@@ -1,0 +1,40 @@
+{
+  "name": "video-maker",
+  "version": "0.1.0",
+  "description": "Video Maker - Professional video creation tool",
+  "main": "app/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "lint": "eslint . --ext .js",
+    "test": "playwright test",
+    "e2e": "playwright test",
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.57.0",
+    "@playwright/test": "^1.44.0",
+    "playwright": "^1.44.0"
+  },
+  "dependencies": {},
+  "build": {
+    "appId": "com.videomaker.app",
+    "productName": "Video Maker",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "app/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

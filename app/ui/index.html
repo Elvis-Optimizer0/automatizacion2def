@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Maker v0.1.0</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Video Maker <span class="version">v0.1.0</span></h1>
+  </header>
+
+  <main class="app-main">
+    <section class="import-section" aria-label="Importar imágenes">
+      <h2>Importar imágenes</h2>
+      <button id="import-btn" class="btn btn-primary" type="button">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>Seleccionar imágenes</span>
+      </button>
+
+      <div id="drop-zone" class="drop-zone" role="region" aria-label="Zona de arrastrar y soltar" tabindex="0">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <p>Arrastra imágenes aquí o haz clic para seleccionar</p>
+        <span class="hint">Formatos: JPG, PNG, WebP, GIF, BMP</span>
+      </div>
+
+      <div id="images-list" class="images-list" role="list" aria-label="Imágenes importadas"></div>
+    </section>
+  </main>
+
+  <div id="toast-container" class="toast-container" role="status" aria-live="polite"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
