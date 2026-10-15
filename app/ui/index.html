@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Maker v0.1.0</title>
+  <title>Video Maker v0.2.0</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>Video Maker <span class="version">v0.1.0</span></h1>
+    <h1>Video Maker <span class="version">v0.2.0</span></h1>
   </header>
 
   <main class="app-main">
     <section class="import-section" aria-label="Importar imágenes">
       <h2>Importar imágenes</h2>
-      <button id="import-btn" class="btn btn-primary" type="button">
+      <button id="import-images-btn" class="btn btn-primary" type="button">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="17 8 12 3 7 8"></polyline>
@@ -23,7 +23,7 @@
         <span>Seleccionar imágenes</span>
       </button>
 
-      <div id="drop-zone" class="drop-zone" role="region" aria-label="Zona de arrastrar y soltar" tabindex="0">
+      <div id="images-drop-zone" class="drop-zone" role="region" aria-label="Zona de arrastrar y soltar imágenes" tabindex="0">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="17 8 12 3 7 8"></polyline>
@@ -34,6 +34,114 @@
       </div>
 
       <div id="images-list" class="images-list" role="list" aria-label="Imágenes importadas"></div>
+    </section>
+
+    <section class="import-section" aria-label="Importar audio">
+      <h2>Audio</h2>
+      <div class="audio-row">
+        <div class="audio-field">
+          <label for="audio-narration" class="audio-label">Narración (obligatorio)</label>
+          <div class="audio-input-wrapper">
+            <input type="text" id="audio-narration" class="audio-input" readonly placeholder="Ningún archivo seleccionado" aria-label="Ruta del archivo de narración">
+            <button id="import-audio-btn" class="btn btn-secondary" type="button">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Seleccionar</span>
+            </button>
+          </div>
+          <div id="audio-narration-drop" class="audio-drop-zone" role="region" aria-label="Zona de arrastrar y soltar narración" tabindex="0">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Arrastra archivo de audio aquí</span>
+          </div>
+          <div id="audio-narration-info" class="audio-info"></div>
+        </div>
+
+        <div class="audio-field">
+          <label for="audio-music" class="audio-label">Música (opcional)</label>
+          <div class="audio-input-wrapper">
+            <input type="text" id="audio-music" class="audio-input" readonly placeholder="Ningún archivo seleccionado" aria-label="Ruta del archivo de música">
+            <button id="import-music-btn" class="btn btn-secondary" type="button">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Seleccionar</span>
+            </button>
+          </div>
+          <div id="audio-music-drop" class="audio-drop-zone" role="region" aria-label="Zona de arrastrar y soltar música" tabindex="0">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Arrastra archivo de audio aquí</span>
+          </div>
+          <div id="audio-music-info" class="audio-info"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="import-section" aria-label="Guion">
+      <h2>Guion</h2>
+      <div class="script-actions">
+        <button id="paste-script-btn" class="btn btn-secondary" type="button">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Pegar del portapapeles</span>
+        </button>
+        <button id="load-script-btn" class="btn btn-secondary" type="button">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          <span>Cargar .txt</span>
+        </button>
+      </div>
+      <textarea id="script-textarea" class="script-textarea" placeholder="Pega o carga tu guion aquí...&#10;Ejemplos:&#10;[Escena 1] 0:00 - 0:30 Texto de la escena 1&#10;[Escena 2] 0:30 - 1:05 Texto de la escena 2&#10;(Escena 3: 1:05 a 1:40) Texto de la escena 3" aria-label="Texto del guion"></textarea>
+      <div id="script-warnings" class="script-warnings" role="status" aria-live="polite"></div>
+      <div id="script-summary" class="script-summary"></div>
+    </section>
+
+    <section class="import-section" aria-label="Línea de tiempo">
+      <h2>Línea de tiempo</h2>
+      <div class="timeline-controls">
+        <label class="checkbox-label">
+          <input type="checkbox" id="adjust-timeline-checkbox">
+          <span class="checkmark"></span>
+          Ajustar tiempos al largo del audio
+        </label>
+      </div>
+      <div id="timeline-table-container" class="timeline-table-container">
+        <table id="timeline-table" class="timeline-table" aria-label="Tabla de línea de tiempo">
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Miniatura</th>
+              <th scope="col">Inicio</th>
+              <th scope="col">Fin</th>
+              <th scope="col">Duración</th>
+              <th scope="col">Imagen</th>
+              <th scope="col">Texto</th>
+            </tr>
+          </thead>
+          <tbody id="timeline-tbody"></tbody>
+        </table>
+        <div id="timeline-empty" class="timeline-empty">Carga un guion e imágenes para ver la línea de tiempo</div>
+      </div>
+      <div id="timeline-summary" class="timeline-summary"></div>
     </section>
   </main>
 

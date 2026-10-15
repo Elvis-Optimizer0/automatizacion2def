@@ -1,5 +1,5 @@
 module.exports = {
-  testDir: './tests/e2e',
+  testDir: './tests',
   timeout: 60000,
   expect: {
     timeout: 10000
@@ -12,5 +12,17 @@ module.exports = {
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure'
-  }
+  },
+  projects: [
+    {
+      name: 'unit',
+      testMatch: '**/unit/**/*.test.js',
+      use: { ...require('@playwright/test').devices['Desktop Chrome'] }
+    },
+    {
+      name: 'e2e',
+      testMatch: '**/e2e/**/*.spec.js',
+      use: { ...require('@playwright/test').devices['Desktop Chrome'] }
+    }
+  ]
 };

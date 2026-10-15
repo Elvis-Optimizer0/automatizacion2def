@@ -1,6 +1,6 @@
 {
   "name": "video-maker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Video Maker - Professional video creation tool",
   "main": "app/main.js",
   "scripts": {
@@ -22,7 +22,10 @@
     "@playwright/test": "^1.44.0",
     "playwright": "^1.44.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "ffprobe-static": "^3.1.0",
+    "zod": "^3.22.4"
+  },
   "build": {
     "appId": "com.videomaker.app",
     "productName": "Video Maker",
@@ -35,6 +38,10 @@
     ],
     "win": {
       "target": "nsis"
-    }
+    },
+    "asarUnpack": [
+      "**/ffprobe*",
+      "**/ffprobe-static/**"
+    ]
   }
 }

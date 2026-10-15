@@ -40,28 +40,70 @@ test.describe('Video Maker - Launch', () => {
 
   test('window title contains version', async () => {
     const title = await page.title();
-    expect(title).toContain('v0.1.0');
+    expect(title).toContain('v0.2.0');
   });
 
   test('window.api is exposed', async () => {
     const apiExists = await page.evaluate(() => {
       return typeof window.api !== 'undefined' &&
              typeof window.api.openImages === 'function' &&
+             typeof window.api.openAudio === 'function' &&
+             typeof window.api.openMusic === 'function' &&
+             typeof window.api.openScript === 'function' &&
+             typeof window.api.getAudioDuration === 'function' &&
              typeof window.api.getPathForFile === 'function';
     });
     expect(apiExists).toBe(true);
   });
 
-  test('import button is visible', async () => {
-    const importBtn = page.locator('#import-btn');
+  test('import images button is visible', async () => {
+    const importBtn = page.locator('#import-images-btn');
     await expect(importBtn).toBeVisible();
     await expect(importBtn).toContainText('Seleccionar imágenes');
   });
 
-  test('drop zone is visible', async () => {
-    const dropZone = page.locator('#drop-zone');
+  test('images drop zone is visible', async () => {
+    const dropZone = page.locator('#images-drop-zone');
     await expect(dropZone).toBeVisible();
     await expect(dropZone).toContainText('Arrastra imágenes aquí');
+  });
+
+  test('audio narration input is visible', async () => {
+    const narrationInput = page.locator('#audio-narration');
+    await expect(narrationInput).toBeVisible();
+  });
+
+  test('audio music input is visible', async () => {
+    const musicInput = page.locator('#audio-music');
+    await expect(musicInput).toBeVisible();
+  });
+
+  test('script textarea is visible', async () => {
+    const scriptTextarea = page.locator('#script-textarea');
+    await expect(scriptTextarea).toBeVisible();
+  });
+
+  test('paste script button is visible', async () => {
+    const pasteBtn = page.locator('#paste-script-btn');
+    await expect(pasteBtn).toBeVisible();
+    await expect(pasteBtn).toContainText('Pegar del portapapeles');
+  });
+
+  test('load script button is visible', async () => {
+    const loadBtn = page.locator('#load-script-btn');
+    await expect(loadBtn).toBeVisible();
+    await expect(loadBtn).toContainText('Cargar .txt');
+  });
+
+  test('timeline empty state is visible', async () => {
+    const emptyState = page.locator('#timeline-empty');
+    await expect(emptyState).toBeAttached();
+    await expect(emptyState).toContainText('Carga un guion e imágenes');
+  });
+
+  test('adjust timeline checkbox is visible', async () => {
+    const checkbox = page.locator('#adjust-timeline-checkbox');
+    await expect(checkbox).toBeVisible();
   });
 
   test('no console errors on load', async () => {
