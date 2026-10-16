@@ -1,7 +1,9 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const ffprobeStatic = require('ffprobe-static');
+const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED } = require('./core/ffmpeg-renderer.js');
 
 let mainWindow;
 
@@ -11,7 +13,7 @@ function createWindow() {
     height: 720,
     minWidth: 1024,
     minHeight: 600,
-    title: 'Video Maker v0.2.0',
+    title: 'Video Maker v0.3.0',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -33,6 +35,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  try {
+    verifyBinaries();
+  } catch (err) {
+    console.error('Binary verification failed:', err.message);
+  }
   createWindow();
 
   app.on('activate', () => {
@@ -163,11 +170,36 @@ ipcMain.handle('dialog:openScript', async () => {
   return { path: filePath, content };
 });
 
+ipcMain.handle('dialog:saveVideo', async () => {
+  if (process.env.VM_TEST_OUTPUT) {
+    return process.env.VM_TEST_OUTPUT;
+  }
+
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Exportar video',
+    buttonLabel: 'Guardar',
+    defaultPath: 'video.mp4',
+    filters: [
+      { name: 'Video MP4', extensions: ['mp4'] }
+    ]
+  });
+
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+
+  return result.filePath;
+});
+
+ipcMain.handle('shell:openFolder', async (_, folderPath) => {
+  const { shell } = require('electron');
+  await shell.openPath(folderPath);
+});
+
 ipcMain.handle('ffprobe:duration', async (_, filePath) => {
   if (!filePath) {
     throw new Error('E_INPUT_MISSING: filePath is required');
   }
-  const fs = require('fs');
   if (!fs.existsSync(filePath)) {
     throw new Error(`E_INPUT_MISSING: file not found: ${filePath}`);
   }
@@ -189,5 +221,34 @@ ipcMain.handle('ffprobe:duration', async (_, filePath) => {
       throw err;
     }
     throw new Error(`E_FFPROBE_FAILED: ${err.message}`);
+  }
+});
+
+ipcMain.handle('render:video', async (_, options) => {
+  const { webContents } = mainWindow;
+
+  const onProgress = (progress) => {
+    webContents.send('render:progress', progress);
+  };
+
+  try {
+    const result = await renderVideo({ ...options, onProgress });
+    return result;
+  } catch (err) {
+    if (err.message.startsWith(E_FFMPEG_MISSING) || err.message.startsWith(E_INPUT_MISSING) || err.message.startsWith(E_FFMPEG_FAILED)) {
+      throw err;
+    }
+    throw new Error(`${E_FFMPEG_FAILED}: ${err.message}`);
+  }
+});
+
+ipcMain.handle('verify:binaries', async () => {
+  try {
+    const ffmpegPath = verifyBinaries();
+    const ffprobePath = getFfprobePath();
+    const ffprobeExists = fs.existsSync(ffprobePath);
+    return { ffmpeg: ffmpegPath, ffprobe: ffprobePath, ffprobeExists };
+  } catch (err) {
+    throw new Error(`${E_FFMPEG_MISSING}: ${err.message}`);
   }
 });
