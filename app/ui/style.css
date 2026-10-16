@@ -444,6 +444,32 @@ body {
   flex-wrap: wrap;
 }
 
+.project-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-lg);
+}
+
+.project-status {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.project-status.error {
+  color: var(--color-danger, #ff4d4d);
+}
+
+.project-status.warning {
+  color: var(--color-warning, #ffb020);
+}
+
+.timeline-table .missing-file {
+  color: var(--color-warning, #ffb020);
+  font-weight: 600;
+}
+
 .btn-sm {
   padding: 0.3rem 0.7rem;
   font-size: var(--font-size-sm);

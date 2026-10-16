@@ -131,6 +131,65 @@ function imageFocus(image, formatId) {
   };
 }
 
+const CURRENT_PROJECT_VERSION = 1;
+
+const projectImageSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  missing: z.boolean().optional(),
+  focus169: focusSchema.optional(),
+  focus916: focusSchema.optional(),
+  focus11: focusSchema.optional(),
+  focus45: focusSchema.optional()
+});
+
+const projectAudioClipSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  duration: z.number().optional()
+});
+
+const projectSchema = z.object({
+  version: z.number().int().default(CURRENT_PROJECT_VERSION),
+  savedAt: z.string().optional(),
+  images: z.array(projectImageSchema).default([]),
+  audio: z.object({
+    narration: projectAudioClipSchema.nullish(),
+    music: z.object({ name: z.string(), path: z.string() }).nullish()
+  }).default({}),
+  script: z.object({ raw: z.string().default('') }).default({}),
+  timeline: z.array(sceneSchema).default([]),
+  config: configSchema,
+  renderOptions: renderOptionsSchema,
+  timelineOptions: z.object({ adjustToAudio: z.boolean().default(false) }).default({})
+}).default({});
+
+function migrateProject(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const version = Number.isInteger(raw.version) ? raw.version : 1;
+  const migrated = { ...raw, version };
+  if (!Array.isArray(migrated.images)) migrated.images = [];
+  if (!Array.isArray(migrated.timeline)) migrated.timeline = [];
+  if (!migrated.audio || typeof migrated.audio !== 'object') migrated.audio = {};
+  if (!migrated.script || typeof migrated.script !== 'object') migrated.script = { raw: '' };
+  if (!migrated.config || typeof migrated.config !== 'object') migrated.config = {};
+  if (!migrated.renderOptions || typeof migrated.renderOptions !== 'object') migrated.renderOptions = {};
+  if (!migrated.timelineOptions || typeof migrated.timelineOptions !== 'object') migrated.timelineOptions = {};
+  return migrated;
+}
+
+function parseProjectFile(raw) {
+  return projectSchema.parse(migrateProject(raw));
+}
+
+function collectProjectPaths(project) {
+  const paths = [];
+  project.images.forEach((image) => paths.push(image.path));
+  if (project.audio && project.audio.narration) paths.push(project.audio.narration.path);
+  if (project.audio && project.audio.music) paths.push(project.audio.music.path);
+  return paths;
+}
+
 module.exports = {
   FOCUS_KEYS_TUPLE,
   focusSchema,
@@ -141,5 +200,10 @@ module.exports = {
   audioSchema,
   renderPayloadSchema,
   parseRenderPayload,
-  imageFocus
+  imageFocus,
+  CURRENT_PROJECT_VERSION,
+  projectSchema,
+  parseProjectFile,
+  migrateProject,
+  collectProjectPaths
 };

@@ -179,6 +179,7 @@ const state = {
   timeline: [],
   timelineOptions: { adjustToAudio: false },
   audioDuration: 0,
+  project: { filePath: null, missing: [] },
   config: {
     outputs: ['16:9'],
     fitMode: 'cover',
@@ -865,6 +866,140 @@ async function handleOpenOutputFolder() {
   }
 }
 
+function buildProjectData() {
+  return {
+    version: 1,
+    images: state.images.map(image => ({
+      name: image.name,
+      path: image.path,
+      focus169: image.focus169,
+      focus916: image.focus916,
+      focus11: image.focus11,
+      focus45: image.focus45
+    })),
+    audio: {
+      narration: state.audio.narration
+        ? { name: state.audio.narration.name, path: state.audio.narration.path, duration: state.audioDuration || undefined }
+        : null,
+      music: state.audio.music ? { name: state.audio.music.name, path: state.audio.music.path } : null
+    },
+    script: { raw: state.script.raw },
+    timeline: state.timeline.map(scene => {
+      const item = { number: scene.number, duration: scene.duration };
+      if (scene.zoom) item.zoom = { ...scene.zoom };
+      if (scene.transition) item.transition = { ...scene.transition };
+      return item;
+    }),
+    config: { ...state.config },
+    renderOptions: { ...state.exportOptions },
+    timelineOptions: { ...state.timelineOptions }
+  };
+}
+
+function setProjectStatus(text, type) {
+  const el = document.getElementById('project-status');
+  if (!el) return;
+  el.textContent = text || '';
+  el.classList.remove('error', 'warning');
+  if (type) el.classList.add(type);
+}
+
+async function handleSaveProject() {
+  try {
+    const result = await window.api.saveProject(buildProjectData());
+    if (!result || !result.filePath) return;
+    state.project.filePath = result.filePath;
+    const name = result.filePath.split(/[\\/]/).pop();
+    setProjectStatus(`Guardado: ${name}`);
+    showToast('Proyecto guardado', 'success');
+  } catch (err) {
+    setProjectStatus('Error al guardar el proyecto', 'error');
+    showToast(`No se pudo guardar: ${err.message}`, 'error');
+  }
+}
+
+function loadProject(project, missing = []) {
+  state.project.missing = missing.slice();
+  state.images = project.images.map(image => {
+    const loaded = ensureFocus({
+      name: image.name,
+      path: image.path,
+      size: 0,
+      type: 'image',
+      preview: `file://${image.path}`,
+      missing: missing.includes(image.path) ? true : !!image.missing
+    });
+    Object.values(FORMAT_FOCUS_KEY).forEach(key => {
+      if (image[key]) loaded[key] = { ...image[key] };
+    });
+    return loaded;
+  });
+
+  state.audio = {
+    narration: project.audio.narration
+      ? { name: project.audio.narration.name, path: project.audio.narration.path }
+      : null,
+    music: project.audio.music
+      ? { name: project.audio.music.name, path: project.audio.music.path }
+      : null
+  };
+  state.audioDuration = project.audio.narration && project.audio.narration.duration
+    ? project.audio.narration.duration
+    : 0;
+  state.script.raw = project.script.raw || '';
+  state.config = { ...state.config, ...project.config, extras: { ...state.config.extras, ...(project.config.extras || {}) } };
+  state.exportOptions = { ...state.exportOptions, ...project.renderOptions };
+  state.timelineOptions = { ...state.timelineOptions, ...project.timelineOptions };
+
+  let accumulated = 0;
+  state.timeline = project.timeline.map((scene, index) => {
+    const start = accumulated;
+    const end = accumulated + scene.duration;
+    accumulated = end;
+    const item = {
+      number: scene.number,
+      duration: scene.duration,
+      start,
+      end,
+      image: state.images[index] || null,
+      text: ''
+    };
+    if (scene.zoom) item.zoom = { ...scene.zoom };
+    if (scene.transition) item.transition = { ...scene.transition };
+    return item;
+  });
+
+  const adjust = document.getElementById('adjust-timeline-checkbox');
+  if (adjust) adjust.checked = !!state.timelineOptions.adjustToAudio;
+
+  renderImages();
+  renderAudio();
+  renderTimeline();
+  renderFocusEditor();
+  renderOutputChips();
+  updateExportButton();
+}
+
+async function handleOpenProject() {
+  try {
+    const result = await window.api.openProject();
+    if (!result) return;
+    state.project.filePath = result.filePath;
+    loadProject(result.project, result.missing || []);
+    const name = result.filePath.split(/[\\/]/).pop();
+    if (result.missing && result.missing.length > 0) {
+      setProjectStatus(`Abierto: ${name} · ${result.missing.length} archivo(s) no encontrados`, 'warning');
+      showToast(`${result.missing.length} archivo(s) no encontrados en el disco`, 'warning');
+    } else {
+      setProjectStatus(`Abierto: ${name}`);
+      showToast('Proyecto abierto', 'success');
+    }
+  } catch (err) {
+    setProjectStatus('Error al abrir el proyecto', 'error');
+    showToast(`No se pudo abrir: ${err.message}`, 'error');
+  }
+}
+
 function buildExportImages() {
   const byPath = new Map(state.images.map(image => [image.path, image]));
   return state.timeline.map(scene => {
@@ -1128,6 +1263,16 @@ const CONTROLS = [
     id: 'apply-scene-settings-btn',
     tipo: 'button',
     handler: applySceneSettingsToAll
+  },
+  {
+    id: 'save-project-btn',
+    tipo: 'button',
+    handler: handleSaveProject
+  },
+  {
+    id: 'open-project-btn',
+    tipo: 'button',
+    handler: handleOpenProject
   },
   {
     id: 'zoom-enabled-checkbox',
@@ -1573,7 +1718,7 @@ function renderAll() {
 
 window.__TEST_STATE__ = state;
 window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus };
-window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry };
+window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject };
 
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();

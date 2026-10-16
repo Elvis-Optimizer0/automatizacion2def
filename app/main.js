@@ -4,6 +4,9 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const ffprobeStatic = require('ffprobe-static');
 const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
+const { parseProjectFile, collectProjectPaths } = require('./core/project-schema.js');
+
+const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
 let mainWindow;
 
@@ -251,4 +254,57 @@ ipcMain.handle('verify:binaries', async () => {
   } catch (err) {
     throw new Error(`${E_FFMPEG_MISSING}: ${err.message}`);
   }
+});
+
+ipcMain.handle('project:save', async (_, data, providedPath) => {
+  let filePath = providedPath || process.env.VM_TEST_PROJECT_OUT;
+  if (!filePath) {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Guardar proyecto',
+      buttonLabel: 'Guardar',
+      defaultPath: 'proyecto.vmproj',
+      filters: [{ name: 'Proyecto Video Maker', extensions: ['vmproj'] }]
+    });
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
+    filePath = result.filePath;
+  }
+
+  let project;
+  try {
+    project = parseProjectFile({ ...(data || {}), savedAt: new Date().toISOString() });
+  } catch (err) {
+    throw new Error(`${E_PROJECT_INVALID}: ${err.message}`);
+  }
+
+  fs.writeFileSync(filePath, JSON.stringify(project, null, 2), 'utf-8');
+  return { filePath };
+});
+
+ipcMain.handle('project:open', async (_, providedPath) => {
+  let filePath = providedPath || process.env.VM_TEST_PROJECT_IN;
+  if (!filePath) {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Abrir proyecto',
+      buttonLabel: 'Abrir',
+      filters: [{ name: 'Proyecto Video Maker', extensions: ['vmproj'] }],
+      properties: ['openFile']
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return null;
+    }
+    filePath = result.filePaths[0];
+  }
+
+  let project;
+  try {
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    project = parseProjectFile(raw);
+  } catch (err) {
+    throw new Error(`${E_PROJECT_INVALID}: ${err.message}`);
+  }
+
+  const missing = collectProjectPaths(project).filter(p => !fs.existsSync(p));
+  return { filePath, project, missing };
 });
