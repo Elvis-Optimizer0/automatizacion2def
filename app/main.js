@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const ffprobeStatic = require('ffprobe-static');
-const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED } = require('./core/ffmpeg-renderer.js');
+const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
 
 let mainWindow;
 
@@ -235,7 +235,7 @@ ipcMain.handle('render:video', async (_, options) => {
     const result = await renderVideo({ ...options, onProgress });
     return result;
   } catch (err) {
-    if (err.message.startsWith(E_FFMPEG_MISSING) || err.message.startsWith(E_INPUT_MISSING) || err.message.startsWith(E_FFMPEG_FAILED)) {
+    if (err.message.startsWith(E_FFMPEG_MISSING) || err.message.startsWith(E_INPUT_MISSING) || err.message.startsWith(E_FFMPEG_FAILED) || err.message.startsWith(E_OUTPUT_CONFIG_MISSING)) {
       throw err;
     }
     throw new Error(`${E_FFMPEG_FAILED}: ${err.message}`);

@@ -1,7 +1,13 @@
+const {
+  assertOutputConfig,
+  DEFAULT_FOCUS
+} = require('./output-formats.js');
+
 const FPS = 30;
 const WIDTH = 1920;
 const HEIGHT = 1080;
-const SCALE_FILTER = `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}`;
+
+const FIT_MODES = ['cover', 'blur', 'frame'];
 
 function fixAsarPath(p) {
   return p.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
@@ -9,6 +15,16 @@ function fixAsarPath(p) {
 
 function num(value, decimals = 6) {
   return Number(Number(value).toFixed(decimals));
+}
+
+function clamp01(value) {
+  if (typeof value !== 'number' || isNaN(value)) return DEFAULT_FOCUS.x;
+  return Math.min(1, Math.max(0, value));
+}
+
+function safeColor(color) {
+  if (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) return color;
+  return 'black';
 }
 
 function transitionDurationFor(scenes, i, transitionType, transitionDuration) {
@@ -29,28 +45,69 @@ function sceneInputDuration(scenes, i, transitionType, transitionDuration) {
   return num(base + transDur);
 }
 
-function buildSceneVideoFilter(scene, index, options = {}) {
+function buildZoomFilter(scene, w, h, options, focus) {
   const {
-    zoomEnabled = true,
     zoomStartScale = 1.0,
     zoomIntensity = 0.15
   } = options;
 
-  let filter = SCALE_FILTER;
+  const frames = Math.max(1, Math.round(scene.duration * FPS));
+  const step = num(zoomIntensity / frames);
+  const maxZoom = num(zoomStartScale + zoomIntensity);
+  const fx = num(clamp01(focus.x));
+  const fy = num(clamp01(focus.y));
+  const xExpr = `max(0,min(iw-iw/zoom,iw*${fx}-iw/zoom/2))`;
+  const yExpr = `max(0,min(ih-ih/zoom,ih*${fy}-ih/zoom/2))`;
 
-  if (zoomEnabled) {
-    const frames = Math.max(1, Math.round(scene.duration * FPS));
-    const step = num(zoomIntensity / frames);
-    const maxZoom = num(zoomStartScale + zoomIntensity);
-    filter += `,zoompan=z='min(max(zoom,${num(zoomStartScale)})+${step},${maxZoom})'`
-      + `:d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${WIDTH}x${HEIGHT}:fps=${FPS}`;
+  return `zoompan=z='min(max(zoom,${num(zoomStartScale)})+${step},${maxZoom})'`
+    + `:d=1:x='${xExpr}':y='${yExpr}':s=${w}x${h}:fps=${FPS}`;
+}
+
+function buildSceneVideoFilter(scene, index, options = {}) {
+  const outputConfig = assertOutputConfig(options.outputConfig);
+  const fitMode = FIT_MODES.includes(options.fitMode) ? options.fitMode : 'cover';
+  const frameColor = safeColor(options.frameColor);
+  const focus = scene.focus && typeof scene.focus === 'object' ? scene.focus : DEFAULT_FOCUS;
+
+  const w = outputConfig.w;
+  const h = outputConfig.h;
+  const fx = num(clamp01(focus.x));
+  const fy = num(clamp01(focus.y));
+
+  const parts = [];
+  let baseLabel;
+
+  if (fitMode === 'blur') {
+    const radius = Math.max(2, Math.round(Math.min(w, h) / 20));
+    parts.push(`[${index}:v]split=2[bg${index}][fg${index}]`);
+    parts.push(`[bg${index}]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=luma_radius=${radius}:luma_power=2[bgf${index}]`);
+    parts.push(`[fg${index}]scale=${w}:${h}:force_original_aspect_ratio=decrease[fgs${index}]`);
+    parts.push(`[bgf${index}][fgs${index}]overlay=(W-w)/2:(H-h)/2[base${index}]`);
+    baseLabel = `base${index}`;
+  } else if (fitMode === 'frame') {
+    const widthExpr = `${w}:-2`;
+    parts.push(`[${index}:v]scale=${widthExpr}[scaled${index}]`);
+    parts.push(`[scaled${index}]pad=${w}:${h}:0:oh/2-ih/2:color=${frameColor}[base${index}]`);
+    baseLabel = `base${index}`;
+  } else {
+    parts.push(`[${index}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
+    baseLabel = `base${index}`;
   }
 
-  filter += ',setsar=1,format=yuv420p';
-  return `[${index}:v]${filter}[v${index}]`;
+  const chain = [];
+  if (options.zoomEnabled) {
+    chain.push(buildZoomFilter(scene, w, h, options, focus));
+  }
+  chain.push('setsar=1');
+  chain.push('format=yuv420p');
+  parts.push(`[${baseLabel}]${chain.join(',')}[v${index}]`);
+
+  return parts.join(';');
 }
 
 function buildVideoFilterGraph(scenes, options = {}) {
+  assertOutputConfig(options.outputConfig);
+
   const {
     transitionType = 'fade',
     transitionDuration = 1.0
@@ -108,6 +165,8 @@ function buildAudioFilterGraph(options = {}) {
 }
 
 function buildFullFilterGraph(scenes, options = {}) {
+  assertOutputConfig(options.outputConfig);
+
   const { hasMusic = false, totalDuration, musicVolume = 0.3 } = options;
   const videoGraph = buildVideoFilterGraph(scenes, options);
   const audioGraph = buildAudioFilterGraph({
@@ -169,10 +228,14 @@ module.exports = {
   FPS,
   WIDTH,
   HEIGHT,
-  SCALE_FILTER,
+  FIT_MODES,
   fixAsarPath,
+  num,
+  clamp01,
+  safeColor,
   transitionDurationFor,
   sceneInputDuration,
+  buildZoomFilter,
   buildSceneVideoFilter,
   buildVideoFilterGraph,
   buildAudioFilterGraph,

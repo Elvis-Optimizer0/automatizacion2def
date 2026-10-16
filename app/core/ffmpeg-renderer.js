@@ -10,6 +10,13 @@ const {
   normalizeScenesToDuration,
   sceneInputDuration
 } = require('./ffmpeg-helpers.js');
+const {
+  assertOutputConfig,
+  resolveOutputConfig,
+  withOutputSuffix,
+  E_OUTPUT_CONFIG_MISSING
+} = require('./output-formats.js');
+const { parseRenderPayload, imageFocus } = require('./project-schema.js');
 
 const E_FFMPEG_MISSING = 'E_FFMPEG_MISSING';
 const E_INPUT_MISSING = 'E_INPUT_MISSING';
@@ -62,6 +69,19 @@ function parseFfmpegProgress(chunk, totalDuration) {
   return { current, progress };
 }
 
+function resolveOutputConfigs(options, payload) {
+  if (Array.isArray(options.outputConfigs) && options.outputConfigs.length > 0) {
+    return options.outputConfigs.map(assertOutputConfig);
+  }
+  if (options.outputConfig) {
+    return [assertOutputConfig(options.outputConfig)];
+  }
+  if (Array.isArray(options.outputIds) && options.outputIds.length > 0) {
+    return options.outputIds.map(resolveOutputConfig);
+  }
+  return payload.config.outputs.map(resolveOutputConfig);
+}
+
 function buildFfmpegArgs(options) {
   const {
     scenes,
@@ -69,8 +89,12 @@ function buildFfmpegArgs(options) {
     narration,
     music,
     outputPath,
+    outputConfig,
+    config = {},
     renderOptions = {}
   } = options;
+
+  assertOutputConfig(outputConfig);
 
   if (!scenes || scenes.length === 0) {
     throw new Error(`${E_INPUT_MISSING}: no scenes to render`);
@@ -82,12 +106,20 @@ function buildFfmpegArgs(options) {
     throw new Error(`${E_INPUT_MISSING}: narration audio is required`);
   }
 
+  const fitMode = config.fitMode || 'cover';
+  const frameColor = config.frameColor || '#000000';
+  const musicVolume = config.musicVolume != null ? config.musicVolume : 0.3;
   const transitionType = renderOptions.transitionType || 'fade';
   const transitionDuration = renderOptions.transitionDuration != null
     ? renderOptions.transitionDuration
     : 1.0;
 
   const orderedImages = images.slice(0, scenes.length);
+  const sceneFilters = orderedImages.map((img, index) => ({
+    ...scenes[index],
+    focus: imageFocus(img, outputConfig.id)
+  }));
+
   const inputLabels = [];
   const args = ['-y'];
 
@@ -113,9 +145,13 @@ function buildFfmpegArgs(options) {
   const hasMusic = !!(music && music.path);
   const totalDuration = calculateTotalDuration(scenes);
 
-  const filterGraph = buildFullFilterGraph(scenes, {
+  const filterGraph = buildFullFilterGraph(sceneFilters, {
+    outputConfig,
+    fitMode,
+    frameColor,
     hasMusic,
     totalDuration,
+    musicVolume,
     zoomEnabled: renderOptions.zoomEnabled,
     zoomStartScale: renderOptions.zoomStartScale,
     zoomIntensity: renderOptions.zoomIntensity,
@@ -142,31 +178,8 @@ function buildFfmpegArgs(options) {
   return { args, totalDuration, inputLabels };
 }
 
-function renderVideo(options) {
+function runFfmpeg(ffmpegPath, args, totalDuration, onProgress) {
   return new Promise((resolve, reject) => {
-    const { onProgress } = options;
-
-    try {
-      verifyBinaries();
-    } catch (err) {
-      reject(err);
-      return;
-    }
-
-    let args;
-    let totalDuration;
-    try {
-      const scenes = normalizeScenesToDuration(options.scenes || [], options.audioDuration);
-      const built = buildFfmpegArgs({ ...options, scenes });
-      validateInputPaths(built.inputLabels);
-      args = built.args;
-      totalDuration = built.totalDuration;
-    } catch (err) {
-      reject(err);
-      return;
-    }
-
-    const ffmpegPath = getFfmpegPath();
     const proc = spawn(ffmpegPath, args, { windowsHide: true });
 
     let stderr = '';
@@ -190,7 +203,7 @@ function renderVideo(options) {
 
     proc.on('close', code => {
       if (code === 0) {
-        resolve({ outputPath: options.outputPath, duration: totalDuration });
+        resolve();
       } else {
         const lastLines = stderr.trim().split('\n').slice(-15).join('\n');
         const error = new Error(`${E_FFMPEG_FAILED}: ffmpeg exited with code ${code}\n${lastLines}`);
@@ -206,14 +219,73 @@ function renderVideo(options) {
   });
 }
 
+async function renderVideo(options) {
+  const { onProgress } = options;
+
+  verifyBinaries();
+
+  let payload;
+  let outputConfigs;
+  try {
+    payload = parseRenderPayload(options);
+    outputConfigs = resolveOutputConfigs(options, payload);
+  } catch (err) {
+    if (err.message && (err.message.startsWith(E_OUTPUT_CONFIG_MISSING) || err.message.startsWith(E_FFMPEG_MISSING))) {
+      throw err;
+    }
+    throw new Error(`${E_INPUT_MISSING}: invalid render payload: ${err.message}`);
+  }
+
+  const scenes = normalizeScenesToDuration(payload.scenes, payload.audioDuration);
+  const totalDuration = calculateTotalDuration(scenes);
+  const totalFiles = outputConfigs.length;
+  const ffmpegPath = getFfmpegPath();
+  const outputs = [];
+
+  for (let index = 0; index < totalFiles; index++) {
+    const outputConfig = outputConfigs[index];
+    const outputPath = withOutputSuffix(payload.outputPath, outputConfig);
+
+    const built = buildFfmpegArgs({
+      scenes,
+      images: payload.images,
+      narration: payload.narration,
+      music: payload.music,
+      outputPath,
+      outputConfig,
+      config: payload.config,
+      renderOptions: payload.renderOptions
+    });
+    validateInputPaths(built.inputLabels);
+
+    const onFileProgress = onProgress
+      ? (p) => {
+        const overall = Math.round(((index + p.progress / 100) / totalFiles) * 100);
+        onProgress({ current: p.current, progress: overall, fileIndex: index, fileProgress: p.progress, totalFiles });
+      }
+      : undefined;
+
+    await runFfmpeg(ffmpegPath, built.args, built.totalDuration, onFileProgress);
+    outputs.push({ id: outputConfig.id, outputPath, duration: totalDuration });
+  }
+
+  return {
+    outputs,
+    outputPath: outputs.length > 0 ? outputs[0].outputPath : payload.outputPath,
+    duration: totalDuration
+  };
+}
+
 module.exports = {
   renderVideo,
   buildFfmpegArgs,
+  resolveOutputConfigs,
   getFfmpegPath,
   verifyBinaries,
   validateInputPaths,
   parseFfmpegProgress,
   E_FFMPEG_MISSING,
   E_INPUT_MISSING,
-  E_FFMPEG_FAILED
+  E_FFMPEG_FAILED,
+  E_OUTPUT_CONFIG_MISSING
 };

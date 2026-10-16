@@ -12,6 +12,9 @@ const {
   fixAsarPath
 } = require('../../app/core/ffmpeg-helpers.js');
 const { buildFfmpegArgs } = require('../../app/core/ffmpeg-renderer.js');
+const { resolveOutputConfig } = require('../../app/core/output-formats.js');
+
+const outputConfig = resolveOutputConfig('16:9');
 
 const scenes = [
   { number: 1, duration: 5 },
@@ -43,7 +46,7 @@ function extractXfades(graph) {
 
 test.describe('filtergraph - no paths between brackets', () => {
   test('video graph never contains input file paths', () => {
-    const graph = buildVideoFilterGraph(scenes, { transitionType: 'fade', transitionDuration: 1 });
+    const graph = buildVideoFilterGraph(scenes, { outputConfig, transitionType: 'fade', transitionDuration: 1 });
     for (const img of images) {
       expect(graph).not.toContain(img.path);
       expect(graph).not.toContain(img.name);
@@ -53,14 +56,14 @@ test.describe('filtergraph - no paths between brackets', () => {
   });
 
   test('full graph with music never contains paths', () => {
-    const graph = buildFullFilterGraph(scenes, { hasMusic: true, totalDuration: 15 });
+    const graph = buildFullFilterGraph(scenes, { outputConfig, hasMusic: true, totalDuration: 15 });
     expect(graph).not.toMatch(/[A-Za-z]:\\/);
     expect(graph).not.toContain('\\');
     [narration, music].forEach(f => expect(graph).not.toContain(f.path));
   });
 
   test('all bracket tokens are safe labels or stream indices', () => {
-    const graph = buildFullFilterGraph(scenes, { hasMusic: true, totalDuration: 15 });
+    const graph = buildFullFilterGraph(scenes, { outputConfig, hasMusic: true, totalDuration: 15 });
     const tokens = extractBrackets(graph);
     expect(tokens.length).toBeGreaterThan(0);
     for (const token of tokens) {
@@ -71,7 +74,7 @@ test.describe('filtergraph - no paths between brackets', () => {
 
 test.describe('filtergraph - indices match -i order', () => {
   test('without music: narration is input N', () => {
-    const { args } = buildFfmpegArgs({ scenes, images, narration, outputPath: 'C:\\out.mp4' });
+    const { args } = buildFfmpegArgs({ scenes, images, narration, outputConfig, outputPath: 'C:\\out.mp4' });
     const inputIndices = args.reduce((acc, arg, i) => {
       if (arg === '-i') acc.push(args[i + 1]);
       return acc;
@@ -87,7 +90,7 @@ test.describe('filtergraph - indices match -i order', () => {
   });
 
   test('with music: music is input N+1', () => {
-    const { args } = buildFfmpegArgs({ scenes, images, narration, music, outputPath: 'C:\\out.mp4' });
+    const { args } = buildFfmpegArgs({ scenes, images, narration, music, outputConfig, outputPath: 'C:\\out.mp4' });
     const inputIndices = args.reduce((acc, arg, i) => {
       if (arg === '-i') acc.push(args[i + 1]);
       return acc;
@@ -112,7 +115,7 @@ test.describe('filtergraph - indices match -i order', () => {
 
 test.describe('filtergraph - offsets positive and increasing', () => {
   test('fade offsets are positive and strictly increasing', () => {
-    const offsets = extractOffsets(buildVideoFilterGraph(scenes, { transitionType: 'fade', transitionDuration: 1 }));
+    const offsets = extractOffsets(buildVideoFilterGraph(scenes, { outputConfig, transitionType: 'fade', transitionDuration: 1 }));
     expect(offsets.length).toBe(scenes.length - 1);
     for (const offset of offsets) expect(offset).toBeGreaterThan(0);
     for (let i = 1; i < offsets.length; i++) {
@@ -130,7 +133,7 @@ test.describe('filtergraph - offsets positive and increasing', () => {
   });
 
   test('offset equals cumulative nominal durations', () => {
-    const offsets = extractOffsets(buildVideoFilterGraph(scenes, { transitionType: 'fade', transitionDuration: 1 }));
+    const offsets = extractOffsets(buildVideoFilterGraph(scenes, { outputConfig, transitionType: 'fade', transitionDuration: 1 }));
     expect(offsets[0]).toBeCloseTo(scenes[0].duration, 3);
     expect(offsets[1]).toBeCloseTo(scenes[0].duration + scenes[1].duration, 3);
   });
@@ -138,7 +141,7 @@ test.describe('filtergraph - offsets positive and increasing', () => {
 
 test.describe('filtergraph - cut maps to fade', () => {
   test('cut transition never emits transition=cut and uses 1/FPS fade', () => {
-    const graph = buildVideoFilterGraph(scenes, { transitionType: 'cut', transitionDuration: 1 });
+    const graph = buildVideoFilterGraph(scenes, { outputConfig, transitionType: 'cut', transitionDuration: 1 });
     expect(graph).not.toMatch(/transition=cut/);
     const xfades = extractXfades(graph);
     expect(xfades.length).toBe(scenes.length - 1);
@@ -190,7 +193,7 @@ test.describe('total duration equals audio duration', () => {
 
 test.describe('ffmpeg args encoding', () => {
   test('uses mp4 h264 aac faststart and maps vout/aout', () => {
-    const { args } = buildFfmpegArgs({ scenes, images, narration, outputPath: 'C:\\out.mp4' });
+    const { args } = buildFfmpegArgs({ scenes, images, narration, outputConfig, outputPath: 'C:\\out.mp4' });
     expect(args).toContain('libx264');
     expect(args).toContain('aac');
     expect(args).toContain('yuv420p');
@@ -202,7 +205,7 @@ test.describe('ffmpeg args encoding', () => {
   });
 
   test('image inputs use framerate 30 and loop', () => {
-    const { args } = buildFfmpegArgs({ scenes, images, narration, outputPath: 'C:\\out.mp4' });
+    const { args } = buildFfmpegArgs({ scenes, images, narration, outputConfig, outputPath: 'C:\\out.mp4' });
     const framerateCount = args.filter(a => a === '-framerate').length;
     const loopCount = args.filter(a => a === '-loop').length;
     expect(framerateCount).toBe(images.length);
