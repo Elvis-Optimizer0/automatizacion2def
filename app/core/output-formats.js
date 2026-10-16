@@ -21,6 +21,13 @@ const FORMAT_FOCUS_KEY = {
 
 const FOCUS_KEYS = ['focus169', 'focus916', 'focus11', 'focus45'];
 const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
+const DEFAULT_SCALE = 1.0;
+const SCALE_MIN = 0.3;
+const SCALE_MAX = 3.0;
+
+const BACKGROUND_MODES = ['color', 'blur'];
+const DEFAULT_BACKGROUND_MODE = 'color';
+const DEFAULT_BACKGROUND_COLOR = '#000000';
 
 function resolveOutputConfig(id) {
   const config = OUTPUT_FORMATS[id];
@@ -58,6 +65,12 @@ module.exports = {
   FORMAT_FOCUS_KEY,
   FOCUS_KEYS,
   DEFAULT_FOCUS,
+  DEFAULT_SCALE,
+  SCALE_MIN,
+  SCALE_MAX,
+  BACKGROUND_MODES,
+  DEFAULT_BACKGROUND_MODE,
+  DEFAULT_BACKGROUND_COLOR,
   resolveOutputConfig,
   assertOutputConfig,
   withOutputSuffix

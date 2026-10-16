@@ -8,7 +8,8 @@ const {
 } = require('../../app/core/output-formats.js');
 const {
   buildSceneVideoFilter,
-  buildVideoFilterGraph
+  buildVideoFilterGraph,
+  clampScale
 } = require('../../app/core/ffmpeg-helpers.js');
 const {
   configSchema,
@@ -170,33 +171,44 @@ test.describe('zod project schema', () => {
       path: 'C:\\a.png',
       focus169: { x: 0.2, y: 0.8 }
     });
-    expect(parsed.focus169).toEqual({ x: 0.2, y: 0.8 });
-    expect(parsed.focus916).toEqual({ x: 0.5, y: 0.5 });
+    expect(parsed.focus169).toEqual({ x: 0.2, y: 0.8, scale: 1 });
+    expect(parsed.focus916).toEqual({ x: 0.5, y: 0.5, scale: 1 });
   });
 
-  test('missing focus fields default to 0.5/0.5', () => {
+  test('missing focus fields default to 0.5/0.5 and scale 1', () => {
     const parsed = imageSchema.parse({ name: 'a.png', path: 'C:\\a.png' });
-    expect(parsed.focus169).toEqual({ x: 0.5, y: 0.5 });
-    expect(parsed.focus45).toEqual({ x: 0.5, y: 0.5 });
+    expect(parsed.focus169).toEqual({ x: 0.5, y: 0.5, scale: 1 });
+    expect(parsed.focus45).toEqual({ x: 0.5, y: 0.5, scale: 1 });
+  });
+
+  test('scale survives validation and is clamped to 0.3..3', () => {
+    const parsed = imageSchema.parse({
+      name: 'a.png',
+      path: 'C:\\a.png',
+      focus169: { x: 0.1, y: 0.9, scale: 2.5 }
+    });
+    expect(parsed.focus169.scale).toBe(2.5);
+    expect(() => imageSchema.parse({ name: 'a.png', path: 'C:\\a.png', focus169: { scale: 4 } })).toThrow();
+    expect(() => imageSchema.parse({ name: 'a.png', path: 'C:\\a.png', focus169: { scale: 0.1 } })).toThrow();
   });
 
   test('focus would be dropped if not declared (regression guard)', () => {
     const parsed = imageSchema.parse({ name: 'a.png', path: 'C:\\a.png', unrelated: { x: 0.9 } });
     expect(parsed.unrelated).toBeUndefined();
-    expect(parsed.focus11).toEqual({ x: 0.5, y: 0.5 });
+    expect(parsed.focus11).toEqual({ x: 0.5, y: 0.5, scale: 1 });
   });
 
   test('payload validation keeps focus and outputs', () => {
     const payload = parseRenderPayload({
       scenes: [{ number: 1, duration: 2 }],
-      images: [{ name: 'a.png', path: 'C:\\a.png', focus916: { x: 0.3, y: 0.7 } }],
+      images: [{ name: 'a.png', path: 'C:\\a.png', focus916: { x: 0.3, y: 0.7, scale: 0.6 } }],
       narration: { name: 'n.wav', path: 'C:\\n.wav' },
       outputPath: 'C:\\out.mp4',
       config: { outputs: ['9:16'], fitMode: 'blur' }
     });
     expect(payload.config.outputs).toEqual(['9:16']);
     expect(payload.config.fitMode).toBe('blur');
-    expect(payload.images[0].focus916).toEqual({ x: 0.3, y: 0.7 });
+    expect(payload.images[0].focus916).toEqual({ x: 0.3, y: 0.7, scale: 0.6 });
     expect(payload.renderOptions.zoomEnabled).toBe(true);
   });
 
@@ -210,9 +222,119 @@ test.describe('zod project schema', () => {
   });
 
   test('imageFocus maps format id to the right key', () => {
-    const image = { focus169: { x: 0.1, y: 0.2 }, focus916: { x: 0.3, y: 0.4 } };
-    expect(imageFocus(image, '16:9')).toEqual({ x: 0.1, y: 0.2 });
-    expect(imageFocus(image, '9:16')).toEqual({ x: 0.3, y: 0.4 });
-    expect(imageFocus(image, '1:1')).toEqual({ x: 0.5, y: 0.5 });
+    const image = { focus169: { x: 0.1, y: 0.2 }, focus916: { x: 0.3, y: 0.4, scale: 0.6 } };
+    expect(imageFocus(image, '16:9')).toEqual({ x: 0.1, y: 0.2, scale: 1 });
+    expect(imageFocus(image, '9:16')).toEqual({ x: 0.3, y: 0.4, scale: 0.6 });
+    expect(imageFocus(image, '1:1')).toEqual({ x: 0.5, y: 0.5, scale: 1 });
+  });
+
+  test('imageFocus migrates phase 4 focus without scale to scale 1', () => {
+    const image = { focus169: { x: 0.2, y: 0.8 } };
+    expect(imageFocus(image, '16:9').scale).toBe(1);
+  });
+});
+
+test.describe('manual framing (scale + background)', () => {
+  const outputConfig = resolveOutputConfig('16:9');
+
+  test('scale 1 reproduces the phase 4 filtergraph exactly', () => {
+    const withScale = buildSceneVideoFilter({ ...scene, focus: { x: 0.5, y: 0.5, scale: 1 } }, 0, {
+      outputConfig,
+      fitMode: 'cover',
+      zoomEnabled: false
+    });
+    const withoutScale = buildSceneVideoFilter({ ...scene, focus: { x: 0.5, y: 0.5 } }, 0, {
+      outputConfig,
+      fitMode: 'cover',
+      zoomEnabled: false
+    });
+    const phase4 = '[0:v]scale=1920:1080:force_original_aspect_ratio=increase,'
+      + 'crop=1920:1080:(iw-ow)*0.5:(ih-oh)*0.5[base0];[base0]setsar=1,format=yuv420p[v0]';
+    expect(withScale).toBe(phase4);
+    expect(withoutScale).toBe(phase4);
+  });
+
+  test('scale < 1 pads with the chosen background color', () => {
+    const filter = buildSceneVideoFilter({ ...scene, focus: { x: 0.2, y: 0.8, scale: 0.6 } }, 0, {
+      outputConfig,
+      backgroundMode: 'color',
+      backgroundColor: '#123456',
+      zoomEnabled: false
+    });
+    expect(filter).toContain('scale=1152:648:force_original_aspect_ratio=increase');
+    expect(filter).toContain('pad=');
+    expect(filter).toContain('color=#123456');
+    expect(filter).toContain('crop=1920:1080');
+    expect(filter).not.toContain('\\');
+    expect(filter).not.toMatch(/[A-Za-z]:\\/);
+  });
+
+  test('scale < 1 rejects unsafe background colors', () => {
+    const filter = buildSceneVideoFilter({ ...scene, focus: { x: 0.5, y: 0.5, scale: 0.6 } }, 0, {
+      outputConfig,
+      backgroundMode: 'color',
+      backgroundColor: 'red;evil',
+      zoomEnabled: false
+    });
+    expect(filter).toContain('color=black');
+    expect(filter).not.toContain('evil');
+  });
+
+  test('scale < 1 with blur background splits and blurs a cover copy', () => {
+    const filter = buildSceneVideoFilter({ ...scene, focus: { x: 0.5, y: 0.5, scale: 0.6 } }, 0, {
+      outputConfig,
+      backgroundMode: 'blur',
+      zoomEnabled: false
+    });
+    expect(filter).toContain('split=2');
+    expect(filter).toContain('boxblur=luma_radius=');
+    expect(filter).toContain('overlay=x=');
+    expect(filter).not.toContain('\\');
+  });
+
+  test('scale > 1 crops a smaller region (target scaled by the factor)', () => {
+    const filter = buildSceneVideoFilter({ ...scene, focus: { x: 0.2, y: 0.8, scale: 1.5 } }, 0, {
+      outputConfig,
+      zoomEnabled: false
+    });
+    expect(filter).toContain('scale=2880:1620:force_original_aspect_ratio=increase');
+    expect(filter).toContain('crop=1920:1080:(iw-ow)*0.2:(ih-oh)*0.8');
+    expect(filter).not.toContain('pad=');
+  });
+
+  test('focus and scale combine in the crop expressions', () => {
+    const filter = buildSceneVideoFilter({ ...scene, focus: { x: 0.7, y: 0.3, scale: 2 } }, 0, {
+      outputConfig,
+      zoomEnabled: false
+    });
+    expect(filter).toContain('scale=3840:2160');
+    expect(filter).toContain('(iw-ow)*0.7');
+    expect(filter).toContain('(ih-oh)*0.3');
+  });
+
+  test('clampScale keeps values inside 0.3..3 and defaults invalid to 1', () => {
+    expect(clampScale(0.1)).toBe(0.3);
+    expect(clampScale(5)).toBe(3);
+    expect(clampScale(1.75)).toBe(1.75);
+    expect(clampScale(undefined)).toBe(1);
+    expect(clampScale(NaN)).toBe(1);
+  });
+
+  test('every format and background avoids paths and backslashes', () => {
+    for (const id of OUTPUT_IDS) {
+      for (const scale of [0.4, 1, 2.2]) {
+        for (const backgroundMode of ['color', 'blur']) {
+          const graph = buildVideoFilterGraph([{ ...scene, focus: { x: 0.3, y: 0.6, scale } }], {
+            outputConfig: resolveOutputConfig(id),
+            backgroundMode,
+            backgroundColor: '#010203',
+            zoomEnabled: true
+          });
+          expect(graph).not.toContain('\\');
+          expect(graph).not.toMatch(/[A-Za-z]:\\/);
+          expect(graph).not.toMatch(/\.(png|jpg|wav|mp4)/);
+        }
+      }
+    }
   });
 });

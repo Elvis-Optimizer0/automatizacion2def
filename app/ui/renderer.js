@@ -152,6 +152,9 @@ function extractSceneNumber(filename) {
 }
 
 const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
+const DEFAULT_SCALE = 1.0;
+const SCALE_MIN = 0.3;
+const SCALE_MAX = 3.0;
 const FORMAT_FOCUS_KEY = {
   '16:9': 'focus169',
   '9:16': 'focus916',
@@ -176,6 +179,8 @@ const state = {
     outputs: ['16:9'],
     fitMode: 'cover',
     frameColor: '#000000',
+    backgroundMode: 'color',
+    backgroundColor: '#000000',
     musicVolume: 0.3
   },
   focus: {
@@ -201,8 +206,11 @@ const state = {
 function ensureFocus(image) {
   if (!image) return image;
   Object.values(FORMAT_FOCUS_KEY).forEach(key => {
-    if (!image[key] || typeof image[key].x !== 'number' || typeof image[key].y !== 'number') {
-      image[key] = { ...DEFAULT_FOCUS };
+    const focus = image[key];
+    if (!focus || typeof focus.x !== 'number' || typeof focus.y !== 'number') {
+      image[key] = { x: DEFAULT_FOCUS.x, y: DEFAULT_FOCUS.y, scale: DEFAULT_SCALE };
+    } else if (typeof focus.scale !== 'number' || isNaN(focus.scale)) {
+      focus.scale = DEFAULT_SCALE;
     }
   });
   return image;
@@ -213,27 +221,41 @@ function clampFocus(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-function focusBox(image, formatId, naturalWidth, naturalHeight) {
+function clampScale(value) {
+  if (typeof value !== 'number' || isNaN(value)) return DEFAULT_SCALE;
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
+}
+
+function coverFractions(formatId, naturalWidth, naturalHeight) {
   const dims = FORMAT_DIMENSIONS[formatId] || FORMAT_DIMENSIONS['16:9'];
   const targetAspect = dims.w / dims.h;
   const imageAspect = naturalWidth / naturalHeight;
-  let width;
-  let height;
   if (imageAspect > targetAspect) {
-    height = 1;
-    width = (naturalHeight * targetAspect) / naturalWidth;
-  } else {
-    width = 1;
-    height = (naturalWidth / targetAspect) / naturalHeight;
+    return { coverW: (naturalHeight * targetAspect) / naturalWidth, coverH: 1 };
   }
+  return { coverW: 1, coverH: (naturalWidth / targetAspect) / naturalHeight };
+}
+
+function frameGeometry(image, formatId, naturalWidth, naturalHeight) {
+  const { coverW, coverH } = coverFractions(formatId, naturalWidth, naturalHeight);
   const focus = (image && image[FORMAT_FOCUS_KEY[formatId]]) || DEFAULT_FOCUS;
+  const scale = clampScale(typeof focus.scale === 'number' ? focus.scale : DEFAULT_SCALE);
   const fx = clampFocus(focus.x);
   const fy = clampFocus(focus.y);
-  const halfW = width / 2;
-  const halfH = height / 2;
-  const left = Math.min(1 - width, Math.max(0, fx - halfW));
-  const top = Math.min(1 - height, Math.max(0, fy - halfH));
-  return { left, top, width, height, fx, fy };
+  const frameW = coverW / scale;
+  const frameH = coverH / scale;
+  return {
+    coverW,
+    coverH,
+    frameW,
+    frameH,
+    fx,
+    fy,
+    scale,
+    autoScale: clampScale(Math.min(coverW, coverH)),
+    boxLeft: (1 - frameW) * fx,
+    boxTop: (1 - frameH) * fy
+  };
 }
 
 function showToast(message, type = 'info') {
@@ -568,10 +590,23 @@ function toggleOutputFormat(format) {
 function renderFocusEditor() {
   const select = document.getElementById('focus-image-select');
   const img = document.getElementById('focus-image');
+  const bg = document.getElementById('focus-bg');
+  const editor = document.getElementById('focus-editor');
   const empty = document.getElementById('focus-empty');
   const box = document.getElementById('focus-box');
   const applyBtn = document.getElementById('focus-apply-all-btn');
+  const autoBtn = document.getElementById('focus-auto-btn');
+  const resetBtn = document.getElementById('focus-reset-btn');
+  const scaleInput = document.getElementById('focus-scale');
   if (!select || !img) return;
+
+  const dims = FORMAT_DIMENSIONS[state.focus.format] || FORMAT_DIMENSIONS['16:9'];
+  if (editor) editor.style.aspectRatio = `${dims.w} / ${dims.h}`;
+  if (editor) {
+    editor.style.backgroundColor = state.config.backgroundMode === 'blur'
+      ? '#000000'
+      : state.config.backgroundColor;
+  }
 
   select.innerHTML = '';
   state.images.forEach((image, index) => {
@@ -581,17 +616,21 @@ function renderFocusEditor() {
     select.appendChild(option);
   });
 
-  if (state.images.length === 0) {
-    select.disabled = true;
-    applyBtn.disabled = true;
+  const disabled = state.images.length === 0;
+  select.disabled = disabled;
+  applyBtn.disabled = disabled;
+  if (autoBtn) autoBtn.disabled = disabled;
+  if (resetBtn) resetBtn.disabled = disabled;
+  if (scaleInput) scaleInput.disabled = disabled;
+
+  if (disabled) {
     empty.style.display = 'block';
     img.style.display = 'none';
+    if (bg) bg.style.display = 'none';
     box.style.display = 'none';
     return;
   }
 
-  select.disabled = false;
-  applyBtn.disabled = false;
   empty.style.display = 'none';
   img.style.display = 'block';
 
@@ -602,26 +641,40 @@ function renderFocusEditor() {
 
   const image = ensureFocus(state.images[state.focus.imageIndex]);
   img.src = `file://${image.path}`;
+  if (bg) {
+    bg.src = `file://${image.path}`;
+    bg.style.display = state.config.backgroundMode === 'blur' ? 'block' : 'none';
+  }
   updateFocusBoxPreview();
 }
 
 function updateFocusBoxPreview() {
   const img = document.getElementById('focus-image');
+  const editor = document.getElementById('focus-editor');
   const box = document.getElementById('focus-box');
   const readout = document.getElementById('focus-readout');
-  if (!img || !box) return;
+  const scaleReadout = document.getElementById('focus-scale-readout');
+  const scaleInput = document.getElementById('focus-scale');
+  if (!img || !editor || !box) return;
   if (state.images.length === 0 || !img.naturalWidth) {
     box.style.display = 'none';
     return;
   }
   const image = state.images[state.focus.imageIndex];
-  const geom = focusBox(image, state.focus.format, img.naturalWidth, img.naturalHeight);
+  const geom = frameGeometry(image, state.focus.format, img.naturalWidth, img.naturalHeight);
+  const rect = editor.getBoundingClientRect();
+  const fw = rect.width || 640;
+  const fh = rect.height || 360;
+
+  img.style.width = `${fw / geom.frameW}px`;
+  img.style.height = `${fh / geom.frameH}px`;
+  img.style.left = `${(-geom.boxLeft / geom.frameW) * fw}px`;
+  img.style.top = `${(-geom.boxTop / geom.frameH) * fh}px`;
+
   box.style.display = 'block';
-  box.style.left = `${geom.left * 100}%`;
-  box.style.top = `${geom.top * 100}%`;
-  box.style.width = `${geom.width * 100}%`;
-  box.style.height = `${geom.height * 100}%`;
-  if (readout) readout.textContent = `${geom.fx.toFixed(2)}, ${geom.fy.toFixed(2)}`;
+  if (readout) readout.textContent = `${geom.fx.toFixed(2)}, ${geom.fy.toFixed(2)} · ×${geom.scale.toFixed(2)}`;
+  if (scaleReadout) scaleReadout.textContent = geom.scale.toFixed(2);
+  if (scaleInput) scaleInput.value = String(geom.scale);
 }
 
 function handleFocusPointer(e) {
@@ -630,20 +683,49 @@ function handleFocusPointer(e) {
   const img = document.getElementById('focus-image');
   if (!editor || !img || !img.naturalWidth) return;
 
-  const rect = img.getBoundingClientRect();
-  const px = (e.clientX - rect.left) / rect.width;
-  const py = (e.clientY - rect.top) / rect.height;
-  if (isNaN(px) || isNaN(py)) return;
+  const rect = editor.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const gx = (e.clientX - rect.left) / rect.width;
+  const gy = (e.clientY - rect.top) / rect.height;
+  if (isNaN(gx) || isNaN(gy)) return;
 
   const image = ensureFocus(state.images[state.focus.imageIndex]);
-  const geom = focusBox(image, state.focus.format, img.naturalWidth, img.naturalHeight);
-  const halfW = geom.width / 2;
-  const halfH = geom.height / 2;
-  const fx = Math.min(1 - halfW, Math.max(halfW, px));
-  const fy = Math.min(1 - halfH, Math.max(halfH, py));
+  const geom = frameGeometry(image, state.focus.format, img.naturalWidth, img.naturalHeight);
+  const u = geom.boxLeft + gx * geom.frameW;
+  const v = geom.boxTop + gy * geom.frameH;
 
-  image[FORMAT_FOCUS_KEY[state.focus.format]] = { x: fx, y: fy };
+  const key = FORMAT_FOCUS_KEY[state.focus.format];
+  image[key] = { x: clampFocus(u), y: clampFocus(v), scale: geom.scale };
   updateFocusBoxPreview();
+}
+
+function setFocusScale(value) {
+  if (state.images.length === 0) return;
+  const image = ensureFocus(state.images[state.focus.imageIndex]);
+  const key = FORMAT_FOCUS_KEY[state.focus.format];
+  image[key].scale = clampScale(value);
+  updateFocusBoxPreview();
+}
+
+function applyAutoScale() {
+  if (state.images.length === 0) return;
+  const img = document.getElementById('focus-image');
+  if (!img || !img.naturalWidth) return;
+  const image = ensureFocus(state.images[state.focus.imageIndex]);
+  const geom = frameGeometry(image, state.focus.format, img.naturalWidth, img.naturalHeight);
+  const key = FORMAT_FOCUS_KEY[state.focus.format];
+  image[key].scale = geom.autoScale;
+  updateFocusBoxPreview();
+  showToast(`Ajuste automático: escala ${geom.autoScale.toFixed(2)}`, 'success');
+}
+
+function resetFocus() {
+  if (state.images.length === 0) return;
+  const image = ensureFocus(state.images[state.focus.imageIndex]);
+  const key = FORMAT_FOCUS_KEY[state.focus.format];
+  image[key] = { x: DEFAULT_FOCUS.x, y: DEFAULT_FOCUS.y, scale: DEFAULT_SCALE };
+  updateFocusBoxPreview();
+  showToast('Encuadre restablecido', 'info');
 }
 
 function applyFocusToAll() {
@@ -651,10 +733,10 @@ function applyFocusToAll() {
   const key = FORMAT_FOCUS_KEY[state.focus.format];
   const source = ensureFocus(state.images[state.focus.imageIndex])[key];
   state.images.forEach(image => {
-    ensureFocus(image)[key] = { ...source };
+    ensureFocus(image)[key] = { x: source.x, y: source.y, scale: source.scale };
   });
   updateFocusBoxPreview();
-  showToast(`Enfoque aplicado a ${state.images.length} imagen(es) en ${state.focus.format}`, 'success');
+  showToast(`Encuadre aplicado a ${state.images.length} imagen(es) en ${state.focus.format}`, 'success');
 }
 
 async function handleOpenOutputFolder() {
@@ -1030,8 +1112,28 @@ const CONTROLS = [
     rutaConfig: 'focus.format',
     handler: (e) => {
       state.focus.format = e.target.value;
-      updateFocusBoxPreview();
+      renderFocusEditor();
     }
+  },
+  {
+    id: 'focus-scale',
+    tipo: 'range',
+    rutaConfig: 'focus.scale',
+    handler: (e) => {
+      setFocusScale(parseFloat(e.target.value));
+    }
+  },
+  {
+    id: 'focus-auto-btn',
+    tipo: 'button',
+    rutaConfig: 'focus',
+    handler: applyAutoScale
+  },
+  {
+    id: 'focus-reset-btn',
+    tipo: 'button',
+    rutaConfig: 'focus',
+    handler: resetFocus
   },
   {
     id: 'focus-apply-all-btn',
@@ -1044,6 +1146,24 @@ const CONTROLS = [
     tipo: 'focuseditor',
     rutaConfig: 'focus',
     handler: handleFocusPointer
+  },
+  {
+    id: 'background-mode',
+    tipo: 'select',
+    rutaConfig: 'config.backgroundMode',
+    handler: (e) => {
+      state.config.backgroundMode = e.target.value === 'blur' ? 'blur' : 'color';
+      renderFocusEditor();
+    }
+  },
+  {
+    id: 'background-color',
+    tipo: 'input',
+    rutaConfig: 'config.backgroundColor',
+    handler: (e) => {
+      state.config.backgroundColor = e.target.value;
+      if (state.config.backgroundMode !== 'blur') renderFocusEditor();
+    }
   }
 ];
 
@@ -1099,6 +1219,9 @@ function setupControl(control) {
       element.addEventListener('change', control.handler);
     } else if (control.tipo === 'input') {
       element.addEventListener('change', control.handler);
+    } else if (control.tipo === 'range') {
+      element.addEventListener('input', control.handler);
+      element.addEventListener('change', control.handler);
     } else if (control.tipo === 'select') {
       element.addEventListener('change', control.handler);
     } else if (control.tipo === 'focuseditor') {
@@ -1118,6 +1241,13 @@ function setupControl(control) {
       element.addEventListener('pointercancel', () => {
         dragging = false;
       });
+      element.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const current = state.images.length
+          ? clampScale(ensureFocus(state.images[state.focus.imageIndex])[FORMAT_FOCUS_KEY[state.focus.format]].scale)
+          : DEFAULT_SCALE;
+        setFocusScale(current + (e.deltaY < 0 ? 0.05 : -0.05));
+      }, { passive: false });
       const focusImage = document.getElementById('focus-image');
       if (focusImage) focusImage.addEventListener('load', updateFocusBoxPreview);
     }
@@ -1190,8 +1320,8 @@ function renderAll() {
 }
 
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips };
-window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus };
+window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry };
 
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();

@@ -1,13 +1,26 @@
 const { z } = require('zod');
-const { OUTPUT_IDS, DEFAULT_OUTPUTS, FOCUS_KEYS, DEFAULT_FOCUS, FORMAT_FOCUS_KEY } = require('./output-formats.js');
+const {
+  OUTPUT_IDS,
+  DEFAULT_OUTPUTS,
+  FOCUS_KEYS,
+  DEFAULT_FOCUS,
+  DEFAULT_SCALE,
+  SCALE_MIN,
+  SCALE_MAX,
+  BACKGROUND_MODES,
+  DEFAULT_BACKGROUND_MODE,
+  DEFAULT_BACKGROUND_COLOR,
+  FORMAT_FOCUS_KEY
+} = require('./output-formats.js');
 
 const FOCUS_KEYS_TUPLE = FOCUS_KEYS;
 const OUTPUT_IDS_TUPLE = OUTPUT_IDS;
 
 const focusSchema = z.object({
   x: z.number().min(0).max(1).default(DEFAULT_FOCUS.x),
-  y: z.number().min(0).max(1).default(DEFAULT_FOCUS.y)
-}).default({ ...DEFAULT_FOCUS });
+  y: z.number().min(0).max(1).default(DEFAULT_FOCUS.y),
+  scale: z.number().min(SCALE_MIN).max(SCALE_MAX).default(DEFAULT_SCALE)
+}).default({});
 
 const imageSchema = z.object({
   name: z.string(),
@@ -22,6 +35,8 @@ const configSchema = z.object({
   outputs: z.array(z.enum(OUTPUT_IDS_TUPLE)).min(1).default([...DEFAULT_OUTPUTS]),
   fitMode: z.enum(['cover', 'blur', 'frame']).default('cover'),
   frameColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#000000'),
+  backgroundMode: z.enum(BACKGROUND_MODES).default(DEFAULT_BACKGROUND_MODE),
+  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default(DEFAULT_BACKGROUND_COLOR),
   musicVolume: z.number().min(0).max(1).default(0.3)
 }).default({});
 
@@ -62,9 +77,13 @@ function imageFocus(image, formatId) {
   const key = FORMAT_FOCUS_KEY[formatId];
   const focus = image && image[key];
   if (!focus || typeof focus.x !== 'number' || typeof focus.y !== 'number') {
-    return { ...DEFAULT_FOCUS };
+    return { ...DEFAULT_FOCUS, scale: DEFAULT_SCALE };
   }
-  return { x: focus.x, y: focus.y };
+  return {
+    x: focus.x,
+    y: focus.y,
+    scale: typeof focus.scale === 'number' ? focus.scale : DEFAULT_SCALE
+  };
 }
 
 module.exports = {

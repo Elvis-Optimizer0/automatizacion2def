@@ -1,6 +1,10 @@
 const {
   assertOutputConfig,
-  DEFAULT_FOCUS
+  DEFAULT_FOCUS,
+  DEFAULT_SCALE,
+  SCALE_MIN,
+  SCALE_MAX,
+  BACKGROUND_MODES
 } = require('./output-formats.js');
 
 const FPS = 30;
@@ -20,6 +24,15 @@ function num(value, decimals = 6) {
 function clamp01(value) {
   if (typeof value !== 'number' || isNaN(value)) return DEFAULT_FOCUS.x;
   return Math.min(1, Math.max(0, value));
+}
+
+function clampScale(value) {
+  if (typeof value !== 'number' || isNaN(value)) return DEFAULT_SCALE;
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
+}
+
+function backgroundModeFor(mode) {
+  return BACKGROUND_MODES.includes(mode) ? mode : BACKGROUND_MODES[0];
 }
 
 function safeColor(color) {
@@ -67,7 +80,10 @@ function buildSceneVideoFilter(scene, index, options = {}) {
   const outputConfig = assertOutputConfig(options.outputConfig);
   const fitMode = FIT_MODES.includes(options.fitMode) ? options.fitMode : 'cover';
   const frameColor = safeColor(options.frameColor);
+  const backgroundMode = backgroundModeFor(options.backgroundMode);
+  const backgroundColor = safeColor(options.backgroundColor);
   const focus = scene.focus && typeof scene.focus === 'object' ? scene.focus : DEFAULT_FOCUS;
+  const scale = clampScale(focus.scale);
 
   const w = outputConfig.w;
   const h = outputConfig.h;
@@ -89,8 +105,25 @@ function buildSceneVideoFilter(scene, index, options = {}) {
     parts.push(`[${index}:v]scale=${widthExpr}[scaled${index}]`);
     parts.push(`[scaled${index}]pad=${w}:${h}:0:oh/2-ih/2:color=${frameColor}[base${index}]`);
     baseLabel = `base${index}`;
+  } else if (scale < 1) {
+    const sw = num(w * scale);
+    const sh = num(h * scale);
+    if (backgroundMode === 'blur') {
+      const radius = Math.max(2, Math.round(Math.min(w, h) / 20));
+      parts.push(`[${index}:v]split=2[zbg${index}][zfg${index}]`);
+      parts.push(`[zbg${index}]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=luma_radius=${radius}:luma_power=2[zbase${index}]`);
+      parts.push(`[zfg${index}]scale=${sw}:${sh}:force_original_aspect_ratio=increase[zscaled${index}]`);
+      parts.push(`[zbase${index}][zscaled${index}]overlay=x='(W-w)*${fx}':y='(H-h)*${fy}'[base${index}]`);
+    } else {
+      parts.push(`[${index}:v]scale=${sw}:${sh}:force_original_aspect_ratio=increase[zscaled${index}]`);
+      parts.push(`[zscaled${index}]pad=w='max(${w},iw)':h='max(${h},ih)':x='max(0,(max(${w},iw)-iw)*${fx})':y='max(0,(max(${h},ih)-ih)*${fy})':color=${backgroundColor}[zpad${index}]`);
+      parts.push(`[zpad${index}]crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
+    }
+    baseLabel = `base${index}`;
   } else {
-    parts.push(`[${index}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
+    const sw = num(w * scale);
+    const sh = num(h * scale);
+    parts.push(`[${index}:v]scale=${sw}:${sh}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
     baseLabel = `base${index}`;
   }
 
@@ -232,6 +265,7 @@ module.exports = {
   fixAsarPath,
   num,
   clamp01,
+  clampScale,
   safeColor,
   transitionDurationFor,
   sceneInputDuration,

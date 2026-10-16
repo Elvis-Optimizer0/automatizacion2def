@@ -108,6 +108,8 @@ function buildFfmpegArgs(options) {
 
   const fitMode = config.fitMode || 'cover';
   const frameColor = config.frameColor || '#000000';
+  const backgroundMode = config.backgroundMode || 'color';
+  const backgroundColor = config.backgroundColor || '#000000';
   const musicVolume = config.musicVolume != null ? config.musicVolume : 0.3;
   const transitionType = renderOptions.transitionType || 'fade';
   const transitionDuration = renderOptions.transitionDuration != null
@@ -149,6 +151,8 @@ function buildFfmpegArgs(options) {
     outputConfig,
     fitMode,
     frameColor,
+    backgroundMode,
+    backgroundColor,
     hasMusic,
     totalDuration,
     musicVolume,

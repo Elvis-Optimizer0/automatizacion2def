@@ -159,7 +159,13 @@
           <option value="4:5">4:5</option>
         </select>
       </div>
+      <div class="export-control-row">
+        <label for="focus-scale">Escala</label>
+        <input type="range" id="focus-scale" class="focus-scale" min="0.3" max="3" step="0.05" value="1" aria-label="Escala del encuadre">
+        <span id="focus-scale-readout" class="focus-readout">1.00</span>
+      </div>
       <div id="focus-editor" class="focus-editor" role="application" aria-label="Editor de enfoque" tabindex="0">
+        <img id="focus-bg" class="focus-bg" alt="" aria-hidden="true" draggable="false">
         <img id="focus-image" class="focus-image" alt="Imagen para enfocar" draggable="false">
         <div id="focus-box" class="focus-box"></div>
         <div id="focus-empty" class="focus-empty">Importa imágenes para ajustar el enfoque</div>
@@ -172,7 +178,13 @@
           </svg>
           <span>Aplicar a todas</span>
         </button>
-        <span id="focus-readout" class="focus-readout">0.50, 0.50</span>
+        <button id="focus-auto-btn" class="btn btn-secondary" type="button" disabled>
+          <span>Ajuste automático</span>
+        </button>
+        <button id="focus-reset-btn" class="btn btn-secondary" type="button" disabled>
+          <span>Restablecer</span>
+        </button>
+        <span id="focus-readout" class="focus-readout">0.50, 0.50 · ×1.00</span>
       </div>
     </section>
 
@@ -202,6 +214,17 @@
           <div class="export-control-row">
             <label for="frame-color">Color del marco</label>
             <input type="color" id="frame-color" class="export-color" value="#000000">
+          </div>
+          <div class="export-control-row">
+            <label for="background-mode">Fondo del encuadre</label>
+            <select id="background-mode" class="export-select">
+              <option value="color">Color</option>
+              <option value="blur">Desenfoque</option>
+            </select>
+          </div>
+          <div class="export-control-row">
+            <label for="background-color">Color del fondo</label>
+            <input type="color" id="background-color" class="export-color" value="#000000">
           </div>
         </fieldset>
 
