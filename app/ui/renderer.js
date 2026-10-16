@@ -1190,8 +1190,8 @@ function renderAll() {
 }
 
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus };
-window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips };
+window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages };
 
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();
