@@ -437,6 +437,20 @@ body {
 
 .timeline-controls {
   margin-bottom: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.btn-sm {
+  padding: 0.3rem 0.7rem;
+  font-size: var(--font-size-sm);
+}
+
+.timeline-table select {
+  min-width: 120px;
 }
 
 .checkbox-label {
@@ -627,8 +641,10 @@ body {
     flex-direction: column;
   }
 
-  .timeline-table th:nth-child(7),
-  .timeline-table td:nth-child(7) {
+  .timeline-table th:nth-child(2),
+  .timeline-table td:nth-child(2),
+  .timeline-table th:nth-child(10),
+  .timeline-table td:nth-child(10) {
     display: none;
   }
 }

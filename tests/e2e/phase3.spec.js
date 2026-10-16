@@ -118,7 +118,7 @@ test.describe.serial('Video Maker - Phase 3 Export', () => {
     await page.waitForTimeout(500);
 
     await expect(page.locator('#script-summary')).toContainText('3 escenas detectadas');
-    const durations = await page.locator('#timeline-tbody input[type="number"]').evaluateAll(inputs =>
+    const durations = await page.locator('#timeline-tbody .timeline-duration-input').evaluateAll(inputs =>
       inputs.map(i => parseFloat(i.value))
     );
     const total = durations.reduce((a, b) => a + b, 0);

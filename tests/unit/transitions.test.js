@@ -120,6 +120,46 @@ test.describe('transition catalog', () => {
     expect(defaults.renderOptions.transitionSeed).toBe(DEFAULT_TRANSITION_SEED);
   });
 
+  test('per-scene transition overrides the global type at its boundary', () => {
+    const list = [{ number: 1, duration: 3 }, { number: 2, duration: 3, transition: { type: 'slideDown' } }, { number: 3, duration: 3 }];
+    const types = resolveBoundaryTypes(list, { transitionType: 'fade', transitionMode: 'fixed' });
+    expect(types[1]).toBe('slideDown');
+    expect(types[2]).toBe('fade');
+
+    const graph = buildVideoFilterGraph(list, { outputConfig, transitionType: 'fade', transitionDuration: 1 });
+    expect(graph).toContain('xfade=transition=slidedown:duration=1:offset=3');
+    expect(graph).toContain('xfade=transition=fade:duration=1:offset=6');
+  });
+
+  test('schema accepts per-scene transition and zoom overrides', () => {
+    const payload = parseRenderPayload({
+      scenes: [
+        { number: 1, duration: 3, zoom: { type: 'panLeft', intensity: 0.3 }, transition: { type: 'circle' } },
+        { number: 2, duration: 3 }
+      ],
+      images: [{ name: 'a.png', path: 'C:/tmp/a.png' }, { name: 'b.png', path: 'C:/tmp/b.png' }],
+      narration: { name: 'n.wav', path: 'C:/tmp/n.wav' },
+      outputPath: 'C:/tmp/out.mp4',
+      config: {},
+      renderOptions: {}
+    });
+    expect(payload.scenes[0].zoom).toEqual({ type: 'panLeft', intensity: 0.3 });
+    expect(payload.scenes[0].transition).toEqual({ type: 'circle' });
+    expect(payload.scenes[1].zoom).toBeUndefined();
+    expect(payload.scenes[1].transition).toBeUndefined();
+  });
+
+  test('invalid per-scene transition is rejected by the schema', () => {
+    expect(() => parseRenderPayload({
+      scenes: [{ number: 1, duration: 3, transition: { type: 'teleport' } }],
+      images: [{ name: 'a.png', path: 'C:/tmp/a.png' }],
+      narration: { name: 'n.wav', path: 'C:/tmp/n.wav' },
+      outputPath: 'C:/tmp/out.mp4',
+      config: {},
+      renderOptions: {}
+    })).toThrow();
+  });
+
   test('invalid transition type is rejected by the schema', () => {
     expect(() => parseRenderPayload({
       scenes: [{ number: 1, duration: 4 }],

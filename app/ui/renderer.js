@@ -434,6 +434,7 @@ function renderTimeline() {
     durInput.type = 'number';
     durInput.step = '0.1';
     durInput.min = '0.1';
+    durInput.className = 'timeline-duration-input';
     durInput.value = scene.duration.toFixed(1);
     durInput.dataset.index = index;
     durInput.addEventListener('change', handleDurationChange);
@@ -448,6 +449,58 @@ function renderTimeline() {
     }
     row.appendChild(imgCell);
 
+    const zoomCell = document.createElement('td');
+    const zoomSelect = document.createElement('select');
+    zoomSelect.className = 'timeline-zoom-select';
+    zoomSelect.dataset.index = index;
+    const zoomGlobal = document.createElement('option');
+    zoomGlobal.value = '';
+    zoomGlobal.textContent = '(global)';
+    zoomSelect.appendChild(zoomGlobal);
+    ZOOM_TYPES.forEach((type) => {
+      const option = document.createElement('option');
+      option.value = type;
+      option.textContent = type;
+      zoomSelect.appendChild(option);
+    });
+    zoomSelect.value = scene.zoom && scene.zoom.type ? scene.zoom.type : '';
+    zoomSelect.addEventListener('change', handleSceneZoomChange);
+    zoomCell.appendChild(zoomSelect);
+    row.appendChild(zoomCell);
+
+    const intensityCell = document.createElement('td');
+    const intensityInput = document.createElement('input');
+    intensityInput.type = 'number';
+    intensityInput.step = '0.05';
+    intensityInput.min = '0';
+    intensityInput.max = '1';
+    intensityInput.className = 'timeline-intensity-input';
+    intensityInput.dataset.index = index;
+    const sceneIntensity = scene.zoom && scene.zoom.intensity != null ? scene.zoom.intensity : state.exportOptions.zoomIntensity;
+    intensityInput.value = Number(sceneIntensity).toFixed(2);
+    intensityInput.addEventListener('change', handleSceneIntensityChange);
+    intensityCell.appendChild(intensityInput);
+    row.appendChild(intensityCell);
+
+    const transitionCell = document.createElement('td');
+    const transitionSelect = document.createElement('select');
+    transitionSelect.className = 'timeline-transition-select';
+    transitionSelect.dataset.index = index;
+    const transitionGlobal = document.createElement('option');
+    transitionGlobal.value = '';
+    transitionGlobal.textContent = '(global)';
+    transitionSelect.appendChild(transitionGlobal);
+    TRANSITION_TYPES.forEach((type) => {
+      const option = document.createElement('option');
+      option.value = type;
+      option.textContent = type;
+      transitionSelect.appendChild(option);
+    });
+    transitionSelect.value = scene.transition && scene.transition.type ? scene.transition.type : '';
+    transitionSelect.addEventListener('change', handleSceneTransitionChange);
+    transitionCell.appendChild(transitionSelect);
+    row.appendChild(transitionCell);
+
     const textCell = document.createElement('td');
     textCell.textContent = scene.text || '';
     textCell.style.maxWidth = '300px';
@@ -460,6 +513,56 @@ function renderTimeline() {
   });
 
   summary.textContent = `Duración total: ${formatTime(totalDuration)} ${state.audioDuration > 0 ? `· Audio: ${formatTime(state.audioDuration)}` : ''}${Math.abs(totalDuration - state.audioDuration) > 0.1 ? ' ⚠ Desajuste' : ''}`;
+}
+
+function handleSceneZoomChange(e) {
+  const index = parseInt(e.target.dataset.index, 10);
+  const value = e.target.value;
+  const scene = state.timeline[index];
+  if (!scene) return;
+  if (!value) {
+    if (scene.zoom) delete scene.zoom.type;
+    if (scene.zoom && !scene.zoom.type && scene.zoom.intensity == null) delete scene.zoom;
+  } else {
+    scene.zoom = { ...(scene.zoom || {}), type: value };
+  }
+}
+
+function handleSceneIntensityChange(e) {
+  const index = parseInt(e.target.dataset.index, 10);
+  const scene = state.timeline[index];
+  if (!scene) return;
+  const value = parseFloat(e.target.value);
+  if (isNaN(value) || value < 0) {
+    e.target.value = Number(state.exportOptions.zoomIntensity).toFixed(2);
+    return;
+  }
+  scene.zoom = { ...(scene.zoom || {}), intensity: Math.min(1, Math.max(0, value)) };
+}
+
+function handleSceneTransitionChange(e) {
+  const index = parseInt(e.target.dataset.index, 10);
+  const value = e.target.value;
+  const scene = state.timeline[index];
+  if (!scene) return;
+  if (!value) {
+    delete scene.transition;
+  } else {
+    scene.transition = { type: value };
+  }
+}
+
+function applySceneSettingsToAll() {
+  if (state.timeline.length === 0) return;
+  const first = state.timeline[0];
+  state.timeline.forEach((scene) => {
+    scene.zoom = first.zoom ? { ...first.zoom } : undefined;
+    if (!scene.zoom) delete scene.zoom;
+    scene.transition = first.transition ? { ...first.transition } : undefined;
+    if (!scene.transition) delete scene.transition;
+  });
+  renderTimeline();
+  showToast('Ajustes de escena aplicados a todas', 'success');
 }
 
 function handleDurationChange(e) {
@@ -802,7 +905,12 @@ async function handleExport() {
   }
   if (!outputPath) return;
 
-  const scenes = state.timeline.map(s => ({ number: s.number, duration: s.duration }));
+  const scenes = state.timeline.map(s => {
+    const scene = { number: s.number, duration: s.duration };
+    if (s.zoom) scene.zoom = { ...s.zoom };
+    if (s.transition) scene.transition = { ...s.transition };
+    return scene;
+  });
   const images = buildExportImages();
 
   state.export.isRendering = true;
@@ -1010,6 +1118,11 @@ const CONTROLS = [
       state.timelineOptions.adjustToAudio = e.target.checked;
       updateTimeline();
     }
+  },
+  {
+    id: 'apply-scene-settings-btn',
+    tipo: 'button',
+    handler: applySceneSettingsToAll
   },
   {
     id: 'zoom-enabled-checkbox',

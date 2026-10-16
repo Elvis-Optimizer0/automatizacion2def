@@ -135,7 +135,10 @@ function resolveBoundaryTypes(scenes, options = {}) {
   } = options;
   const types = [];
   for (let i = 1; i < scenes.length; i++) {
-    types[i] = resolveTransitionType(transitionType, transitionMode, i - 1, transitionSeed);
+    const override = scenes[i] && scenes[i].transition && scenes[i].transition.type;
+    types[i] = TRANSITION_TYPES.includes(override)
+      ? override
+      : resolveTransitionType(transitionType, transitionMode, i - 1, transitionSeed);
   }
   return types;
 }

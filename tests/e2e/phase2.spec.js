@@ -172,7 +172,7 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
     const rows = page.locator('#timeline-tbody tr');
     await expect(rows).toHaveCount(4);
 
-    const durations = await page.locator('#timeline-tbody input[type="number"]').evaluateAll(inputs =>
+    const durations = await page.locator('#timeline-tbody .timeline-duration-input').evaluateAll(inputs =>
       inputs.map(i => parseFloat(i.value))
     );
 

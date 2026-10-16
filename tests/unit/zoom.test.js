@@ -125,6 +125,16 @@ test.describe('zoom catalog', () => {
     expect(defaults.renderOptions.zoomSeed).toBe(DEFAULT_ZOOM_SEED);
   });
 
+  test('per-scene zoom overrides the global type and intensity', () => {
+    const sceneWithZoom = { duration: 4, focus, zoom: { type: 'panRight', intensity: 0.3 } };
+    const graph = buildSceneVideoFilter(sceneWithZoom, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.1, zoomStartScale: 1 });
+    expect(graph).toContain('(iw-iw/zoom)*on/120');
+    expect(graph).toContain('1.3');
+
+    const fallback = buildSceneVideoFilter({ duration: 4, focus }, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.2, zoomStartScale: 1 });
+    expect(fallback).toContain('iw*0.2');
+  });
+
   test('invalid zoom type is rejected by the schema', () => {
     expect(() => parseRenderPayload({
       scenes: [{ number: 1, duration: 4 }],

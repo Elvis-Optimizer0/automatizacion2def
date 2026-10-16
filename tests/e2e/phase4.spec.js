@@ -178,7 +178,7 @@ test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
     await page.check('#adjust-timeline-checkbox');
     await page.waitForTimeout(500);
 
-    const durations = await page.locator('#timeline-tbody input[type="number"]').evaluateAll(inputs =>
+    const durations = await page.locator('#timeline-tbody .timeline-duration-input').evaluateAll(inputs =>
       inputs.map(i => parseFloat(i.value))
     );
     const total = durations.reduce((a, b) => a + b, 0);

@@ -67,10 +67,15 @@ const sceneZoomSchema = z.object({
   intensity: z.number().min(0).max(1).optional()
 }).optional();
 
+const sceneTransitionSchema = z.object({
+  type: z.enum(TRANSITION_TYPES).optional()
+}).optional();
+
 const sceneSchema = z.object({
   number: z.number(),
   duration: z.number().positive(),
-  zoom: sceneZoomSchema
+  zoom: sceneZoomSchema,
+  transition: sceneTransitionSchema
 });
 
 const audioSchema = z.object({
