@@ -305,10 +305,11 @@ function buildVideoFilterGraph(scenes, options = {}) {
   const n = scenes.length;
   if (n === 0) return '';
 
+  const finalLabel = options.finalVideoLabel || 'vout';
   const parts = scenes.map((scene, index) => buildSceneVideoFilter(scene, index, options));
 
   if (n === 1) {
-    parts.push('[v0]copy[vout]');
+    parts.push(`[v0]copy[${finalLabel}]`);
     return parts.join(';');
   }
 
@@ -324,7 +325,7 @@ function buildVideoFilterGraph(scenes, options = {}) {
     currentLabel = `x${i}`;
   }
 
-  parts.push(`[${currentLabel}]copy[vout]`);
+  parts.push(`[${currentLabel}]copy[${finalLabel}]`);
   return parts.join(';');
 }
 
@@ -354,11 +355,120 @@ function buildAudioFilterGraph(options = {}) {
   return parts.join(';');
 }
 
+function escapeDrawtext(text) {
+  return String(text)
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, '\\\'')
+    .replace(/%/g, '\\%')
+    .replace(/\n/g, '\\n');
+}
+
+function escapeFilterPath(filePath) {
+  return String(filePath).replace(/\\/g, '/').replace(/:/g, '\\:');
+}
+
+function hexToDraw(color) {
+  const safe = safeColor(color);
+  return `0x${safe.slice(1)}`;
+}
+
+function badgePosition(position, w, h, pad) {
+  switch (position) {
+  case 'topLeft': return { x: `${pad}`, y: `${pad}` };
+  case 'bottomLeft': return { x: `${pad}`, y: `${h}-th-${pad}` };
+  case 'bottomRight': return { x: `${w}-tw-${pad}`, y: `${h}-th-${pad}` };
+  case 'topRight':
+  default: return { x: `${w}-tw-${pad}`, y: `${pad}` };
+  }
+}
+
+function hasExtras(extras) {
+  if (!extras || typeof extras !== 'object') return false;
+  const badge = extras.badge || {};
+  const lowerThird = extras.lowerThird || {};
+  const progressBar = extras.progressBar || {};
+  return Boolean(
+    (badge.enabled && badge.text)
+    || (lowerThird.enabled && lowerThird.text)
+    || progressBar.enabled
+  );
+}
+
+function buildExtrasFilter(options = {}) {
+  const { extras, outputConfig, totalDuration, fontPath, inputLabel = 'vpre', outputLabel = 'vout' } = options;
+  if (!hasExtras(extras)) return '';
+
+  const w = outputConfig.w;
+  const h = outputConfig.h;
+  const font = escapeFilterPath(fontPath);
+  const filters = [];
+
+  const badge = extras.badge || {};
+  if (badge.enabled && badge.text) {
+    const pad = Math.round(Math.min(w, h) * 0.03);
+    const size = Math.round(Math.min(w, h) * 0.045);
+    const pos = badgePosition(badge.position, w, h, pad);
+    const fontColor = 'white';
+    const boxColor = 'black@0.55';
+    let alphaPart = '';
+    let xExpr = pos.x;
+    if (badge.animation === 'fade') {
+      alphaPart = ':alpha=\'min(1,t/1)\'';
+    } else if (badge.animation === 'pop') {
+      alphaPart = ':alpha=\'min(1,t/0.3)\'';
+    } else if (badge.animation === 'pulse') {
+      alphaPart = ':alpha=\'0.5+0.5*sin(2*PI*t)\'';
+    } else if (badge.animation === 'slide') {
+      xExpr = `${pos.x}-(1-min(1,t/0.6))*${Math.round(Math.min(w, h) * 0.12)}`;
+      alphaPart = ':alpha=\'min(1,t/0.4)\'';
+    }
+    filters.push(
+      `drawtext=fontfile='${font}':text='${escapeDrawtext(badge.text)}'`
+      + `:x='${xExpr}':y='${pos.y}':fontsize=${size}:fontcolor=${fontColor}`
+      + `:box=1:boxcolor=${boxColor}:boxborderw=${Math.round(size * 0.35)}${alphaPart}`
+    );
+  }
+
+  const lowerThird = extras.lowerThird || {};
+  if (lowerThird.enabled && lowerThird.text) {
+    const size = Math.round(Math.min(w, h) * 0.05);
+    const opacity = lowerThird.opacity != null ? lowerThird.opacity : 0.6;
+    const boxAlpha = Math.min(1, Math.max(0, opacity));
+    const boxColor = `black@${num(boxAlpha)}`;
+    const xExpr = `${Math.round(w * 0.05)}`;
+    const yExpr = `${h}-th-${Math.round(h * 0.08)}`;
+    filters.push(
+      `drawtext=fontfile='${font}':text='${escapeDrawtext(lowerThird.text)}'`
+      + `:x='${xExpr}':y='${yExpr}':fontsize=${size}:fontcolor=white`
+      + `:box=1:boxcolor=${boxColor}:boxborderw=${Math.round(size * 0.4)}`
+    );
+  }
+
+  const progressBar = extras.progressBar || {};
+  if (progressBar.enabled) {
+    const height = progressBar.height != null ? progressBar.height : 8;
+    const color = hexToDraw(progressBar.color || '#ff0000');
+    const duration = totalDuration > 0 ? num(totalDuration) : 1;
+    filters.push(
+      `drawbox=x=0:y=${h}-${height}:w='iw*min(1,t/${duration})':h=${height}:color=${color}@0.9:t=fill`
+    );
+  }
+
+  if (filters.length === 0) return '';
+  return `[${inputLabel}]${filters.join(',')}[${outputLabel}]`;
+}
+
 function buildFullFilterGraph(scenes, options = {}) {
   assertOutputConfig(options.outputConfig);
 
-  const { hasMusic = false, totalDuration, musicVolume = 0.3 } = options;
-  const videoGraph = buildVideoFilterGraph(scenes, options);
+  const { hasMusic = false, totalDuration, musicVolume = 0.3, extras, fontPath } = options;
+  const extrasEnabled = hasExtras(extras);
+  const videoLabel = extrasEnabled ? 'vmain' : 'vout';
+  const videoGraph = buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: videoLabel });
+  const extrasGraph = extrasEnabled
+    ? buildExtrasFilter({ extras, outputConfig: options.outputConfig, totalDuration, fontPath, inputLabel: 'vmain', outputLabel: 'vout' })
+    : '';
   const audioGraph = buildAudioFilterGraph({
     inputCount: scenes.length,
     hasMusic,
@@ -366,9 +476,10 @@ function buildFullFilterGraph(scenes, options = {}) {
     musicVolume
   });
 
-  if (!videoGraph) return audioGraph;
-  if (!audioGraph) return videoGraph;
-  return `${videoGraph};${audioGraph}`;
+  const videoParts = [videoGraph, extrasGraph].filter(Boolean).join(';');
+  if (!videoParts) return audioGraph;
+  if (!audioGraph) return videoParts;
+  return `${videoParts};${audioGraph}`;
 }
 
 function validateOffsets(scenes, _transitionType = 'fade', _transitionDuration = 1.0) {
@@ -444,6 +555,10 @@ module.exports = {
   buildSceneVideoFilter,
   buildVideoFilterGraph,
   buildAudioFilterGraph,
+  buildExtrasFilter,
+  hasExtras,
+  escapeDrawtext,
+  escapeFilterPath,
   buildFullFilterGraph,
   validateOffsets,
   calculateTotalDuration,

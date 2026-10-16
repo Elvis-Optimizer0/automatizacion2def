@@ -185,7 +185,12 @@ const state = {
     frameColor: '#000000',
     backgroundMode: 'color',
     backgroundColor: '#000000',
-    musicVolume: 0.3
+    musicVolume: 0.3,
+    extras: {
+      badge: { enabled: false, text: '', position: 'topRight', animation: 'fade' },
+      lowerThird: { enabled: false, text: '', opacity: 0.6 },
+      progressBar: { enabled: false, color: '#ff0000', height: 8 }
+    }
   },
   focus: {
     imageIndex: 0,
@@ -1207,6 +1212,88 @@ const CONTROLS = [
     handler: (e) => {
       const value = parseFloat(e.target.value);
       state.exportOptions.transitionDuration = isNaN(value) ? 1.0 : value;
+    }
+  },
+  {
+    id: 'badge-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.extras.badge.enabled',
+    handler: (e) => {
+      state.config.extras.badge.enabled = e.target.checked;
+    }
+  },
+  {
+    id: 'badge-text',
+    tipo: 'input',
+    rutaConfig: 'config.extras.badge.text',
+    handler: (e) => {
+      state.config.extras.badge.text = e.target.value;
+    }
+  },
+  {
+    id: 'badge-position',
+    tipo: 'select',
+    rutaConfig: 'config.extras.badge.position',
+    handler: (e) => {
+      state.config.extras.badge.position = e.target.value;
+    }
+  },
+  {
+    id: 'badge-animation',
+    tipo: 'select',
+    rutaConfig: 'config.extras.badge.animation',
+    handler: (e) => {
+      state.config.extras.badge.animation = e.target.value;
+    }
+  },
+  {
+    id: 'lower-third-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.extras.lowerThird.enabled',
+    handler: (e) => {
+      state.config.extras.lowerThird.enabled = e.target.checked;
+    }
+  },
+  {
+    id: 'lower-third-text',
+    tipo: 'input',
+    rutaConfig: 'config.extras.lowerThird.text',
+    handler: (e) => {
+      state.config.extras.lowerThird.text = e.target.value;
+    }
+  },
+  {
+    id: 'lower-third-opacity',
+    tipo: 'input',
+    rutaConfig: 'config.extras.lowerThird.opacity',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.extras.lowerThird.opacity = isNaN(value) ? 0.6 : Math.min(1, Math.max(0, value));
+    }
+  },
+  {
+    id: 'progress-bar-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.extras.progressBar.enabled',
+    handler: (e) => {
+      state.config.extras.progressBar.enabled = e.target.checked;
+    }
+  },
+  {
+    id: 'progress-bar-color',
+    tipo: 'input',
+    rutaConfig: 'config.extras.progressBar.color',
+    handler: (e) => {
+      state.config.extras.progressBar.color = e.target.value;
+    }
+  },
+  {
+    id: 'progress-bar-height',
+    tipo: 'input',
+    rutaConfig: 'config.extras.progressBar.height',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.extras.progressBar.height = isNaN(value) ? 8 : Math.min(200, Math.max(1, value));
     }
   },
   {

@@ -39,13 +39,33 @@ const imageSchema = z.object({
   focus45: focusSchema
 });
 
+const extrasSchema = z.object({
+  badge: z.object({
+    enabled: z.boolean().default(false),
+    text: z.string().default(''),
+    position: z.enum(['topLeft', 'topRight', 'bottomLeft', 'bottomRight']).default('topRight'),
+    animation: z.enum(['none', 'fade', 'pulse', 'slide', 'pop']).default('fade')
+  }).default({}),
+  lowerThird: z.object({
+    enabled: z.boolean().default(false),
+    text: z.string().default(''),
+    opacity: z.number().min(0).max(1).default(0.6)
+  }).default({}),
+  progressBar: z.object({
+    enabled: z.boolean().default(false),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ff0000'),
+    height: z.number().min(1).max(200).default(8)
+  }).default({})
+}).default({});
+
 const configSchema = z.object({
   outputs: z.array(z.enum(OUTPUT_IDS_TUPLE)).min(1).default([...DEFAULT_OUTPUTS]),
   fitMode: z.enum(['cover', 'blur', 'frame']).default('cover'),
   frameColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#000000'),
   backgroundMode: z.enum(BACKGROUND_MODES).default(DEFAULT_BACKGROUND_MODE),
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default(DEFAULT_BACKGROUND_COLOR),
-  musicVolume: z.number().min(0).max(1).default(0.3)
+  musicVolume: z.number().min(0).max(1).default(0.3),
+  extras: extrasSchema
 }).default({});
 
 const renderOptionsSchema = z.object({

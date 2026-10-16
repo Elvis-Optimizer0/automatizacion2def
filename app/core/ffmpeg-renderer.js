@@ -26,6 +26,10 @@ function getFfmpegPath() {
   return fixAsarPath(ffmpegStatic);
 }
 
+function getFontPath() {
+  return fixAsarPath(path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans-Bold.ttf'));
+}
+
 function verifyBinaries() {
   const ffmpegPath = getFfmpegPath();
   if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
@@ -160,6 +164,8 @@ function buildFfmpegArgs(options) {
     frameColor,
     backgroundMode,
     backgroundColor,
+    extras: config.extras,
+    fontPath: getFontPath(),
     hasMusic,
     totalDuration,
     musicVolume,

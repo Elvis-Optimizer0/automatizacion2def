@@ -44,7 +44,8 @@
       "**/ffprobe*",
       "**/ffprobe-static/**",
       "**/ffmpeg*",
-      "**/ffmpeg-static/**"
+      "**/ffmpeg-static/**",
+      "app/assets/fonts/**"
     ]
   }
 }
