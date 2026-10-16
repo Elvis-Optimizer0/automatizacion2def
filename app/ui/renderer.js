@@ -157,6 +157,8 @@ const SCALE_MIN = 0.3;
 const SCALE_MAX = 3.0;
 const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
 const ZOOM_MODES = ['fixed', 'alternate', 'random'];
+const TRANSITION_TYPES = ['cut', 'fade', 'fadeblack', 'dissolve', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'curtainLeft', 'curtainRight', 'circle'];
+const TRANSITION_MODES = ['fixed', 'alternate', 'random'];
 const FORMAT_FOCUS_KEY = {
   '16:9': 'focus169',
   '9:16': 'focus916',
@@ -197,6 +199,8 @@ const state = {
     zoomStartScale: 1.0,
     zoomIntensity: 0.15,
     transitionType: 'fade',
+    transitionMode: 'fixed',
+    transitionSeed: 4242,
     transitionDuration: 1.0
   },
   export: {
@@ -1063,7 +1067,24 @@ const CONTROLS = [
     tipo: 'select',
     rutaConfig: 'exportOptions.transitionType',
     handler: (e) => {
-      state.exportOptions.transitionType = e.target.value === 'cut' ? 'cut' : 'fade';
+      state.exportOptions.transitionType = TRANSITION_TYPES.includes(e.target.value) ? e.target.value : 'fade';
+    }
+  },
+  {
+    id: 'transition-mode',
+    tipo: 'select',
+    rutaConfig: 'exportOptions.transitionMode',
+    handler: (e) => {
+      state.exportOptions.transitionMode = TRANSITION_MODES.includes(e.target.value) ? e.target.value : 'fixed';
+    }
+  },
+  {
+    id: 'transition-seed',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.transitionSeed',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.exportOptions.transitionSeed = isNaN(value) ? 4242 : value;
     }
   },
   {

@@ -15,7 +15,10 @@ const {
 const {
   ZOOM_TYPES,
   ZOOM_MODES,
-  DEFAULT_ZOOM_SEED
+  DEFAULT_ZOOM_SEED,
+  TRANSITION_TYPES,
+  TRANSITION_MODES,
+  DEFAULT_TRANSITION_SEED
 } = require('./ffmpeg-helpers.js');
 
 const FOCUS_KEYS_TUPLE = FOCUS_KEYS;
@@ -52,7 +55,9 @@ const renderOptionsSchema = z.object({
   zoomSeed: z.number().int().default(DEFAULT_ZOOM_SEED),
   zoomStartScale: z.number().min(1).max(4).default(1.0),
   zoomIntensity: z.number().min(0).max(1).default(0.15),
-  transitionType: z.enum(['fade', 'cut']).default('fade'),
+  transitionType: z.enum(TRANSITION_TYPES).default('fade'),
+  transitionMode: z.enum(TRANSITION_MODES).default('fixed'),
+  transitionSeed: z.number().int().default(DEFAULT_TRANSITION_SEED),
   transitionDuration: z.number().min(0).max(10).default(1.0)
 }).default({});
 

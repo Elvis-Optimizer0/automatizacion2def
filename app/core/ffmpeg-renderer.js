@@ -8,7 +8,7 @@ const {
   buildFullFilterGraph,
   calculateTotalDuration,
   normalizeScenesToDuration,
-  sceneInputDuration
+  resolveInputDurations
 } = require('./ffmpeg-helpers.js');
 const {
   assertOutputConfig,
@@ -112,9 +112,17 @@ function buildFfmpegArgs(options) {
   const backgroundColor = config.backgroundColor || '#000000';
   const musicVolume = config.musicVolume != null ? config.musicVolume : 0.3;
   const transitionType = renderOptions.transitionType || 'fade';
+  const transitionMode = renderOptions.transitionMode || 'fixed';
+  const transitionSeed = renderOptions.transitionSeed;
   const transitionDuration = renderOptions.transitionDuration != null
     ? renderOptions.transitionDuration
     : 1.0;
+  const inputDurations = resolveInputDurations(scenes, {
+    transitionType,
+    transitionMode,
+    transitionSeed,
+    transitionDuration
+  });
 
   const orderedImages = images.slice(0, scenes.length);
   const sceneFilters = orderedImages.map((img, index) => ({
@@ -127,11 +135,10 @@ function buildFfmpegArgs(options) {
 
   orderedImages.forEach((img, index) => {
     inputLabels.push({ type: 'video', name: img.name, path: img.path });
-    const inputDuration = sceneInputDuration(scenes, index, transitionType, transitionDuration);
     args.push(
       '-framerate', String(FPS),
       '-loop', '1',
-      '-t', String(inputDuration),
+      '-t', String(inputDurations[index]),
       '-i', img.path
     );
   });
@@ -163,6 +170,8 @@ function buildFfmpegArgs(options) {
     zoomStartScale: renderOptions.zoomStartScale,
     zoomIntensity: renderOptions.zoomIntensity,
     transitionType,
+    transitionMode,
+    transitionSeed,
     transitionDuration
   });
 

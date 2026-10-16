@@ -26,6 +26,62 @@ const ZOOM_OPPOSITE = {
 };
 const DEFAULT_ZOOM_SEED = 12345;
 
+const TRANSITION_MAP = {
+  cut: 'fade',
+  fade: 'fade',
+  fadeblack: 'fadeblack',
+  dissolve: 'dissolve',
+  slideLeft: 'slideleft',
+  slideRight: 'slideright',
+  slideUp: 'slideup',
+  slideDown: 'slidedown',
+  curtainLeft: 'wipeleft',
+  curtainRight: 'wiperight',
+  circle: 'circleopen'
+};
+const TRANSITION_TYPES = Object.keys(TRANSITION_MAP);
+const TRANSITION_MODES = ['fixed', 'alternate', 'random'];
+const RANDOM_TRANSITION_TYPES = TRANSITION_TYPES.filter((t) => t !== 'cut');
+const TRANSITION_OPPOSITE = {
+  slideLeft: 'slideRight',
+  slideRight: 'slideLeft',
+  slideUp: 'slideDown',
+  slideDown: 'slideUp',
+  curtainLeft: 'curtainRight',
+  curtainRight: 'curtainLeft',
+  fade: 'dissolve',
+  dissolve: 'fade',
+  fadeblack: 'fade',
+  circle: 'fade'
+};
+const XFADE_TRANSITIONS = [
+  'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight',
+  'wipeup', 'wipedown', 'slideleft', 'slideright', 'slideup', 'slidedown',
+  'smoothleft', 'smoothright', 'smoothup', 'smoothdown', 'circlecrop',
+  'rectcrop', 'circleopen', 'circleclose', 'vertopen', 'vertclose',
+  'horzopen', 'horzclose', 'dissolve', 'pixelize', 'diagtl', 'diagtr',
+  'diagbl', 'diagbr', 'hlslice', 'hrslice', 'vuslice', 'vdslice',
+  'fadegrays', 'wipetl', 'wipetr', 'wipebl', 'wipebr', 'squeezeh',
+  'squeezev'
+];
+const DEFAULT_TRANSITION_SEED = 4242;
+
+function xfadeNameFor(type) {
+  return TRANSITION_MAP[type] || TRANSITION_MAP.fade;
+}
+
+function resolveTransitionType(baseType, mode, index, seed) {
+  const base = TRANSITION_TYPES.includes(baseType) ? baseType : 'fade';
+  if (mode === 'random') {
+    const r = seededRandom(seed != null ? seed : DEFAULT_TRANSITION_SEED, index);
+    return RANDOM_TRANSITION_TYPES[Math.floor(r * RANDOM_TRANSITION_TYPES.length) % RANDOM_TRANSITION_TYPES.length];
+  }
+  if (mode === 'alternate') {
+    return index % 2 === 0 ? base : (TRANSITION_OPPOSITE[base] || base);
+  }
+  return base;
+}
+
 function fixAsarPath(p) {
   return p.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
 }
@@ -69,6 +125,31 @@ function sceneInputDuration(scenes, i, transitionType, transitionDuration) {
   }
   const transDur = transitionDurationFor(scenes, i + 1, transitionType, transitionDuration);
   return num(base + transDur);
+}
+
+function resolveBoundaryTypes(scenes, options = {}) {
+  const {
+    transitionType = 'fade',
+    transitionMode = 'fixed',
+    transitionSeed
+  } = options;
+  const types = [];
+  for (let i = 1; i < scenes.length; i++) {
+    types[i] = resolveTransitionType(transitionType, transitionMode, i - 1, transitionSeed);
+  }
+  return types;
+}
+
+function resolveInputDurations(scenes, options = {}) {
+  const boundaryTypes = resolveBoundaryTypes(scenes, options);
+  const transitionDuration = options.transitionDuration != null ? options.transitionDuration : 1.0;
+  return scenes.map((scene, i) => {
+    if (i >= scenes.length - 1) {
+      return num(scene.duration);
+    }
+    const transDur = transitionDurationFor(scenes, i + 1, boundaryTypes[i + 1], transitionDuration);
+    return num(scene.duration + transDur);
+  });
 }
 
 function seededRandom(seed, index) {
@@ -215,7 +296,6 @@ function buildVideoFilterGraph(scenes, options = {}) {
   assertOutputConfig(options.outputConfig);
 
   const {
-    transitionType = 'fade',
     transitionDuration = 1.0
   } = options;
 
@@ -231,12 +311,13 @@ function buildVideoFilterGraph(scenes, options = {}) {
 
   let currentLabel = 'v0';
   let accumulated = 0;
+  const boundaryTypes = resolveBoundaryTypes(scenes, options);
 
   for (let i = 1; i < n; i++) {
     accumulated += scenes[i - 1].duration;
-    const transDur = transitionDurationFor(scenes, i, transitionType, transitionDuration);
+    const transDur = transitionDurationFor(scenes, i, boundaryTypes[i], transitionDuration);
     const offset = num(accumulated);
-    parts.push(`[${currentLabel}][v${i}]xfade=transition=fade:duration=${transDur}:offset=${offset}[x${i}]`);
+    parts.push(`[${currentLabel}][v${i}]xfade=transition=${xfadeNameFor(boundaryTypes[i])}:duration=${transDur}:offset=${offset}[x${i}]`);
     currentLabel = `x${i}`;
   }
 
@@ -338,6 +419,15 @@ module.exports = {
   ZOOM_TYPES,
   ZOOM_MODES,
   DEFAULT_ZOOM_SEED,
+  TRANSITION_TYPES,
+  TRANSITION_MODES,
+  TRANSITION_MAP,
+  XFADE_TRANSITIONS,
+  DEFAULT_TRANSITION_SEED,
+  xfadeNameFor,
+  resolveTransitionType,
+  resolveBoundaryTypes,
+  resolveInputDurations,
   fixAsarPath,
   num,
   clamp01,

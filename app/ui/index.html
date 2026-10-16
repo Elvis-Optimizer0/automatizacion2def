@@ -276,9 +276,30 @@
           <div class="export-control-row">
             <label for="transition-type">Tipo</label>
             <select id="transition-type" class="export-select">
-              <option value="fade">Fundido</option>
               <option value="cut">Corte</option>
+              <option value="fade" selected>Fundido</option>
+              <option value="fadeblack">Fundido a negro</option>
+              <option value="dissolve">Disolvencia</option>
+              <option value="slideLeft">Deslizar izquierda</option>
+              <option value="slideRight">Deslizar derecha</option>
+              <option value="slideUp">Deslizar arriba</option>
+              <option value="slideDown">Deslizar abajo</option>
+              <option value="curtainLeft">Cortina izquierda</option>
+              <option value="curtainRight">Cortina derecha</option>
+              <option value="circle">Círculo</option>
             </select>
+          </div>
+          <div class="export-control-row">
+            <label for="transition-mode">Modo</label>
+            <select id="transition-mode" class="export-select">
+              <option value="fixed" selected>Fijo</option>
+              <option value="alternate">Alternar</option>
+              <option value="random">Aleatorio</option>
+            </select>
+          </div>
+          <div class="export-control-row">
+            <label for="transition-seed">Semilla</label>
+            <input type="number" id="transition-seed" class="export-input" min="0" step="1" value="4242">
           </div>
           <div class="export-control-row">
             <label for="transition-duration">Duración (s)</label>
