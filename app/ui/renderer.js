@@ -1716,6 +1716,11 @@ function renderAll() {
   renderTimeline();
 }
 
+window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
+  id: control.id,
+  tipo: control.tipo,
+  hasHandler: typeof control.handler === 'function'
+}));
 window.__TEST_STATE__ = state;
 window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject };
