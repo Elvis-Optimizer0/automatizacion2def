@@ -13,6 +13,19 @@ const HEIGHT = 1080;
 
 const FIT_MODES = ['cover', 'blur', 'frame'];
 
+const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
+const ZOOM_MODES = ['fixed', 'alternate', 'random'];
+const RANDOM_ZOOM_TYPES = ['kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
+const ZOOM_OPPOSITE = {
+  zoomIn: 'zoomOut',
+  zoomOut: 'zoomIn',
+  panLeft: 'panRight',
+  panRight: 'panLeft',
+  panUp: 'panDown',
+  panDown: 'panUp'
+};
+const DEFAULT_ZOOM_SEED = 12345;
+
 function fixAsarPath(p) {
   return p.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
 }
@@ -58,22 +71,74 @@ function sceneInputDuration(scenes, i, transitionType, transitionDuration) {
   return num(base + transDur);
 }
 
-function buildZoomFilter(scene, w, h, options, focus) {
-  const {
-    zoomStartScale = 1.0,
-    zoomIntensity = 0.15
-  } = options;
+function seededRandom(seed, index) {
+  let t = ((Number(seed) >>> 0) + Math.imul(index + 1, 0x9e3779b9)) >>> 0;
+  t = Math.imul(t ^ (t >>> 16), 0x21f0aaad);
+  t = Math.imul(t ^ (t >>> 15), 0x735a2d97);
+  t ^= t >>> 15;
+  return (t >>> 0) / 4294967296;
+}
 
+function resolveZoomType(baseType, mode, index, seed) {
+  const base = ZOOM_TYPES.includes(baseType) ? baseType : 'kenburns';
+  if (mode === 'random') {
+    const r = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index);
+    return RANDOM_ZOOM_TYPES[Math.floor(r * RANDOM_ZOOM_TYPES.length) % RANDOM_ZOOM_TYPES.length];
+  }
+  if (mode === 'alternate') {
+    return index % 2 === 0 ? base : (ZOOM_OPPOSITE[base] || base);
+  }
+  return base;
+}
+
+function buildZoomFilter(scene, w, h, options, focus) {
+  const type = ZOOM_TYPES.includes(options.zoomType) ? options.zoomType : 'kenburns';
+  if (type === 'none') return '';
+
+  const start = num(options.zoomStartScale != null ? options.zoomStartScale : 1.0);
+  const intensity = num(options.zoomIntensity != null ? options.zoomIntensity : 0.15);
   const frames = Math.max(1, Math.round(scene.duration * FPS));
-  const step = num(zoomIntensity / frames);
-  const maxZoom = num(zoomStartScale + zoomIntensity);
+  const maxZoom = num(start + intensity);
+  const around = num(start + intensity / 2);
   const fx = num(clamp01(focus.x));
   const fy = num(clamp01(focus.y));
-  const xExpr = `max(0,min(iw-iw/zoom,iw*${fx}-iw/zoom/2))`;
-  const yExpr = `max(0,min(ih-ih/zoom,ih*${fy}-ih/zoom/2))`;
 
-  return `zoompan=z='min(max(zoom,${num(zoomStartScale)})+${step},${maxZoom})'`
-    + `:d=1:x='${xExpr}':y='${yExpr}':s=${w}x${h}:fps=${FPS}`;
+  const progress = `on/${frames}`;
+  const xCenter = `iw*${fx}-iw/zoom/2`;
+  const yCenter = `ih*${fy}-ih/zoom/2`;
+  const clampX = (expr) => `max(0,min(iw-iw/zoom,${expr}))`;
+  const clampY = (expr) => `max(0,min(ih-ih/zoom,${expr}))`;
+  const zIn = `min(${start}+${intensity}*${progress},${maxZoom})`;
+  const zOut = `max(${maxZoom}-${intensity}*${progress},${start})`;
+  const zPulse = `${around}-${num(intensity / 2)}*cos(2*PI*${progress})`;
+
+  let zExpr = zIn;
+  let xExpr = xCenter;
+  let yExpr = yCenter;
+
+  if (type === 'zoomOut') {
+    zExpr = zOut;
+  } else if (type === 'pulse') {
+    zExpr = zPulse;
+  } else if (type === 'kenburns') {
+    zExpr = zIn;
+    xExpr = `iw*${fx}-iw/zoom/2+(iw-iw/zoom)*(${progress}-0.5)`;
+    yExpr = `ih*${fy}-ih/zoom/2+(ih-ih/zoom)*(${progress}-0.5)`;
+  } else if (type === 'panLeft') {
+    zExpr = `${maxZoom}`;
+    xExpr = `(iw-iw/zoom)*(1-${progress})`;
+  } else if (type === 'panRight') {
+    zExpr = `${maxZoom}`;
+    xExpr = `(iw-iw/zoom)*${progress}`;
+  } else if (type === 'panUp') {
+    zExpr = `${maxZoom}`;
+    yExpr = `(ih-ih/zoom)*(1-${progress})`;
+  } else if (type === 'panDown') {
+    zExpr = `${maxZoom}`;
+    yExpr = `(ih-ih/zoom)*${progress}`;
+  }
+
+  return `zoompan=z='${zExpr}':d=1:x='${clampX(xExpr)}':y='${clampY(yExpr)}':s=${w}x${h}:fps=${FPS}`;
 }
 
 function buildSceneVideoFilter(scene, index, options = {}) {
@@ -128,8 +193,16 @@ function buildSceneVideoFilter(scene, index, options = {}) {
   }
 
   const chain = [];
-  if (options.zoomEnabled) {
-    chain.push(buildZoomFilter(scene, w, h, options, focus));
+  const sceneZoom = scene.zoom && typeof scene.zoom === 'object' ? scene.zoom : {};
+  const zoomOptions = {
+    ...options,
+    zoomType: sceneZoom.type || options.zoomType,
+    zoomStartScale: sceneZoom.startScale != null ? sceneZoom.startScale : options.zoomStartScale,
+    zoomIntensity: sceneZoom.intensity != null ? sceneZoom.intensity : options.zoomIntensity
+  };
+  const zoomType = resolveZoomType(zoomOptions.zoomType, options.zoomMode, index, options.zoomSeed);
+  if (options.zoomEnabled && zoomType !== 'none') {
+    chain.push(buildZoomFilter(scene, w, h, { ...zoomOptions, zoomType }, focus));
   }
   chain.push('setsar=1');
   chain.push('format=yuv420p');
@@ -262,10 +335,15 @@ module.exports = {
   WIDTH,
   HEIGHT,
   FIT_MODES,
+  ZOOM_TYPES,
+  ZOOM_MODES,
+  DEFAULT_ZOOM_SEED,
   fixAsarPath,
   num,
   clamp01,
   clampScale,
+  resolveZoomType,
+  seededRandom,
   safeColor,
   transitionDurationFor,
   sceneInputDuration,

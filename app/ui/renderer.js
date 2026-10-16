@@ -155,6 +155,8 @@ const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
 const DEFAULT_SCALE = 1.0;
 const SCALE_MIN = 0.3;
 const SCALE_MAX = 3.0;
+const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
+const ZOOM_MODES = ['fixed', 'alternate', 'random'];
 const FORMAT_FOCUS_KEY = {
   '16:9': 'focus169',
   '9:16': 'focus916',
@@ -189,6 +191,9 @@ const state = {
   },
   exportOptions: {
     zoomEnabled: true,
+    zoomType: 'kenburns',
+    zoomMode: 'fixed',
+    zoomSeed: 12345,
     zoomStartScale: 1.0,
     zoomIntensity: 0.15,
     transitionType: 'fade',
@@ -1011,6 +1016,31 @@ const CONTROLS = [
     }
   },
   {
+    id: 'zoom-type',
+    tipo: 'select',
+    rutaConfig: 'exportOptions.zoomType',
+    handler: (e) => {
+      state.exportOptions.zoomType = ZOOM_TYPES.includes(e.target.value) ? e.target.value : 'kenburns';
+    }
+  },
+  {
+    id: 'zoom-mode',
+    tipo: 'select',
+    rutaConfig: 'exportOptions.zoomMode',
+    handler: (e) => {
+      state.exportOptions.zoomMode = ZOOM_MODES.includes(e.target.value) ? e.target.value : 'fixed';
+    }
+  },
+  {
+    id: 'zoom-seed',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.zoomSeed',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.exportOptions.zoomSeed = isNaN(value) ? 12345 : value;
+    }
+  },
+  {
     id: 'zoom-start-scale',
     tipo: 'input',
     rutaConfig: 'exportOptions.zoomStartScale',
@@ -1218,6 +1248,7 @@ function setupControl(control) {
     } else if (control.tipo === 'checkbox') {
       element.addEventListener('change', control.handler);
     } else if (control.tipo === 'input') {
+      element.addEventListener('input', control.handler);
       element.addEventListener('change', control.handler);
     } else if (control.tipo === 'range') {
       element.addEventListener('input', control.handler);

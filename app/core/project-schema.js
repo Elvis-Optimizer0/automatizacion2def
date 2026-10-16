@@ -12,6 +12,11 @@ const {
   DEFAULT_BACKGROUND_COLOR,
   FORMAT_FOCUS_KEY
 } = require('./output-formats.js');
+const {
+  ZOOM_TYPES,
+  ZOOM_MODES,
+  DEFAULT_ZOOM_SEED
+} = require('./ffmpeg-helpers.js');
 
 const FOCUS_KEYS_TUPLE = FOCUS_KEYS;
 const OUTPUT_IDS_TUPLE = OUTPUT_IDS;
@@ -42,15 +47,25 @@ const configSchema = z.object({
 
 const renderOptionsSchema = z.object({
   zoomEnabled: z.boolean().default(true),
+  zoomType: z.enum(ZOOM_TYPES).default('kenburns'),
+  zoomMode: z.enum(ZOOM_MODES).default('fixed'),
+  zoomSeed: z.number().int().default(DEFAULT_ZOOM_SEED),
   zoomStartScale: z.number().min(1).max(4).default(1.0),
   zoomIntensity: z.number().min(0).max(1).default(0.15),
   transitionType: z.enum(['fade', 'cut']).default('fade'),
   transitionDuration: z.number().min(0).max(10).default(1.0)
 }).default({});
 
+const sceneZoomSchema = z.object({
+  type: z.enum(ZOOM_TYPES).optional(),
+  startScale: z.number().min(1).max(4).optional(),
+  intensity: z.number().min(0).max(1).optional()
+}).optional();
+
 const sceneSchema = z.object({
   number: z.number(),
-  duration: z.number().positive()
+  duration: z.number().positive(),
+  zoom: sceneZoomSchema
 });
 
 const audioSchema = z.object({

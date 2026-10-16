@@ -229,12 +229,38 @@
         </fieldset>
 
         <fieldset class="export-fieldset">
-          <legend>Zoom (Ken Burns)</legend>
+          <legend>Zoom</legend>
           <label class="checkbox-label">
             <input type="checkbox" id="zoom-enabled-checkbox" checked>
             <span class="checkmark"></span>
             Activar zoom
           </label>
+          <div class="export-control-row">
+            <label for="zoom-type">Efecto</label>
+            <select id="zoom-type" class="export-select">
+              <option value="none">Sin zoom</option>
+              <option value="kenburns" selected>Ken Burns</option>
+              <option value="zoomIn">Acercar</option>
+              <option value="zoomOut">Alejar</option>
+              <option value="pulse">Pulso</option>
+              <option value="panLeft">Paneo izquierda</option>
+              <option value="panRight">Paneo derecha</option>
+              <option value="panUp">Paneo arriba</option>
+              <option value="panDown">Paneo abajo</option>
+            </select>
+          </div>
+          <div class="export-control-row">
+            <label for="zoom-mode">Modo</label>
+            <select id="zoom-mode" class="export-select">
+              <option value="fixed" selected>Fijo</option>
+              <option value="alternate">Alternar</option>
+              <option value="random">Aleatorio</option>
+            </select>
+          </div>
+          <div class="export-control-row">
+            <label for="zoom-seed">Semilla</label>
+            <input type="number" id="zoom-seed" class="export-input" min="0" step="1" value="12345">
+          </div>
           <div class="export-control-row">
             <label for="zoom-start-scale">Escala inicial</label>
             <input type="number" id="zoom-start-scale" class="export-input" min="1.0" max="2.0" step="0.05" value="1.0">
