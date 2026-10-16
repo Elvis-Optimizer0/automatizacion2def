@@ -717,6 +717,9 @@ function renderAll() {
   renderTimeline();
 }
 
+window.__TEST_STATE__ = state;
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll };
+
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();
 
