@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Maker v0.2.0</title>
+  <title>Video Maker v0.3.0</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>Video Maker <span class="version">v0.2.0</span></h1>
+    <h1>Video Maker <span class="version">v0.3.0</span></h1>
   </header>
 
   <main class="app-main">
@@ -142,6 +142,71 @@
         <div id="timeline-empty" class="timeline-empty">Carga un guion e imágenes para ver la línea de tiempo</div>
       </div>
       <div id="timeline-summary" class="timeline-summary"></div>
+    </section>
+
+    <section class="import-section" aria-label="Exportar">
+      <h2>Exportar</h2>
+      <div class="export-options">
+        <fieldset class="export-fieldset">
+          <legend>Zoom (Ken Burns)</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" id="zoom-enabled-checkbox" checked>
+            <span class="checkmark"></span>
+            Activar zoom
+          </label>
+          <div class="export-control-row">
+            <label for="zoom-start-scale">Escala inicial</label>
+            <input type="number" id="zoom-start-scale" class="export-input" min="1.0" max="2.0" step="0.05" value="1.0">
+          </div>
+          <div class="export-control-row">
+            <label for="zoom-intensity">Intensidad</label>
+            <input type="number" id="zoom-intensity" class="export-input" min="0" max="0.5" step="0.01" value="0.15">
+          </div>
+        </fieldset>
+
+        <fieldset class="export-fieldset">
+          <legend>Transición</legend>
+          <div class="export-control-row">
+            <label for="transition-type">Tipo</label>
+            <select id="transition-type" class="export-select">
+              <option value="fade">Fundido</option>
+              <option value="cut">Corte</option>
+            </select>
+          </div>
+          <div class="export-control-row">
+            <label for="transition-duration">Duración (s)</label>
+            <input type="number" id="transition-duration" class="export-input" min="0.1" max="5" step="0.1" value="1.0">
+          </div>
+        </fieldset>
+      </div>
+
+      <button id="export-btn" class="btn btn-primary" type="button" disabled>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>Exportar MP4</span>
+      </button>
+
+      <div id="export-progress" class="export-progress" hidden>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="progress-info">
+          <span id="progress-text">0%</span>
+          <span id="progress-time">0:00 / 0:00</span>
+        </div>
+      </div>
+
+      <button id="open-output-folder-btn" class="btn btn-secondary" type="button" hidden>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span>Abrir carpeta</span>
+      </button>
+
+      <div id="export-status" class="export-status"></div>
     </section>
   </main>
 

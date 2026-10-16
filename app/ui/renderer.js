@@ -157,7 +157,21 @@ const state = {
   script: { raw: '', scenes: [], warnings: [] },
   timeline: [],
   timelineOptions: { adjustToAudio: false },
-  audioDuration: 0
+  audioDuration: 0,
+  exportOptions: {
+    zoomEnabled: true,
+    zoomStartScale: 1.0,
+    zoomIntensity: 0.15,
+    transitionType: 'fade',
+    transitionDuration: 1.0
+  },
+  export: {
+    isRendering: false,
+    progress: 0,
+    outputPath: null,
+    outputFolder: null,
+    status: ''
+  }
 };
 
 function showToast(message, type = 'info') {
@@ -430,6 +444,114 @@ function updateTimeline() {
   const adjustToAudio = state.timelineOptions.adjustToAudio;
   state.timeline = buildTimeline(state.script.scenes, state.images, state.audioDuration, { adjustToAudio });
   renderTimeline();
+  updateExportButton();
+}
+
+function updateExportButton() {
+  const btn = document.getElementById('export-btn');
+  if (!btn) return;
+  const ready = state.timeline.length > 0
+    && !!state.audio.narration
+    && state.timeline.every(s => !!s.image);
+  btn.disabled = !ready || state.export.isRendering;
+}
+
+function setExportStatus(message, type = '') {
+  const status = document.getElementById('export-status');
+  if (!status) return;
+  status.textContent = message;
+  status.className = `export-status${type ? ' ' + type : ''}`;
+  state.export.status = message;
+}
+
+function setExportProgress(progress) {
+  const container = document.getElementById('export-progress');
+  const fill = document.getElementById('progress-fill');
+  const text = document.getElementById('progress-text');
+  const time = document.getElementById('progress-time');
+  if (!container) return;
+
+  state.export.progress = progress.progress;
+  container.hidden = false;
+  if (fill) fill.style.width = `${progress.progress}%`;
+  if (text) text.textContent = `${progress.progress}%`;
+  if (time) time.textContent = `${formatTime(progress.current)} / ${formatTime(state.audioDuration)}`;
+}
+
+async function handleExport() {
+  if (state.export.isRendering) return;
+  if (state.timeline.length === 0) {
+    showToast('Genera la línea de tiempo primero', 'warning');
+    return;
+  }
+  if (!state.audio.narration) {
+    showToast('Importa la narración antes de exportar', 'warning');
+    return;
+  }
+  const missing = state.timeline.filter(s => !s.image);
+  if (missing.length > 0) {
+    showToast(`Hay ${missing.length} escena(s) sin imagen`, 'error');
+    setExportStatus('No se puede exportar: hay escenas sin imagen', 'error');
+    return;
+  }
+
+  let outputPath;
+  try {
+    outputPath = await window.api.saveVideo();
+  } catch (err) {
+    setExportStatus(`Error al elegir salida: ${err.message}`, 'error');
+    return;
+  }
+  if (!outputPath) return;
+
+  const scenes = state.timeline.map(s => ({ number: s.number, duration: s.duration }));
+  const images = state.timeline.map(s => ({ name: s.image.name, path: s.image.path }));
+
+  state.export.isRendering = true;
+  state.export.progress = 0;
+  updateExportButton();
+  setExportProgress({ progress: 0, current: 0 });
+  setExportStatus('Exportando…');
+
+  const removeListener = window.api.onRenderProgress(setExportProgress);
+
+  try {
+    const result = await window.api.renderVideo({
+      scenes,
+      images,
+      narration: state.audio.narration,
+      music: state.audio.music,
+      outputPath,
+      audioDuration: state.audioDuration,
+      renderOptions: { ...state.exportOptions }
+    });
+
+    state.export.outputPath = result.outputPath;
+    state.export.outputFolder = result.outputPath.replace(/[\\/][^\\/]*$/, '');
+    setExportProgress({ progress: 100, current: state.audioDuration });
+
+    const folderBtn = document.getElementById('open-output-folder-btn');
+    if (folderBtn) folderBtn.hidden = false;
+
+    setExportStatus(`Video exportado: ${result.outputPath}`, 'success');
+    showToast('Video exportado correctamente', 'success');
+  } catch (err) {
+    setExportStatus(`Error al exportar: ${err.message}`, 'error');
+    showToast('Error al exportar el video', 'error');
+  } finally {
+    state.export.isRendering = false;
+    updateExportButton();
+    if (typeof removeListener === 'function') removeListener();
+  }
+}
+
+async function handleOpenOutputFolder() {
+  if (!state.export.outputFolder) return;
+  try {
+    await window.api.openFolder(state.export.outputFolder);
+  } catch (err) {
+    showToast(`No se pudo abrir la carpeta: ${err.message}`, 'error');
+  }
 }
 
 const CONTROLS = [
@@ -595,6 +717,61 @@ const CONTROLS = [
       state.timelineOptions.adjustToAudio = e.target.checked;
       updateTimeline();
     }
+  },
+  {
+    id: 'zoom-enabled-checkbox',
+    tipo: 'checkbox',
+    rutaConfig: 'exportOptions.zoomEnabled',
+    handler: (e) => {
+      state.exportOptions.zoomEnabled = e.target.checked;
+    }
+  },
+  {
+    id: 'zoom-start-scale',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.zoomStartScale',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomStartScale = isNaN(value) ? 1.0 : value;
+    }
+  },
+  {
+    id: 'zoom-intensity',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.zoomIntensity',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomIntensity = isNaN(value) ? 0 : value;
+    }
+  },
+  {
+    id: 'transition-type',
+    tipo: 'select',
+    rutaConfig: 'exportOptions.transitionType',
+    handler: (e) => {
+      state.exportOptions.transitionType = e.target.value === 'cut' ? 'cut' : 'fade';
+    }
+  },
+  {
+    id: 'transition-duration',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.transitionDuration',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.transitionDuration = isNaN(value) ? 1.0 : value;
+    }
+  },
+  {
+    id: 'export-btn',
+    tipo: 'button',
+    rutaConfig: 'export',
+    handler: handleExport
+  },
+  {
+    id: 'open-output-folder-btn',
+    tipo: 'button',
+    rutaConfig: 'export',
+    handler: handleOpenOutputFolder
   }
 ];
 
@@ -647,6 +824,10 @@ function setupControl(control) {
     } else if (control.tipo === 'textarea') {
       element.addEventListener('input', control.handler);
     } else if (control.tipo === 'checkbox') {
+      element.addEventListener('change', control.handler);
+    } else if (control.tipo === 'input') {
+      element.addEventListener('change', control.handler);
+    } else if (control.tipo === 'select') {
       element.addEventListener('change', control.handler);
     }
   } catch (err) {
@@ -718,7 +899,8 @@ function renderAll() {
 }
 
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus };
+window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder };
 
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();
@@ -726,6 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
   CONTROLS.forEach(setupControl);
 
   renderAll();
+  updateExportButton();
 
-  console.log('Video Maker v0.2.0 - Renderer loaded');
+  console.log('Video Maker v0.3.0 - Renderer loaded');
 });
