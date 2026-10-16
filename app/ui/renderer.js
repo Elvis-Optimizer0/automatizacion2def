@@ -151,6 +151,20 @@ function extractSceneNumber(filename) {
   return match ? parseInt(match[1], 10) : null;
 }
 
+const DEFAULT_FOCUS = { x: 0.5, y: 0.5 };
+const FORMAT_FOCUS_KEY = {
+  '16:9': 'focus169',
+  '9:16': 'focus916',
+  '1:1': 'focus11',
+  '4:5': 'focus45'
+};
+const FORMAT_DIMENSIONS = {
+  '16:9': { w: 1920, h: 1080 },
+  '9:16': { w: 1080, h: 1920 },
+  '1:1': { w: 1080, h: 1080 },
+  '4:5': { w: 1080, h: 1350 }
+};
+
 const state = {
   images: [],
   audio: { narration: null, music: null },
@@ -158,6 +172,16 @@ const state = {
   timeline: [],
   timelineOptions: { adjustToAudio: false },
   audioDuration: 0,
+  config: {
+    outputs: ['16:9'],
+    fitMode: 'cover',
+    frameColor: '#000000',
+    musicVolume: 0.3
+  },
+  focus: {
+    imageIndex: 0,
+    format: '16:9'
+  },
   exportOptions: {
     zoomEnabled: true,
     zoomStartScale: 1.0,
@@ -173,6 +197,44 @@ const state = {
     status: ''
   }
 };
+
+function ensureFocus(image) {
+  if (!image) return image;
+  Object.values(FORMAT_FOCUS_KEY).forEach(key => {
+    if (!image[key] || typeof image[key].x !== 'number' || typeof image[key].y !== 'number') {
+      image[key] = { ...DEFAULT_FOCUS };
+    }
+  });
+  return image;
+}
+
+function clampFocus(value) {
+  if (typeof value !== 'number' || isNaN(value)) return 0.5;
+  return Math.min(1, Math.max(0, value));
+}
+
+function focusBox(image, formatId, naturalWidth, naturalHeight) {
+  const dims = FORMAT_DIMENSIONS[formatId] || FORMAT_DIMENSIONS['16:9'];
+  const targetAspect = dims.w / dims.h;
+  const imageAspect = naturalWidth / naturalHeight;
+  let width;
+  let height;
+  if (imageAspect > targetAspect) {
+    height = 1;
+    width = (naturalHeight * targetAspect) / naturalWidth;
+  } else {
+    width = 1;
+    height = (naturalWidth / targetAspect) / naturalHeight;
+  }
+  const focus = (image && image[FORMAT_FOCUS_KEY[formatId]]) || DEFAULT_FOCUS;
+  const fx = clampFocus(focus.x);
+  const fy = clampFocus(focus.y);
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const left = Math.min(1 - width, Math.max(0, fx - halfW));
+  const top = Math.min(1 - height, Math.max(0, fy - halfH));
+  return { left, top, width, height, fx, fy };
+}
 
 function showToast(message, type = 'info') {
   const toastContainer = document.getElementById('toast-container');
@@ -393,7 +455,7 @@ function handleDurationChange(e) {
 }
 
 async function handleImagesImport(filePaths) {
-  const newImages = filePaths.map(filePath => ({
+  const newImages = filePaths.map(filePath => ensureFocus({
     name: filePath.name,
     path: filePath.path,
     size: filePath.size || 0,
@@ -403,6 +465,7 @@ async function handleImagesImport(filePaths) {
 
   state.images = [...state.images, ...newImages];
   renderImages();
+  renderFocusEditor();
   updateTimeline();
   showToast(`${newImages.length} imagen(es) importada(s)`, 'success');
 }
@@ -452,6 +515,7 @@ function updateExportButton() {
   if (!btn) return;
   const ready = state.timeline.length > 0
     && !!state.audio.narration
+    && state.config.outputs.length > 0
     && state.timeline.every(s => !!s.image);
   btn.disabled = !ready || state.export.isRendering;
 }
@@ -478,6 +542,145 @@ function setExportProgress(progress) {
   if (time) time.textContent = `${formatTime(progress.current)} / ${formatTime(state.audioDuration)}`;
 }
 
+function renderOutputChips() {
+  document.querySelectorAll('#output-format-chips .format-chip').forEach(chip => {
+    const active = state.config.outputs.includes(chip.dataset.format);
+    chip.classList.toggle('active', active);
+    chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  updateExportButton();
+}
+
+function toggleOutputFormat(format) {
+  const idx = state.config.outputs.indexOf(format);
+  if (idx >= 0) {
+    if (state.config.outputs.length === 1) {
+      showToast('Debe haber al menos un formato', 'warning');
+      return;
+    }
+    state.config.outputs.splice(idx, 1);
+  } else {
+    state.config.outputs.push(format);
+  }
+  renderOutputChips();
+}
+
+function renderFocusEditor() {
+  const select = document.getElementById('focus-image-select');
+  const img = document.getElementById('focus-image');
+  const empty = document.getElementById('focus-empty');
+  const box = document.getElementById('focus-box');
+  const applyBtn = document.getElementById('focus-apply-all-btn');
+  if (!select || !img) return;
+
+  select.innerHTML = '';
+  state.images.forEach((image, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = image.name;
+    select.appendChild(option);
+  });
+
+  if (state.images.length === 0) {
+    select.disabled = true;
+    applyBtn.disabled = true;
+    empty.style.display = 'block';
+    img.style.display = 'none';
+    box.style.display = 'none';
+    return;
+  }
+
+  select.disabled = false;
+  applyBtn.disabled = false;
+  empty.style.display = 'none';
+  img.style.display = 'block';
+
+  if (state.focus.imageIndex >= state.images.length) {
+    state.focus.imageIndex = 0;
+  }
+  select.value = String(state.focus.imageIndex);
+
+  const image = ensureFocus(state.images[state.focus.imageIndex]);
+  img.src = `file://${image.path}`;
+  updateFocusBoxPreview();
+}
+
+function updateFocusBoxPreview() {
+  const img = document.getElementById('focus-image');
+  const box = document.getElementById('focus-box');
+  const readout = document.getElementById('focus-readout');
+  if (!img || !box) return;
+  if (state.images.length === 0 || !img.naturalWidth) {
+    box.style.display = 'none';
+    return;
+  }
+  const image = state.images[state.focus.imageIndex];
+  const geom = focusBox(image, state.focus.format, img.naturalWidth, img.naturalHeight);
+  box.style.display = 'block';
+  box.style.left = `${geom.left * 100}%`;
+  box.style.top = `${geom.top * 100}%`;
+  box.style.width = `${geom.width * 100}%`;
+  box.style.height = `${geom.height * 100}%`;
+  if (readout) readout.textContent = `${geom.fx.toFixed(2)}, ${geom.fy.toFixed(2)}`;
+}
+
+function handleFocusPointer(e) {
+  if (state.images.length === 0) return;
+  const editor = document.getElementById('focus-editor');
+  const img = document.getElementById('focus-image');
+  if (!editor || !img || !img.naturalWidth) return;
+
+  const rect = img.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width;
+  const py = (e.clientY - rect.top) / rect.height;
+  if (isNaN(px) || isNaN(py)) return;
+
+  const image = ensureFocus(state.images[state.focus.imageIndex]);
+  const geom = focusBox(image, state.focus.format, img.naturalWidth, img.naturalHeight);
+  const halfW = geom.width / 2;
+  const halfH = geom.height / 2;
+  const fx = Math.min(1 - halfW, Math.max(halfW, px));
+  const fy = Math.min(1 - halfH, Math.max(halfH, py));
+
+  image[FORMAT_FOCUS_KEY[state.focus.format]] = { x: fx, y: fy };
+  updateFocusBoxPreview();
+}
+
+function applyFocusToAll() {
+  if (state.images.length === 0) return;
+  const key = FORMAT_FOCUS_KEY[state.focus.format];
+  const source = ensureFocus(state.images[state.focus.imageIndex])[key];
+  state.images.forEach(image => {
+    ensureFocus(image)[key] = { ...source };
+  });
+  updateFocusBoxPreview();
+  showToast(`Enfoque aplicado a ${state.images.length} imagen(es) en ${state.focus.format}`, 'success');
+}
+
+async function handleOpenOutputFolder() {
+  if (!state.export.outputFolder) return;
+  try {
+    await window.api.openFolder(state.export.outputFolder);
+  } catch (err) {
+    showToast(`No se pudo abrir la carpeta: ${err.message}`, 'error');
+  }
+}
+
+function buildExportImages() {
+  const byPath = new Map(state.images.map(image => [image.path, image]));
+  return state.timeline.map(scene => {
+    const source = byPath.get(scene.image.path) || scene.image;
+    const image = ensureFocus({
+      name: scene.image.name,
+      path: scene.image.path
+    });
+    Object.values(FORMAT_FOCUS_KEY).forEach(k => {
+      if (source && source[k]) image[k] = { ...source[k] };
+    });
+    return image;
+  });
+}
+
 async function handleExport() {
   if (state.export.isRendering) return;
   if (state.timeline.length === 0) {
@@ -494,6 +697,10 @@ async function handleExport() {
     setExportStatus('No se puede exportar: hay escenas sin imagen', 'error');
     return;
   }
+  if (state.config.outputs.length === 0) {
+    showToast('Selecciona al menos un formato de salida', 'warning');
+    return;
+  }
 
   let outputPath;
   try {
@@ -505,7 +712,7 @@ async function handleExport() {
   if (!outputPath) return;
 
   const scenes = state.timeline.map(s => ({ number: s.number, duration: s.duration }));
-  const images = state.timeline.map(s => ({ name: s.image.name, path: s.image.path }));
+  const images = buildExportImages();
 
   state.export.isRendering = true;
   state.export.progress = 0;
@@ -523,9 +730,12 @@ async function handleExport() {
       music: state.audio.music,
       outputPath,
       audioDuration: state.audioDuration,
+      outputIds: state.config.outputs.slice(),
+      config: { ...state.config },
       renderOptions: { ...state.exportOptions }
     });
 
+    const outputs = result.outputs && result.outputs.length ? result.outputs : [{ id: '16:9', outputPath: result.outputPath }];
     state.export.outputPath = result.outputPath;
     state.export.outputFolder = result.outputPath.replace(/[\\/][^\\/]*$/, '');
     setExportProgress({ progress: 100, current: state.audioDuration });
@@ -533,8 +743,9 @@ async function handleExport() {
     const folderBtn = document.getElementById('open-output-folder-btn');
     if (folderBtn) folderBtn.hidden = false;
 
-    setExportStatus(`Video exportado: ${result.outputPath}`, 'success');
-    showToast('Video exportado correctamente', 'success');
+    const summary = outputs.map(o => `${o.id}: ${o.outputPath.split(/[\\/]/).pop()}`).join(' · ');
+    setExportStatus(`Video exportado → ${summary}`, 'success');
+    showToast(`Exportados ${outputs.length} formato(s)`, 'success');
   } catch (err) {
     setExportStatus(`Error al exportar: ${err.message}`, 'error');
     showToast('Error al exportar el video', 'error');
@@ -542,15 +753,6 @@ async function handleExport() {
     state.export.isRendering = false;
     updateExportButton();
     if (typeof removeListener === 'function') removeListener();
-  }
-}
-
-async function handleOpenOutputFolder() {
-  if (!state.export.outputFolder) return;
-  try {
-    await window.api.openFolder(state.export.outputFolder);
-  } catch (err) {
-    showToast(`No se pudo abrir la carpeta: ${err.message}`, 'error');
   }
 }
 
@@ -772,6 +974,76 @@ const CONTROLS = [
     tipo: 'button',
     rutaConfig: 'export',
     handler: handleOpenOutputFolder
+  },
+  {
+    id: 'output-chip-16x9',
+    tipo: 'button',
+    rutaConfig: 'config.outputs',
+    handler: () => toggleOutputFormat('16:9')
+  },
+  {
+    id: 'output-chip-9x16',
+    tipo: 'button',
+    rutaConfig: 'config.outputs',
+    handler: () => toggleOutputFormat('9:16')
+  },
+  {
+    id: 'output-chip-1x1',
+    tipo: 'button',
+    rutaConfig: 'config.outputs',
+    handler: () => toggleOutputFormat('1:1')
+  },
+  {
+    id: 'output-chip-4x5',
+    tipo: 'button',
+    rutaConfig: 'config.outputs',
+    handler: () => toggleOutputFormat('4:5')
+  },
+  {
+    id: 'fit-mode',
+    tipo: 'select',
+    rutaConfig: 'config.fitMode',
+    handler: (e) => {
+      state.config.fitMode = e.target.value;
+    }
+  },
+  {
+    id: 'frame-color',
+    tipo: 'input',
+    rutaConfig: 'config.frameColor',
+    handler: (e) => {
+      state.config.frameColor = e.target.value;
+    }
+  },
+  {
+    id: 'focus-image-select',
+    tipo: 'select',
+    rutaConfig: 'focus.imageIndex',
+    handler: (e) => {
+      state.focus.imageIndex = parseInt(e.target.value, 10) || 0;
+      renderFocusEditor();
+    }
+  },
+  {
+    id: 'focus-format-select',
+    tipo: 'select',
+    rutaConfig: 'focus.format',
+    handler: (e) => {
+      state.focus.format = e.target.value;
+      updateFocusBoxPreview();
+    }
+  },
+  {
+    id: 'focus-apply-all-btn',
+    tipo: 'button',
+    rutaConfig: 'focus',
+    handler: applyFocusToAll
+  },
+  {
+    id: 'focus-editor',
+    tipo: 'focuseditor',
+    rutaConfig: 'focus',
+    handler: handleFocusPointer
   }
 ];
 
@@ -829,6 +1101,25 @@ function setupControl(control) {
       element.addEventListener('change', control.handler);
     } else if (control.tipo === 'select') {
       element.addEventListener('change', control.handler);
+    } else if (control.tipo === 'focuseditor') {
+      let dragging = false;
+      element.addEventListener('click', control.handler);
+      element.addEventListener('pointerdown', (e) => {
+        dragging = true;
+        if (element.setPointerCapture) element.setPointerCapture(e.pointerId);
+        control.handler(e);
+      });
+      element.addEventListener('pointermove', (e) => {
+        if (dragging) control.handler(e);
+      });
+      element.addEventListener('pointerup', () => {
+        dragging = false;
+      });
+      element.addEventListener('pointercancel', () => {
+        dragging = false;
+      });
+      const focusImage = document.getElementById('focus-image');
+      if (focusImage) focusImage.addEventListener('load', updateFocusBoxPreview);
     }
   } catch (err) {
     console.error(`Error setting up control ${control.id}:`, err);
@@ -908,7 +1199,9 @@ document.addEventListener('DOMContentLoaded', () => {
   CONTROLS.forEach(setupControl);
 
   renderAll();
+  renderOutputChips();
+  renderFocusEditor();
   updateExportButton();
 
-  console.log('Video Maker v0.3.0 - Renderer loaded');
+  console.log('Video Maker v0.4.0 - Renderer loaded');
 });
