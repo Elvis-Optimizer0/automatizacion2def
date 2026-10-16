@@ -113,8 +113,6 @@ function buildFfmpegArgs(options) {
   const hasMusic = !!(music && music.path);
   const totalDuration = calculateTotalDuration(scenes);
 
-  validateInputPaths(inputLabels);
-
   const filterGraph = buildFullFilterGraph(scenes, {
     hasMusic,
     totalDuration,
@@ -141,7 +139,7 @@ function buildFfmpegArgs(options) {
     outputPath
   );
 
-  return { args, totalDuration };
+  return { args, totalDuration, inputLabels };
 }
 
 function renderVideo(options) {
@@ -160,6 +158,7 @@ function renderVideo(options) {
     try {
       const scenes = normalizeScenesToDuration(options.scenes || [], options.audioDuration);
       const built = buildFfmpegArgs({ ...options, scenes });
+      validateInputPaths(built.inputLabels);
       args = built.args;
       totalDuration = built.totalDuration;
     } catch (err) {

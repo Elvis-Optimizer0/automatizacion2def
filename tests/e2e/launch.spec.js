@@ -40,7 +40,7 @@ test.describe('Video Maker - Launch', () => {
 
   test('window title contains version', async () => {
     const title = await page.title();
-    expect(title).toContain('v0.2.0');
+    expect(title).toContain('v0.3.0');
   });
 
   test('window.api is exposed', async () => {

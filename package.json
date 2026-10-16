@@ -1,6 +1,6 @@
 {
   "name": "video-maker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Video Maker - Professional video creation tool",
   "main": "app/main.js",
   "scripts": {
@@ -23,6 +23,7 @@
     "playwright": "^1.44.0"
   },
   "dependencies": {
+    "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
     "zod": "^3.22.4"
   },
@@ -41,7 +42,9 @@
     },
     "asarUnpack": [
       "**/ffprobe*",
-      "**/ffprobe-static/**"
+      "**/ffprobe-static/**",
+      "**/ffmpeg*",
+      "**/ffmpeg-static/**"
     ]
   }
 }
