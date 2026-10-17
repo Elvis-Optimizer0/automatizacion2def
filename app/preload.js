@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('api', {
   saveProject: (data, filePath) => ipcRenderer.invoke('project:save', data, filePath),
   openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
   verifyBinaries: () => ipcRenderer.invoke('verify:binaries'),
+  listFonts: () => ipcRenderer.invoke('fonts:list'),
+  importFont: () => ipcRenderer.invoke('fonts:import'),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('render:progress', handler);

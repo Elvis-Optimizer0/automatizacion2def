@@ -19,6 +19,7 @@ const {
 } = require('./output-formats.js');
 const { parseRenderPayload, imageFocus } = require('./project-schema.js');
 const { buildAss, E_SUBTITLES_FAILED } = require('./subtitles.js');
+const { getBundledFontsDir, mergeFontsIntoDir } = require('./fonts.js');
 
 const E_FFMPEG_MISSING = 'E_FFMPEG_MISSING';
 const E_INPUT_MISSING = 'E_INPUT_MISSING';
@@ -33,7 +34,7 @@ function getFontPath() {
 }
 
 function getFontsDir() {
-  return fixAsarPath(path.join(__dirname, '..', 'assets', 'fonts'));
+  return getBundledFontsDir();
 }
 
 function verifyBinaries() {
@@ -252,7 +253,7 @@ function runFfmpeg(ffmpegPath, args, totalDuration, onProgress, errorPrefix = E_
 }
 
 async function renderVideo(options) {
-  const { onProgress } = options;
+  const { onProgress, userFontsDir } = options;
 
   verifyBinaries();
 
@@ -276,9 +277,12 @@ async function renderVideo(options) {
 
   const subtitlesEnabled = !!(payload.config.subtitles && payload.config.subtitles.enabled);
   let subtitlesDir = null;
+  let fontsDir;
   if (subtitlesEnabled) {
     try {
       subtitlesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-subs-'));
+      fontsDir = path.join(subtitlesDir, 'fonts');
+      mergeFontsIntoDir(fontsDir, [getBundledFontsDir(), userFontsDir]);
     } catch (err) {
       throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
     }
@@ -311,7 +315,7 @@ async function renderVideo(options) {
         config: payload.config,
         renderOptions: payload.renderOptions,
         subtitlesPath,
-        fontsDir: subtitlesEnabled ? getFontsDir() : undefined
+        fontsDir
       });
       validateInputPaths(built.inputLabels);
 

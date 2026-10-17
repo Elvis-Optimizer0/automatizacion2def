@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const ffprobeStatic = require('ffprobe-static');
 const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_SUBTITLES_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
 const { parseProjectFile, collectProjectPaths } = require('./core/project-schema.js');
+const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
@@ -235,7 +236,11 @@ ipcMain.handle('render:video', async (_, options) => {
   };
 
   try {
-    const result = await renderVideo({ ...options, onProgress });
+    const result = await renderVideo({
+      ...options,
+      onProgress,
+      userFontsDir: getUserFontsDir(app.getPath('userData'))
+    });
     return result;
   } catch (err) {
     if (err.message.startsWith(E_FFMPEG_MISSING) || err.message.startsWith(E_INPUT_MISSING) || err.message.startsWith(E_FFMPEG_FAILED) || err.message.startsWith(E_SUBTITLES_FAILED) || err.message.startsWith(E_OUTPUT_CONFIG_MISSING)) {
@@ -253,6 +258,43 @@ ipcMain.handle('verify:binaries', async () => {
     return { ffmpeg: ffmpegPath, ffprobe: ffprobePath, ffprobeExists };
   } catch (err) {
     throw new Error(`${E_FFMPEG_MISSING}: ${err.message}`);
+  }
+});
+
+ipcMain.handle('fonts:list', async () => {
+  const userDir = getUserFontsDir(app.getPath('userData'));
+  return {
+    bundled: listFontsInDir(getBundledFontsDir()),
+    user: listFontsInDir(userDir),
+    userDir
+  };
+});
+
+ipcMain.handle('fonts:import', async () => {
+  const userDir = getUserFontsDir(app.getPath('userData'));
+
+  let filePath = process.env.VM_TEST_FONT_IN;
+  if (!filePath) {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Importar tipografia',
+      buttonLabel: 'Importar',
+      filters: [{ name: 'Tipografias', extensions: ['ttf', 'otf'] }],
+      properties: ['openFile']
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return null;
+    }
+    filePath = result.filePaths[0];
+  }
+
+  try {
+    const imported = importFontFromPath(filePath, userDir);
+    return { imported, user: listFontsInDir(userDir) };
+  } catch (err) {
+    if (err.message.startsWith(E_FONT_IMPORT_FAILED)) {
+      throw err;
+    }
+    throw new Error(`${E_FONT_IMPORT_FAILED}: ${err.message}`);
   }
 });
 
