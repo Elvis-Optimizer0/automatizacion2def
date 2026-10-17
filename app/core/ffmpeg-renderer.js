@@ -43,6 +43,18 @@ function listEncoders() {
   });
 }
 
+function probeEncoder(name) {
+  return new Promise((resolve) => {
+    const proc = spawn(getFfmpegPath(), [
+      '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'color=c=black:s=256x144:d=0.1',
+      '-c:v', name, '-f', 'null', '-'
+    ], { windowsHide: true });
+    proc.on('close', code => resolve(code === 0));
+    proc.on('error', () => resolve(false));
+  });
+}
+
 async function detectEncoders(force = false) {
   if (encoderCache && !force) return encoderCache;
   let output = '';
@@ -51,8 +63,10 @@ async function detectEncoders(force = false) {
   } catch {
     output = '';
   }
+  const listed = /\bh264_amf\b/.test(output);
+  const h264Amf = listed ? await probeEncoder('h264_amf') : false;
   encoderCache = {
-    h264_amf: /\bh264_amf\b/.test(output),
+    h264_amf: h264Amf,
     libx264: /\blibx264\b/.test(output)
   };
   return encoderCache;
