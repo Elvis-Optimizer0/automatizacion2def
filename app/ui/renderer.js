@@ -788,6 +788,108 @@ async function handleImportFont() {
   }
 }
 
+let presetsCache = [];
+let presetNameDraft = '';
+
+function snapshotSubtitleStyle() {
+  const clone = JSON.parse(JSON.stringify(state.config.subtitles));
+  delete clone.enabled;
+  return clone;
+}
+
+function applyPresetByName(name) {
+  const preset = presetsCache.find(item => item.name === name);
+  if (!preset) return;
+  const enabled = state.config.subtitles.enabled;
+  state.config.subtitles = mergeSubtitleConfig(state.config.subtitles, preset.style);
+  state.config.subtitles.enabled = enabled;
+  syncSubtitleControls();
+  updateSubtitlePreview();
+  refreshKeywordList();
+}
+
+async function refreshPresets(selectedName) {
+  const select = document.getElementById('preset-select');
+  if (!select || !window.api || typeof window.api.listPresets !== 'function') return;
+
+  let data;
+  try {
+    data = await window.api.listPresets();
+  } catch (err) {
+    showToast(`No se pudieron cargar los presets: ${err.message}`, 'error');
+    return;
+  }
+  presetsCache = (data && data.presets) || [];
+
+  const current = selectedName || select.value;
+  select.innerHTML = '';
+  for (const preset of presetsCache) {
+    const option = document.createElement('option');
+    option.value = preset.name;
+    option.textContent = preset.name;
+    select.appendChild(option);
+  }
+  if (presetsCache.some(item => item.name === current)) {
+    select.value = current;
+  }
+}
+
+async function handleSavePreset() {
+  try {
+    const nameInput = document.getElementById('preset-name-input');
+    const name = (nameInput && nameInput.value.trim()) || '';
+    if (!name) {
+      showToast('Escribe un nombre para el preset', 'warning');
+      return;
+    }
+    const result = await window.api.addPreset(name, snapshotSubtitleStyle());
+    presetsCache = (result && result.presets) || presetsCache;
+    await refreshPresets(name);
+    showToast(`Preset "${name}" guardado`, 'success');
+  } catch (err) {
+    showToast(`No se pudo guardar el preset: ${err.message}`, 'error');
+  }
+}
+
+async function handleRenamePreset() {
+  try {
+    const select = document.getElementById('preset-select');
+    const oldName = select && select.value;
+    const newName = presetNameDraft.trim();
+    if (!oldName) {
+      showToast('Selecciona un preset para renombrar', 'warning');
+      return;
+    }
+    if (!newName) {
+      showToast('Escribe el nuevo nombre', 'warning');
+      return;
+    }
+    const result = await window.api.renamePreset(oldName, newName);
+    presetsCache = (result && result.presets) || presetsCache;
+    await refreshPresets(newName);
+    showToast(`Preset renombrado a "${newName}"`, 'success');
+  } catch (err) {
+    showToast(`No se pudo renombrar: ${err.message}`, 'error');
+  }
+}
+
+async function handleDeletePreset() {
+  try {
+    const select = document.getElementById('preset-select');
+    const name = select && select.value;
+    if (!name) {
+      showToast('Selecciona un preset para eliminar', 'warning');
+      return;
+    }
+    const result = await window.api.deletePreset(name);
+    presetsCache = (result && result.presets) || presetsCache;
+    await refreshPresets();
+    showToast(`Preset "${name}" eliminado`, 'info');
+  } catch (err) {
+    showToast(`No se pudo eliminar: ${err.message}`, 'error');
+  }
+}
+
 const PREVIEW_TEXT = 'La deuda sube 30% y el interés de $1.000 afecta tu sueldo';
 let keywordsMasterColor = '#ff0000';
 
@@ -2159,6 +2261,35 @@ const CONTROLS = [
     id: 'keywords-apply-color-btn',
     tipo: 'button',
     handler: applyColorToAllKeywords
+  },
+  {
+    id: 'preset-select',
+    tipo: 'select',
+    handler: (e) => {
+      applyPresetByName(e.target.value);
+    }
+  },
+  {
+    id: 'preset-name-input',
+    tipo: 'input',
+    handler: (e) => {
+      presetNameDraft = e.target.value;
+    }
+  },
+  {
+    id: 'save-preset-btn',
+    tipo: 'button',
+    handler: handleSavePreset
+  },
+  {
+    id: 'rename-preset-btn',
+    tipo: 'button',
+    handler: handleRenamePreset
+  },
+  {
+    id: 'delete-preset-btn',
+    tipo: 'button',
+    handler: handleDeletePreset
   }
 ];
 
@@ -2321,7 +2452,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2337,6 +2468,7 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshFontList();
   updateSubtitlePreview();
   refreshKeywordList();
+  refreshPresets();
 
   console.log('Video Maker v0.5.1 - Renderer loaded');
 });

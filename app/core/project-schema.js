@@ -250,6 +250,7 @@ module.exports = {
   renderOptionsSchema,
   sceneSchema,
   audioSchema,
+  subtitlesSchema,
   renderPayloadSchema,
   parseRenderPayload,
   imageFocus,

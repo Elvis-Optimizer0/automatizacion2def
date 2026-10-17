@@ -7,6 +7,7 @@ const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG
 const { parseProjectFile, collectProjectPaths } = require('./core/project-schema.js');
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 const { detectKeywords } = require('./core/keywords.js');
+const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
@@ -301,6 +302,25 @@ ipcMain.handle('fonts:import', async () => {
 
 ipcMain.handle('keywords:detect', async (_, texts, options) => {
   return detectKeywords(texts, options || {});
+});
+
+ipcMain.handle('presets:list', async () => {
+  return readPresets(app.getPath('userData'));
+});
+
+ipcMain.handle('presets:add', async (_, name, style) => {
+  const presets = addPreset(app.getPath('userData'), name, style);
+  return { presets };
+});
+
+ipcMain.handle('presets:rename', async (_, oldName, newName) => {
+  const presets = renamePreset(app.getPath('userData'), oldName, newName);
+  return { presets };
+});
+
+ipcMain.handle('presets:delete', async (_, name) => {
+  const presets = deletePreset(app.getPath('userData'), name);
+  return { presets };
 });
 
 ipcMain.handle('project:save', async (_, data, providedPath) => {  let filePath = providedPath || process.env.VM_TEST_PROJECT_OUT;

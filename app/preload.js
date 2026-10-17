@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   listFonts: () => ipcRenderer.invoke('fonts:list'),
   importFont: () => ipcRenderer.invoke('fonts:import'),
   detectKeywords: (texts, options) => ipcRenderer.invoke('keywords:detect', texts, options),
+  listPresets: () => ipcRenderer.invoke('presets:list'),
+  addPreset: (name, style) => ipcRenderer.invoke('presets:add', name, style),
+  renamePreset: (oldName, newName) => ipcRenderer.invoke('presets:rename', oldName, newName),
+  deletePreset: (name) => ipcRenderer.invoke('presets:delete', name),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('render:progress', handler);

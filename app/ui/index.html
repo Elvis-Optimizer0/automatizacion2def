@@ -389,6 +389,17 @@
           <button id="import-font-btn" class="btn btn-secondary btn-sm" type="button">Importar tipografía</button>
           <p class="subtitle-notice">Los tipos incluidos (Roboto, Open Sans, Montserrat, Playfair Display, Oswald) usan la licencia SIL Open Font. Al importar una tipografía confirmas que cuentas con la licencia necesaria para usarla.</p>
           <div class="export-control-row">
+            <label for="preset-select">Presets</label>
+            <select id="preset-select" class="export-select"></select>
+          </div>
+          <div class="export-control-row">
+            <label for="preset-name-input">Nombre</label>
+            <input type="text" id="preset-name-input" class="export-input" placeholder="Mi estilo">
+          </div>
+          <button id="save-preset-btn" class="btn btn-secondary btn-sm" type="button">Guardar preset</button>
+          <button id="rename-preset-btn" class="btn btn-secondary btn-sm" type="button">Renombrar</button>
+          <button id="delete-preset-btn" class="btn btn-secondary btn-sm" type="button">Eliminar</button>
+          <div class="export-control-row">
             <label for="subtitle-size-h">Tamaño horizontal (px)</label>
             <input type="number" id="subtitle-size-h" class="export-input" min="8" max="400" step="1" value="48">
           </div>
