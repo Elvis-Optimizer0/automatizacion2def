@@ -54,6 +54,12 @@ function sha256(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+function frameSsim(a, b) {
+  const result = spawnSync(ffmpegPath, ['-i', a, '-i', b, '-lavfi', 'ssim', '-f', 'null', '-'], { windowsHide: true });
+  const match = result.stderr.toString().match(/All:([0-9.]+)/);
+  return match ? parseFloat(match[1]) : NaN;
+}
+
 async function waitForTestExports(page) {
   await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__TEST_EXPORT__, { timeout: 15000 });
 }
@@ -254,5 +260,59 @@ test.describe.serial('Video Maker - Phase 5 Manual framing', () => {
     await page.waitForTimeout(100);
     const reset = await page.evaluate(() => window.__TEST_STATE__.images[0].focus169);
     expect(reset).toEqual({ x: 0.5, y: 0.5, scale: 1 });
+  });
+
+  test('6. Per-format framing is independent: changing 9:16 leaves the 16:9 render identical', async () => {
+    const ninePath = path.join(testDir, 'exported_9x16.mp4');
+
+    await page.evaluate(() => {
+      const image = window.__TEST_STATE__.images[0];
+      image.focus169 = { x: 0.5, y: 0.5, scale: 1 };
+      image.focus916 = { x: 0.5, y: 0.5, scale: 1 };
+      window.__TEST_STATE__.config.outputs = ['16:9', '9:16'];
+      window.__TEST_STATE__.config.fitMode = 'cover';
+      window.__TEST_STATE__.config.backgroundMode = 'color';
+      window.__TEST_STATE__.config.backgroundColor = '#ff00ff';
+      window.__TEST_STATE__.exportOptions.zoomEnabled = false;
+      window.__TEST_RENDER__.renderFocusEditor();
+      window.__TEST_RENDER__.renderOutputChips();
+    });
+    await page.waitForTimeout(150);
+    await exportAndWait(page);
+
+    const sixteenA = probeVideo(outputPath);
+    const nineA = probeVideo(ninePath);
+    expect(sixteenA.width).toBe(1920);
+    expect(sixteenA.height).toBe(1080);
+    expect(nineA.width).toBe(1080);
+    expect(nineA.height).toBe(1920);
+
+    const frame169Before = path.join(testDir, 'fmt169_before.png');
+    const frame916Before = path.join(testDir, 'fmt916_before.png');
+    extractFrame(outputPath, frame169Before, 1);
+    extractFrame(ninePath, frame916Before, 1);
+
+    await page.evaluate(() => {
+      window.__TEST_STATE__.images[0].focus916 = { x: 0.1, y: 0.9, scale: 0.5 };
+      window.__TEST_RENDER__.renderFocusEditor();
+    });
+    await page.waitForTimeout(150);
+    await exportAndWait(page);
+
+    const frame169After = path.join(testDir, 'fmt169_after.png');
+    const frame916After = path.join(testDir, 'fmt916_after.png');
+    extractFrame(outputPath, frame169After, 1);
+    extractFrame(ninePath, frame916After, 1);
+
+    expect(frameSsim(frame169Before, frame169After)).toBeGreaterThan(0.999);
+    expect(sha256(frame169Before)).toBe(sha256(frame169After));
+
+    const nineSsim = frameSsim(frame916After, frame916Before);
+    expect(nineSsim).toBeLessThan(0.999);
+
+    const border = readPixel(ninePath, 540, 4);
+    expect(border.r).toBeGreaterThan(200);
+    expect(border.b).toBeGreaterThan(200);
+    expect(border.g).toBeLessThan(80);
   });
 });

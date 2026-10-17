@@ -312,6 +312,38 @@ test.describe('manual framing (scale + background)', () => {
     expect(filter).toContain('(ih-oh)*0.3');
   });
 
+  test('animated zoom composes on top of the scaled-out canvas (no new source edges)', () => {
+    const graph = buildVideoFilterGraph([focusScene({ x: 0.5, y: 0.5, scale: 0.6 })], {
+      outputConfig,
+      backgroundMode: 'color',
+      backgroundColor: '#112233',
+      zoomEnabled: true,
+      zoomType: 'kenburns'
+    });
+    expect(graph).toContain('pad=');
+    expect(graph).toContain('color=#112233');
+    expect(graph).toContain('[base0]zoompan=');
+    const padIndex = graph.indexOf('pad=');
+    const zoomIndex = graph.indexOf('[base0]zoompan=');
+    expect(padIndex).toBeGreaterThan(-1);
+    expect(zoomIndex).toBeGreaterThan(padIndex);
+    expect(graph).not.toMatch(/\[1:v\]/);
+  });
+
+  test('animated zoom composes on top of the cropped canvas when scale > 1', () => {
+    const graph = buildVideoFilterGraph([focusScene({ x: 0.2, y: 0.8, scale: 1.5 })], {
+      outputConfig,
+      zoomEnabled: true,
+      zoomType: 'kenburns'
+    });
+    expect(graph).toContain('crop=1920:1080:(iw-ow)*0.2:(ih-oh)*0.8');
+    expect(graph).toContain('[base0]zoompan=');
+    const cropIndex = graph.indexOf('crop=1920:1080');
+    const zoomIndex = graph.indexOf('[base0]zoompan=');
+    expect(zoomIndex).toBeGreaterThan(cropIndex);
+    expect(graph).not.toMatch(/\[1:v\]/);
+  });
+
   test('clampScale keeps values inside 0.3..3 and defaults invalid to 1', () => {
     expect(clampScale(0.1)).toBe(0.3);
     expect(clampScale(5)).toBe(3);

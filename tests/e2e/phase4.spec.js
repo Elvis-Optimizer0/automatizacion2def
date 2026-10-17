@@ -78,6 +78,16 @@ async function exportAndWait(page) {
   expect(status).toContain('Video exportado');
 }
 
+function outputMtime(filePath) {
+  return fs.existsSync(filePath) ? fs.statSync(filePath).mtimeMs : 0;
+}
+
+async function exportAndWaitFresh(page, filePath) {
+  const before = outputMtime(filePath);
+  await exportAndWait(page);
+  await expect.poll(() => outputMtime(filePath), { timeout: 20000 }).toBeGreaterThan(before);
+}
+
 test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
   let electronApp;
   let page;
@@ -281,7 +291,7 @@ test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
       window.__TEST_STATE__.images[0].focus169 = { x: 0.5, y: 0.2 };
     });
     await page.waitForTimeout(150);
-    await exportAndWait(page);
+    await exportAndWaitFresh(page, outputPath);
     const frameTop = path.join(testDir, 'frame_top.png');
     extractFrame(outputPath, frameTop, 1);
 
@@ -289,7 +299,7 @@ test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
       window.__TEST_STATE__.images[0].focus169 = { x: 0.5, y: 0.8 };
     });
     await page.waitForTimeout(150);
-    await exportAndWait(page);
+    await exportAndWaitFresh(page, outputPath);
     const frameBottom = path.join(testDir, 'frame_bottom.png');
     extractFrame(outputPath, frameBottom, 1);
 
