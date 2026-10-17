@@ -1735,5 +1735,5 @@ document.addEventListener('DOMContentLoaded', () => {
   renderFocusEditor();
   updateExportButton();
 
-  console.log('Video Maker v0.4.0 - Renderer loaded');
+  console.log('Video Maker v0.5.0 - Renderer loaded');
 });
