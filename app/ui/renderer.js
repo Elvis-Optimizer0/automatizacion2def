@@ -207,9 +207,11 @@ const state = {
       alignment: 2,
       marginH: 40,
       marginV: 40,
+      delay: 0,
+      autoVoiceStart: true,
       background: { enabled: false, color: '#000000', opacity: 0.5 },
       shadow: { enabled: false, color: '#000000', opacity: 0.7, distance: 3, angle: 45, blur: 4 },
-      highlight: { enabled: false, colors: {}, terms: [], detect: { numbers: true, percent: true, currency: true } },
+      highlight: { enabled: false, colors: {}, terms: [], limit: 30, detect: { numbers: true, percent: true, currency: true } },
       animation: 'none'
     }
   },
@@ -739,6 +741,7 @@ function mergeSubtitleConfig(base, incoming) {
       ...(incoming.highlight || {}),
       colors: { ...base.highlight.colors, ...((incoming.highlight && incoming.highlight.colors) || {}) },
       terms: ((incoming.highlight && incoming.highlight.terms) || base.highlight.terms || []).slice(),
+      limit: (incoming.highlight && incoming.highlight.limit) || base.highlight.limit || 30,
       detect: { ...base.highlight.detect, ...((incoming.highlight && incoming.highlight.detect) || {}) }
     }
   };
@@ -998,7 +1001,8 @@ async function refreshKeywordList() {
         terms: highlight.terms,
         numbers: highlight.detect.numbers,
         percent: highlight.detect.percent,
-        currency: highlight.detect.currency
+        currency: highlight.detect.currency,
+        topN: highlight.limit
       });
     } catch (err) {
       showToast(`No se pudieron detectar palabras clave: ${err.message}`, 'error');
@@ -1008,15 +1012,15 @@ async function refreshKeywordList() {
 
   const terms = [];
   const seen = new Set();
-  const push = (term, kind) => {
+  const push = (term, kind, meta = {}) => {
     const clean = String(term || '').trim();
     if (!clean) return;
     const key = clean.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    terms.push({ term: clean, kind: kind || 'word' });
+    terms.push({ term: clean, kind: kind || 'word', count: meta.count, scene: meta.scene });
   };
-  for (const candidate of candidates) push(candidate.term, candidate.kind);
+  for (const candidate of candidates) push(candidate.term, candidate.kind, candidate);
   for (const key of Object.keys(highlight.colors)) push(key, 'word');
 
   listEl.innerHTML = '';
@@ -1063,9 +1067,67 @@ async function refreshKeywordList() {
 
     row.appendChild(checkbox);
     row.appendChild(label);
+    if (item.count && item.count > 1) {
+      const meta = document.createElement('span');
+      meta.className = 'keyword-meta';
+      meta.textContent = `${item.count}× · esc. ${item.scene || 1}`;
+      row.appendChild(meta);
+    }
     row.appendChild(color);
     listEl.appendChild(row);
   }
+}
+
+function normalizeForSearch(text) {
+  return String(text == null ? '' : text)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function selectSuggestedKeywords() {
+  const listEl = document.getElementById('keywords-list');
+  if (!listEl) return;
+  const highlight = state.config.subtitles.highlight;
+  const limit = Math.max(1, Number(highlight.limit) || 30);
+  const rows = [...listEl.querySelectorAll('.keyword-row')].slice(0, limit);
+  if (rows.length === 0) {
+    showToast('No hay propuestas para seleccionar', 'warning');
+    return;
+  }
+  rows.forEach(row => {
+    const label = row.querySelector('.keyword-term');
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const color = row.querySelector('input[type="color"]');
+    if (!label || !checkbox || !color) return;
+    checkbox.checked = true;
+    color.value = keywordsMasterColor;
+    highlight.colors[label.textContent] = keywordsMasterColor;
+  });
+  updateSubtitlePreview();
+  showToast(`${rows.length} palabra(s) sugerida(s) resaltada(s)`, 'success');
+}
+
+async function addSearchTerm() {
+  const input = document.getElementById('subtitle-term-search');
+  const value = input ? input.value.trim() : '';
+  if (!value) {
+    showToast('Escribe una palabra para añadir', 'warning');
+    return;
+  }
+  const scriptText = state.timeline.map(scene => scene.text || '').join(' ');
+  const needle = normalizeForSearch(value);
+  const haystack = normalizeForSearch(scriptText);
+  if (!needle || !haystack.includes(needle)) {
+    showToast(`"${value}" no aparece en el guion`, 'warning');
+    return;
+  }
+  state.config.subtitles.highlight.colors[value] = keywordsMasterColor;
+  if (input) input.value = '';
+  await refreshKeywordList();
+  updateSubtitlePreview();
+  showToast(`"${value}" añadida para resaltar`, 'success');
 }
 
 function applyColorToAllKeywords() {
@@ -1161,6 +1223,8 @@ function syncSubtitleControls() {
   setValue('subtitle-alignment', s.alignment);
   setValue('subtitle-margin-h', s.marginH);
   setValue('subtitle-margin-v', s.marginV);
+  setValue('subtitle-delay', s.delay);
+  setValue('subtitles-voice-detect', s.autoVoiceStart);
   setValue('subtitles-background-enabled', s.background.enabled);
   setValue('subtitles-background-color', s.background.color);
   setValue('subtitles-background-opacity', s.background.opacity);
@@ -1173,6 +1237,7 @@ function syncSubtitleControls() {
   setValue('subtitle-animation', s.animation);
   setValue('subtitles-highlight-enabled', s.highlight.enabled);
   setValue('subtitle-terms-input', (s.highlight.terms || []).join(', '));
+  setValue('subtitle-terms-limit', s.highlight.limit);
   setValue('subtitles-detect-numbers', s.highlight.detect.numbers);
   setValue('subtitles-detect-percent', s.highlight.detect.percent);
   setValue('subtitles-detect-currency', s.highlight.detect.currency);
@@ -2344,9 +2409,51 @@ const CONTROLS = [
     }
   },
   {
+    id: 'subtitle-delay',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.delay',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.delay = Number.isNaN(value) ? 0 : Math.min(5, Math.max(-2, value));
+    }
+  },
+  {
+    id: 'subtitles-voice-detect',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.autoVoiceStart',
+    handler: (e) => {
+      state.config.subtitles.autoVoiceStart = e.target.checked;
+    }
+  },
+  {
+    id: 'subtitle-terms-limit',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.highlight.limit',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.subtitles.highlight.limit = Number.isNaN(value) ? 30 : Math.min(200, Math.max(1, value));
+      refreshKeywordList();
+    }
+  },
+  {
     id: 'detect-keywords-btn',
     tipo: 'button',
     handler: handleDetectKeywords
+  },
+  {
+    id: 'subtitles-select-suggested-btn',
+    tipo: 'button',
+    handler: selectSuggestedKeywords
+  },
+  {
+    id: 'subtitle-term-search',
+    tipo: 'input',
+    handler: () => {}
+  },
+  {
+    id: 'subtitle-term-add-btn',
+    tipo: 'button',
+    handler: addSearchTerm
   },
   {
     id: 'keywords-color',
@@ -2570,7 +2677,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
 document.addEventListener('DOMContentLoaded', () => {

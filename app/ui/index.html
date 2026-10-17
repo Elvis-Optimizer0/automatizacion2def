@@ -455,6 +455,15 @@
             <label for="subtitle-margin-v">Margen vertical</label>
             <input type="number" id="subtitle-margin-v" class="export-input" min="0" max="1000" step="1" value="40">
           </div>
+          <div class="export-control-row">
+            <label for="subtitle-delay">Retraso de subtítulos (s)</label>
+            <input type="number" id="subtitle-delay" class="export-input" min="-2" max="5" step="0.1" value="0">
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-voice-detect" checked>
+            <span class="checkmark"></span>
+            Detectar inicio de voz
+          </label>
           <label class="checkbox-label">
             <input type="checkbox" id="subtitles-background-enabled">
             <span class="checkmark"></span>
@@ -525,12 +534,22 @@
             <span class="checkmark"></span>
             Detectar montos en dólares
           </label>
+          <div class="export-control-row">
+            <label for="subtitle-terms-limit">Máximo de propuestas</label>
+            <input type="number" id="subtitle-terms-limit" class="export-input" min="1" max="200" step="1" value="30">
+          </div>
           <button id="detect-keywords-btn" class="btn btn-secondary btn-sm" type="button">Detectar palabras clave</button>
+          <button id="subtitles-select-suggested-btn" class="btn btn-secondary btn-sm" type="button">Seleccionar sugeridas (top N)</button>
           <div class="export-control-row">
             <label for="keywords-color">Color para resaltar</label>
             <input type="color" id="keywords-color" class="export-color" value="#ff0000">
           </div>
           <button id="keywords-apply-color-btn" class="btn btn-secondary btn-sm" type="button">Resaltar todas con este color</button>
+          <div class="export-control-row">
+            <label for="subtitle-term-search">Buscar y añadir palabra del guion</label>
+            <input type="text" id="subtitle-term-search" class="export-input" placeholder="presupuesto">
+          </div>
+          <button id="subtitle-term-add-btn" class="btn btn-secondary btn-sm" type="button">Añadir palabra</button>
           <div id="keywords-list" class="keywords-list" aria-live="polite"></div>
           <div id="subtitle-preview" class="subtitle-preview" aria-label="Vista previa de subtítulos">
             <span id="subtitle-preview-text" class="subtitle-preview-text">La deuda sube 30% y el interés afecta tu sueldo</span>

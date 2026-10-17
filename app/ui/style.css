@@ -977,6 +977,14 @@ body {
   word-break: break-word;
 }
 
+.keyword-meta {
+  flex: 0 0 auto;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
 .preview-video {
   display: block;
   width: 100%;
