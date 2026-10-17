@@ -922,3 +922,30 @@ body {
     max-height: 300px;
   }
 }
+.subtitle-notice {
+  margin: var(--spacing-sm) 0 0;
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+}
+
+.subtitle-preview {
+  position: relative;
+  margin-top: var(--spacing-md);
+  min-height: 96px;
+  padding: var(--spacing-md);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  transition: background-color 0.15s ease;
+}
+
+.subtitle-preview-text {
+  display: block;
+  width: 100%;
+  line-height: 1.25;
+  word-break: break-word;
+}

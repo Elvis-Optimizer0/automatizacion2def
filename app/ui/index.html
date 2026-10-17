@@ -374,6 +374,126 @@
             <input type="number" id="progress-bar-height" class="export-input" min="1" max="200" step="1" value="8">
           </div>
         </fieldset>
+
+        <fieldset class="export-fieldset">
+          <legend>Subtítulos</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-enabled">
+            <span class="checkmark"></span>
+            Activar subtítulos automáticos
+          </label>
+          <div class="export-control-row">
+            <label for="subtitle-font">Tipografía</label>
+            <select id="subtitle-font" class="export-select"></select>
+          </div>
+          <button id="import-font-btn" class="btn btn-secondary btn-sm" type="button">Importar tipografía</button>
+          <p class="subtitle-notice">Los tipos incluidos (Roboto, Open Sans, Montserrat, Playfair Display, Oswald) usan la licencia SIL Open Font. Al importar una tipografía confirmas que cuentas con la licencia necesaria para usarla.</p>
+          <div class="export-control-row">
+            <label for="subtitle-size-h">Tamaño horizontal (px)</label>
+            <input type="number" id="subtitle-size-h" class="export-input" min="8" max="400" step="1" value="48">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-size-v">Tamaño vertical (px)</label>
+            <input type="number" id="subtitle-size-v" class="export-input" min="8" max="400" step="1" value="64">
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitle-bold">
+            <span class="checkmark"></span>
+            Negrita
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitle-italic">
+            <span class="checkmark"></span>
+            Cursiva
+          </label>
+          <div class="export-control-row">
+            <label for="subtitle-letter-spacing">Espaciado de letras</label>
+            <input type="number" id="subtitle-letter-spacing" class="export-input" min="-20" max="50" step="1" value="0">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-text-color">Color del texto</label>
+            <input type="color" id="subtitle-text-color" class="export-color" value="#ffffff">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-outline-width">Contorno (px)</label>
+            <input type="number" id="subtitle-outline-width" class="export-input" min="0" max="50" step="1" value="0">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-outline-color">Color del contorno</label>
+            <input type="color" id="subtitle-outline-color" class="export-color" value="#000000">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-alignment">Alineación</label>
+            <select id="subtitle-alignment" class="export-select">
+              <option value="1">Abajo izquierda</option>
+              <option value="2" selected>Abajo centro</option>
+              <option value="3">Abajo derecha</option>
+              <option value="4">Medio izquierda</option>
+              <option value="5">Centro</option>
+              <option value="6">Medio derecha</option>
+              <option value="7">Arriba izquierda</option>
+              <option value="8">Arriba centro</option>
+              <option value="9">Arriba derecha</option>
+            </select>
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-margin-h">Margen lateral</label>
+            <input type="number" id="subtitle-margin-h" class="export-input" min="0" max="1000" step="1" value="40">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-margin-v">Margen vertical</label>
+            <input type="number" id="subtitle-margin-v" class="export-input" min="0" max="1000" step="1" value="40">
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-background-enabled">
+            <span class="checkmark"></span>
+            Fondo de texto
+          </label>
+          <div class="export-control-row">
+            <label for="subtitles-background-color">Color del fondo</label>
+            <input type="color" id="subtitles-background-color" class="export-color" value="#000000">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitles-background-opacity">Opacidad del fondo</label>
+            <input type="number" id="subtitles-background-opacity" class="export-input" min="0" max="1" step="0.05" value="0.5">
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-shadow-enabled">
+            <span class="checkmark"></span>
+            Sombra
+          </label>
+          <div class="export-control-row">
+            <label for="subtitles-shadow-color">Color de la sombra</label>
+            <input type="color" id="subtitles-shadow-color" class="export-color" value="#000000">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitles-shadow-opacity">Opacidad de la sombra</label>
+            <input type="number" id="subtitles-shadow-opacity" class="export-input" min="0" max="1" step="0.05" value="0.7">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitles-shadow-distance">Distancia de la sombra</label>
+            <input type="number" id="subtitles-shadow-distance" class="export-input" min="0" max="100" step="1" value="3">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitles-shadow-angle">Ángulo de la sombra</label>
+            <input type="number" id="subtitles-shadow-angle" class="export-input" min="0" max="360" step="1" value="45">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitles-shadow-blur">Desenfoque de la sombra</label>
+            <input type="number" id="subtitles-shadow-blur" class="export-input" min="0" max="100" step="1" value="4">
+          </div>
+          <div class="export-control-row">
+            <label for="subtitle-animation">Animación de entrada</label>
+            <select id="subtitle-animation" class="export-select">
+              <option value="none" selected>Sin animación</option>
+              <option value="fade">Aparecer</option>
+              <option value="pop">Pop</option>
+            </select>
+          </div>
+          <div id="subtitle-preview" class="subtitle-preview" aria-label="Vista previa de subtítulos">
+            <span id="subtitle-preview-text" class="subtitle-preview-text">La deuda sube 30% y el interés afecta tu sueldo</span>
+          </div>
+        </fieldset>
       </div>
 
       <button id="export-btn" class="btn btn-primary" type="button" disabled>

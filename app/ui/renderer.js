@@ -191,6 +191,26 @@ const state = {
       badge: { enabled: false, text: '', position: 'topRight', animation: 'fade' },
       lowerThird: { enabled: false, text: '', opacity: 0.6 },
       progressBar: { enabled: false, color: '#ff0000', height: 8 }
+    },
+    subtitles: {
+      enabled: false,
+      fontFamily: 'Roboto',
+      fontFile: '',
+      fontSizeH: 48,
+      fontSizeV: 64,
+      bold: false,
+      italic: false,
+      letterSpacing: 0,
+      textColor: '#ffffff',
+      outlineWidth: 0,
+      outlineColor: '#000000',
+      alignment: 2,
+      marginH: 40,
+      marginV: 40,
+      background: { enabled: false, color: '#000000', opacity: 0.5 },
+      shadow: { enabled: false, color: '#000000', opacity: 0.7, distance: 3, angle: 45, blur: 4 },
+      highlight: { enabled: false, colors: {}, detect: { numbers: true, percent: true, currency: true } },
+      animation: 'none'
     }
   },
   focus: {
@@ -705,6 +725,144 @@ function toggleOutputFormat(format) {
   renderOutputChips();
 }
 
+function mergeSubtitleConfig(base, incoming) {
+  if (!incoming) return { ...base };
+  return {
+    ...base,
+    ...incoming,
+    background: { ...base.background, ...(incoming.background || {}) },
+    shadow: { ...base.shadow, ...(incoming.shadow || {}) },
+    highlight: {
+      ...base.highlight,
+      ...(incoming.highlight || {}),
+      colors: { ...base.highlight.colors, ...((incoming.highlight && incoming.highlight.colors) || {}) },
+      detect: { ...base.highlight.detect, ...((incoming.highlight && incoming.highlight.detect) || {}) }
+    }
+  };
+}
+
+async function refreshFontList(preferredFamily) {
+  const select = document.getElementById('subtitle-font');
+  if (!select || !window.api || typeof window.api.listFonts !== 'function') return;
+
+  let data;
+  try {
+    data = await window.api.listFonts();
+  } catch (err) {
+    showToast(`No se pudieron cargar las tipografías: ${err.message}`, 'error');
+    return;
+  }
+
+  const families = [];
+  for (const font of [...(data.bundled || []), ...(data.user || [])]) {
+    if (font && font.family && !families.includes(font.family)) families.push(font.family);
+  }
+
+  const current = preferredFamily || state.config.subtitles.fontFamily;
+  select.innerHTML = '';
+  for (const family of families) {
+    const option = document.createElement('option');
+    option.value = family;
+    option.textContent = family;
+    select.appendChild(option);
+  }
+
+  if (families.includes(current)) {
+    select.value = current;
+  } else if (families.length > 0) {
+    select.value = families[0];
+    state.config.subtitles.fontFamily = families[0];
+  }
+  updateSubtitlePreview();
+}
+
+async function handleImportFont() {
+  try {
+    const result = await window.api.importFont();
+    if (!result || !result.imported) return;
+    await refreshFontList(result.imported.family);
+    showToast(`Tipografía "${result.imported.family}" importada`, 'success');
+  } catch (err) {
+    showToast(`No se pudo importar la tipografía: ${err.message}`, 'error');
+  }
+}
+
+function updateSubtitlePreview() {
+  const box = document.getElementById('subtitle-preview');
+  const text = document.getElementById('subtitle-preview-text');
+  if (!box || !text) return;
+
+  const style = state.config.subtitles;
+  const factor = 0.32;
+  text.style.fontFamily = `"${style.fontFamily}", sans-serif`;
+  text.style.fontSize = `${Math.max(11, Math.round(style.fontSizeH * factor))}px`;
+  text.style.fontWeight = style.bold ? '700' : '400';
+  text.style.fontStyle = style.italic ? 'italic' : 'normal';
+  text.style.letterSpacing = `${(Number(style.letterSpacing) || 0) * factor}px`;
+  text.style.color = style.textColor;
+  text.style.webkitTextStroke = style.outlineWidth > 0
+    ? `${Math.max(1, Math.round(style.outlineWidth * factor))}px ${style.outlineColor}`
+    : '0';
+
+  if (style.shadow && style.shadow.enabled) {
+    const rad = (Number(style.shadow.angle) || 0) * Math.PI / 180;
+    const dx = (Number(style.shadow.distance) || 0) * Math.cos(rad) * factor;
+    const dy = (Number(style.shadow.distance) || 0) * Math.sin(rad) * factor;
+    text.style.textShadow = `${dx.toFixed(1)}px ${dy.toFixed(1)}px ${Math.max(0, Math.round(style.shadow.blur * factor))}px ${style.shadow.color}`;
+  } else {
+    text.style.textShadow = 'none';
+  }
+
+  if (style.background && style.background.enabled) {
+    const hex = style.background.color.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16) || 0;
+    const g = parseInt(hex.slice(2, 4), 16) || 0;
+    const b = parseInt(hex.slice(4, 6), 16) || 0;
+    box.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${style.background.opacity})`;
+  } else {
+    box.style.backgroundColor = 'transparent';
+  }
+
+  const col = ((Number(style.alignment) || 2) - 1) % 3;
+  box.style.textAlign = col === 0 ? 'left' : (col === 1 ? 'center' : 'right');
+}
+
+function syncSubtitleControls() {
+  const s = state.config.subtitles;
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      el.checked = !!value;
+    } else {
+      el.value = value;
+    }
+  };
+
+  setValue('subtitles-enabled', s.enabled);
+  setValue('subtitle-size-h', s.fontSizeH);
+  setValue('subtitle-size-v', s.fontSizeV);
+  setValue('subtitle-bold', s.bold);
+  setValue('subtitle-italic', s.italic);
+  setValue('subtitle-letter-spacing', s.letterSpacing);
+  setValue('subtitle-text-color', s.textColor);
+  setValue('subtitle-outline-width', s.outlineWidth);
+  setValue('subtitle-outline-color', s.outlineColor);
+  setValue('subtitle-alignment', s.alignment);
+  setValue('subtitle-margin-h', s.marginH);
+  setValue('subtitle-margin-v', s.marginV);
+  setValue('subtitles-background-enabled', s.background.enabled);
+  setValue('subtitles-background-color', s.background.color);
+  setValue('subtitles-background-opacity', s.background.opacity);
+  setValue('subtitles-shadow-enabled', s.shadow.enabled);
+  setValue('subtitles-shadow-color', s.shadow.color);
+  setValue('subtitles-shadow-opacity', s.shadow.opacity);
+  setValue('subtitles-shadow-distance', s.shadow.distance);
+  setValue('subtitles-shadow-angle', s.shadow.angle);
+  setValue('subtitles-shadow-blur', s.shadow.blur);
+  setValue('subtitle-animation', s.animation);
+}
+
 function renderFocusEditor() {
   const select = document.getElementById('focus-image-select');
   const img = document.getElementById('focus-image');
@@ -885,7 +1043,7 @@ function buildProjectData() {
     },
     script: { raw: state.script.raw },
     timeline: state.timeline.map(scene => {
-      const item = { number: scene.number, duration: scene.duration };
+      const item = { number: scene.number, duration: scene.duration, text: scene.text || '' };
       if (scene.zoom) item.zoom = { ...scene.zoom };
       if (scene.transition) item.transition = { ...scene.transition };
       return item;
@@ -947,7 +1105,12 @@ function loadProject(project, missing = []) {
     ? project.audio.narration.duration
     : 0;
   state.script.raw = project.script.raw || '';
-  state.config = { ...state.config, ...project.config, extras: { ...state.config.extras, ...(project.config.extras || {}) } };
+  state.config = {
+    ...state.config,
+    ...project.config,
+    extras: { ...state.config.extras, ...(project.config.extras || {}) },
+    subtitles: mergeSubtitleConfig(state.config.subtitles, project.config.subtitles)
+  };
   state.exportOptions = { ...state.exportOptions, ...project.renderOptions };
   state.timelineOptions = { ...state.timelineOptions, ...project.timelineOptions };
 
@@ -962,7 +1125,7 @@ function loadProject(project, missing = []) {
       start,
       end,
       image: state.images[index] || null,
-      text: ''
+      text: scene.text || ''
     };
     if (scene.zoom) item.zoom = { ...scene.zoom };
     if (scene.transition) item.transition = { ...scene.transition };
@@ -978,6 +1141,8 @@ function loadProject(project, missing = []) {
   renderFocusEditor();
   renderOutputChips();
   updateExportButton();
+  syncSubtitleControls();
+  refreshFontList(state.config.subtitles.fontFamily);
 }
 
 async function handleOpenProject() {
@@ -1560,6 +1725,226 @@ const CONTROLS = [
       state.config.backgroundColor = e.target.value;
       if (state.config.backgroundMode !== 'blur') renderFocusEditor();
     }
+  },
+  {
+    id: 'subtitles-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.enabled',
+    handler: (e) => {
+      state.config.subtitles.enabled = e.target.checked;
+    }
+  },
+  {
+    id: 'subtitle-font',
+    tipo: 'select',
+    rutaConfig: 'config.subtitles.fontFamily',
+    handler: (e) => {
+      state.config.subtitles.fontFamily = e.target.value;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'import-font-btn',
+    tipo: 'button',
+    handler: handleImportFont
+  },
+  {
+    id: 'subtitle-size-h',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.fontSizeH',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.subtitles.fontSizeH = isNaN(value) ? 48 : Math.min(400, Math.max(8, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-size-v',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.fontSizeV',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.subtitles.fontSizeV = isNaN(value) ? 64 : Math.min(400, Math.max(8, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-bold',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.bold',
+    handler: (e) => {
+      state.config.subtitles.bold = e.target.checked;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-italic',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.italic',
+    handler: (e) => {
+      state.config.subtitles.italic = e.target.checked;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-letter-spacing',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.letterSpacing',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.letterSpacing = isNaN(value) ? 0 : Math.min(50, Math.max(-20, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-text-color',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.textColor',
+    handler: (e) => {
+      state.config.subtitles.textColor = e.target.value;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-outline-width',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.outlineWidth',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.outlineWidth = isNaN(value) ? 0 : Math.min(50, Math.max(0, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-outline-color',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.outlineColor',
+    handler: (e) => {
+      state.config.subtitles.outlineColor = e.target.value;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-alignment',
+    tipo: 'select',
+    rutaConfig: 'config.subtitles.alignment',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.subtitles.alignment = isNaN(value) ? 2 : Math.min(9, Math.max(1, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-margin-h',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.marginH',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.subtitles.marginH = isNaN(value) ? 40 : Math.min(1000, Math.max(0, value));
+    }
+  },
+  {
+    id: 'subtitle-margin-v',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.marginV',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.config.subtitles.marginV = isNaN(value) ? 40 : Math.min(1000, Math.max(0, value));
+    }
+  },
+  {
+    id: 'subtitles-background-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.background.enabled',
+    handler: (e) => {
+      state.config.subtitles.background.enabled = e.target.checked;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-background-color',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.background.color',
+    handler: (e) => {
+      state.config.subtitles.background.color = e.target.value;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-background-opacity',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.background.opacity',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.background.opacity = isNaN(value) ? 0.5 : Math.min(1, Math.max(0, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-shadow-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.shadow.enabled',
+    handler: (e) => {
+      state.config.subtitles.shadow.enabled = e.target.checked;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-shadow-color',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.shadow.color',
+    handler: (e) => {
+      state.config.subtitles.shadow.color = e.target.value;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-shadow-opacity',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.shadow.opacity',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.shadow.opacity = isNaN(value) ? 0.7 : Math.min(1, Math.max(0, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-shadow-distance',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.shadow.distance',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.shadow.distance = isNaN(value) ? 3 : Math.min(100, Math.max(0, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-shadow-angle',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.shadow.angle',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.shadow.angle = isNaN(value) ? 45 : Math.min(360, Math.max(0, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitles-shadow-blur',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.shadow.blur',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.subtitles.shadow.blur = isNaN(value) ? 4 : Math.min(100, Math.max(0, value));
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-animation',
+    tipo: 'select',
+    rutaConfig: 'config.subtitles.animation',
+    handler: (e) => {
+      state.config.subtitles.animation = ['none', 'fade', 'pop'].includes(e.target.value) ? e.target.value : 'none';
+    }
   }
 ];
 
@@ -1722,7 +2107,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1734,6 +2119,9 @@ document.addEventListener('DOMContentLoaded', () => {
   renderOutputChips();
   renderFocusEditor();
   updateExportButton();
+  syncSubtitleControls();
+  refreshFontList();
+  updateSubtitlePreview();
 
   console.log('Video Maker v0.5.1 - Renderer loaded');
 });
