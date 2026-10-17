@@ -79,6 +79,7 @@ const subtitleBackgroundSchema = z.object({
 const subtitleHighlightSchema = z.object({
   enabled: z.boolean().default(false),
   colors: z.record(z.string(), HEX_COLOR).default({}),
+  terms: z.array(z.string()).default([]),
   detect: z.object({
     numbers: z.boolean().default(true),
     percent: z.boolean().default(true),

@@ -490,6 +490,37 @@
               <option value="pop">Pop</option>
             </select>
           </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-highlight-enabled">
+            <span class="checkmark"></span>
+            Resaltar palabras clave
+          </label>
+          <div class="export-control-row">
+            <label for="subtitle-terms-input">Términos financieros</label>
+            <input type="text" id="subtitle-terms-input" class="export-input" placeholder="deuda, interés, sueldo">
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-detect-numbers" checked>
+            <span class="checkmark"></span>
+            Detectar cifras
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-detect-percent" checked>
+            <span class="checkmark"></span>
+            Detectar porcentajes
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-detect-currency" checked>
+            <span class="checkmark"></span>
+            Detectar montos en dólares
+          </label>
+          <button id="detect-keywords-btn" class="btn btn-secondary btn-sm" type="button">Detectar palabras clave</button>
+          <div class="export-control-row">
+            <label for="keywords-color">Color para resaltar</label>
+            <input type="color" id="keywords-color" class="export-color" value="#ff0000">
+          </div>
+          <button id="keywords-apply-color-btn" class="btn btn-secondary btn-sm" type="button">Resaltar todas con este color</button>
+          <div id="keywords-list" class="keywords-list" aria-live="polite"></div>
           <div id="subtitle-preview" class="subtitle-preview" aria-label="Vista previa de subtítulos">
             <span id="subtitle-preview-text" class="subtitle-preview-text">La deuda sube 30% y el interés afecta tu sueldo</span>
           </div>

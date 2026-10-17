@@ -949,3 +949,30 @@ body {
   line-height: 1.25;
   word-break: break-word;
 }
+
+.keywords-list {
+  margin-top: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.keywords-empty {
+  margin: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+}
+
+.keyword-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.keyword-term {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  word-break: break-word;
+}

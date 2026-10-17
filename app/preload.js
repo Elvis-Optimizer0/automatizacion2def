@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
   verifyBinaries: () => ipcRenderer.invoke('verify:binaries'),
   listFonts: () => ipcRenderer.invoke('fonts:list'),
   importFont: () => ipcRenderer.invoke('fonts:import'),
+  detectKeywords: (texts, options) => ipcRenderer.invoke('keywords:detect', texts, options),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('render:progress', handler);

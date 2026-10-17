@@ -6,6 +6,7 @@ const ffprobeStatic = require('ffprobe-static');
 const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_SUBTITLES_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
 const { parseProjectFile, collectProjectPaths } = require('./core/project-schema.js');
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
+const { detectKeywords } = require('./core/keywords.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
@@ -298,8 +299,11 @@ ipcMain.handle('fonts:import', async () => {
   }
 });
 
-ipcMain.handle('project:save', async (_, data, providedPath) => {
-  let filePath = providedPath || process.env.VM_TEST_PROJECT_OUT;
+ipcMain.handle('keywords:detect', async (_, texts, options) => {
+  return detectKeywords(texts, options || {});
+});
+
+ipcMain.handle('project:save', async (_, data, providedPath) => {  let filePath = providedPath || process.env.VM_TEST_PROJECT_OUT;
   if (!filePath) {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: 'Guardar proyecto',

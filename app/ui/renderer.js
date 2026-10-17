@@ -209,7 +209,7 @@ const state = {
       marginV: 40,
       background: { enabled: false, color: '#000000', opacity: 0.5 },
       shadow: { enabled: false, color: '#000000', opacity: 0.7, distance: 3, angle: 45, blur: 4 },
-      highlight: { enabled: false, colors: {}, detect: { numbers: true, percent: true, currency: true } },
+      highlight: { enabled: false, colors: {}, terms: [], detect: { numbers: true, percent: true, currency: true } },
       animation: 'none'
     }
   },
@@ -736,6 +736,7 @@ function mergeSubtitleConfig(base, incoming) {
       ...base.highlight,
       ...(incoming.highlight || {}),
       colors: { ...base.highlight.colors, ...((incoming.highlight && incoming.highlight.colors) || {}) },
+      terms: ((incoming.highlight && incoming.highlight.terms) || base.highlight.terms || []).slice(),
       detect: { ...base.highlight.detect, ...((incoming.highlight && incoming.highlight.detect) || {}) }
     }
   };
@@ -787,6 +788,147 @@ async function handleImportFont() {
   }
 }
 
+const PREVIEW_TEXT = 'La deuda sube 30% y el interés de $1.000 afecta tu sueldo';
+let keywordsMasterColor = '#ff0000';
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightPreview(text, style) {
+  let html = escapeHtml(text);
+  const highlight = style.highlight || {};
+  if (!highlight.enabled || !highlight.colors) return html;
+  for (const key of Object.keys(highlight.colors)) {
+    const term = String(key).trim();
+    if (!term) continue;
+    const pattern = new RegExp(`(^|[^\\p{L}\\p{N}])(${escapeRegExp(term)})(?![\\p{L}\\p{N}])`, 'giu');
+    html = html.replace(pattern, (match, pre, word) => `${pre}<mark style="color:${highlight.colors[key]};background:transparent">${word}</mark>`);
+  }
+  return html;
+}
+
+async function refreshKeywordList() {
+  const listEl = document.getElementById('keywords-list');
+  if (!listEl) return;
+
+  const highlight = state.config.subtitles.highlight;
+  const texts = state.timeline.map(scene => scene.text).filter(Boolean);
+  let candidates = [];
+
+  if (texts.length > 0 && window.api && typeof window.api.detectKeywords === 'function') {
+    try {
+      candidates = await window.api.detectKeywords(texts, {
+        terms: highlight.terms,
+        numbers: highlight.detect.numbers,
+        percent: highlight.detect.percent,
+        currency: highlight.detect.currency
+      });
+    } catch (err) {
+      showToast(`No se pudieron detectar palabras clave: ${err.message}`, 'error');
+      return;
+    }
+  }
+
+  const terms = [];
+  const seen = new Set();
+  const push = (term, kind) => {
+    const clean = String(term || '').trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    terms.push({ term: clean, kind: kind || 'word' });
+  };
+  for (const candidate of candidates) push(candidate.term, candidate.kind);
+  for (const key of Object.keys(highlight.colors)) push(key, 'word');
+
+  listEl.innerHTML = '';
+  if (terms.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'keywords-empty';
+    empty.textContent = 'Sin palabras clave detectadas. Añade términos o carga escenas con cifras.';
+    listEl.appendChild(empty);
+    return;
+  }
+
+  for (const item of terms) {
+    const row = document.createElement('div');
+    row.className = 'keyword-row';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = Object.prototype.hasOwnProperty.call(highlight.colors, item.term);
+    checkbox.setAttribute('aria-label', `Resaltar ${item.term}`);
+
+    const label = document.createElement('span');
+    label.className = 'keyword-term';
+    label.textContent = item.term;
+
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.className = 'export-color';
+    color.value = highlight.colors[item.term] || keywordsMasterColor;
+
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        highlight.colors[item.term] = color.value;
+      } else {
+        delete highlight.colors[item.term];
+      }
+      updateSubtitlePreview();
+    });
+
+    color.addEventListener('input', () => {
+      highlight.colors[item.term] = color.value;
+      checkbox.checked = true;
+      updateSubtitlePreview();
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(label);
+    row.appendChild(color);
+    listEl.appendChild(row);
+  }
+}
+
+function applyColorToAllKeywords() {
+  const listEl = document.getElementById('keywords-list');
+  if (!listEl) return;
+  const rows = listEl.querySelectorAll('.keyword-row');
+  if (rows.length === 0) {
+    showToast('No hay palabras clave para resaltar', 'warning');
+    return;
+  }
+  const highlight = state.config.subtitles.highlight;
+  rows.forEach(row => {
+    const label = row.querySelector('.keyword-term');
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const color = row.querySelector('input[type="color"]');
+    if (!label || !checkbox || !color) return;
+    checkbox.checked = true;
+    color.value = keywordsMasterColor;
+    highlight.colors[label.textContent] = keywordsMasterColor;
+  });
+  updateSubtitlePreview();
+  showToast(`Palabras clave resaltadas con ${keywordsMasterColor}`, 'success');
+}
+
+async function handleDetectKeywords() {
+  await refreshKeywordList();
+  const count = document.querySelectorAll('#keywords-list .keyword-row').length;
+  showToast(count > 0 ? `${count} palabra(s) clave detectada(s)` : 'No se detectaron palabras clave', count > 0 ? 'success' : 'info');
+}
+
 function updateSubtitlePreview() {
   const box = document.getElementById('subtitle-preview');
   const text = document.getElementById('subtitle-preview-text');
@@ -794,6 +936,7 @@ function updateSubtitlePreview() {
 
   const style = state.config.subtitles;
   const factor = 0.32;
+  text.innerHTML = highlightPreview(PREVIEW_TEXT, style);
   text.style.fontFamily = `"${style.fontFamily}", sans-serif`;
   text.style.fontSize = `${Math.max(11, Math.round(style.fontSizeH * factor))}px`;
   text.style.fontWeight = style.bold ? '700' : '400';
@@ -861,6 +1004,11 @@ function syncSubtitleControls() {
   setValue('subtitles-shadow-angle', s.shadow.angle);
   setValue('subtitles-shadow-blur', s.shadow.blur);
   setValue('subtitle-animation', s.animation);
+  setValue('subtitles-highlight-enabled', s.highlight.enabled);
+  setValue('subtitle-terms-input', (s.highlight.terms || []).join(', '));
+  setValue('subtitles-detect-numbers', s.highlight.detect.numbers);
+  setValue('subtitles-detect-percent', s.highlight.detect.percent);
+  setValue('subtitles-detect-currency', s.highlight.detect.currency);
 }
 
 function renderFocusEditor() {
@@ -1143,6 +1291,7 @@ function loadProject(project, missing = []) {
   updateExportButton();
   syncSubtitleControls();
   refreshFontList(state.config.subtitles.fontFamily);
+  refreshKeywordList();
 }
 
 async function handleOpenProject() {
@@ -1945,6 +2094,71 @@ const CONTROLS = [
     handler: (e) => {
       state.config.subtitles.animation = ['none', 'fade', 'pop'].includes(e.target.value) ? e.target.value : 'none';
     }
+  },
+  {
+    id: 'subtitles-highlight-enabled',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.highlight.enabled',
+    handler: (e) => {
+      state.config.subtitles.highlight.enabled = e.target.checked;
+      updateSubtitlePreview();
+    }
+  },
+  {
+    id: 'subtitle-terms-input',
+    tipo: 'input',
+    rutaConfig: 'config.subtitles.highlight.terms',
+    handler: (e) => {
+      state.config.subtitles.highlight.terms = e.target.value
+        .split(',')
+        .map(term => term.trim())
+        .filter(Boolean);
+      refreshKeywordList();
+    }
+  },
+  {
+    id: 'subtitles-detect-numbers',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.highlight.detect.numbers',
+    handler: (e) => {
+      state.config.subtitles.highlight.detect.numbers = e.target.checked;
+      refreshKeywordList();
+    }
+  },
+  {
+    id: 'subtitles-detect-percent',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.highlight.detect.percent',
+    handler: (e) => {
+      state.config.subtitles.highlight.detect.percent = e.target.checked;
+      refreshKeywordList();
+    }
+  },
+  {
+    id: 'subtitles-detect-currency',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.highlight.detect.currency',
+    handler: (e) => {
+      state.config.subtitles.highlight.detect.currency = e.target.checked;
+      refreshKeywordList();
+    }
+  },
+  {
+    id: 'detect-keywords-btn',
+    tipo: 'button',
+    handler: handleDetectKeywords
+  },
+  {
+    id: 'keywords-color',
+    tipo: 'input',
+    handler: (e) => {
+      keywordsMasterColor = e.target.value;
+    }
+  },
+  {
+    id: 'keywords-apply-color-btn',
+    tipo: 'button',
+    handler: applyColorToAllKeywords
   }
 ];
 
@@ -2107,7 +2321,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2122,6 +2336,7 @@ document.addEventListener('DOMContentLoaded', () => {
   syncSubtitleControls();
   refreshFontList();
   updateSubtitlePreview();
+  refreshKeywordList();
 
   console.log('Video Maker v0.5.1 - Renderer loaded');
 });
