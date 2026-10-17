@@ -72,6 +72,38 @@ async function detectEncoders(force = false) {
   return encoderCache;
 }
 
+function parseLeadingSilence(output) {
+  const text = String(output == null ? '' : output);
+  const startMatch = text.match(/silence_start:\s*(-?\d+(?:\.\d+)?)/);
+  if (!startMatch) return 0;
+  const start = parseFloat(startMatch[1]);
+  if (isNaN(start) || start > 0.1) return 0;
+  const after = text.slice(startMatch.index);
+  const endMatch = after.match(/silence_end:\s*(\d+(?:\.\d+)?)/);
+  if (!endMatch) return 0;
+  const end = parseFloat(endMatch[1]);
+  return !isNaN(end) && end > 0 ? Number(end.toFixed(6)) : 0;
+}
+
+function detectLeadingSilence(audioPath) {
+  return new Promise((resolve) => {
+    if (!audioPath || !fs.existsSync(audioPath)) {
+      resolve(0);
+      return;
+    }
+    const proc = spawn(getFfmpegPath(), [
+      '-hide_banner', '-nostats',
+      '-i', audioPath,
+      '-af', 'silencedetect=noise=-35dB:d=0.3',
+      '-f', 'null', '-'
+    ], { windowsHide: true });
+    let stderr = '';
+    proc.stderr.on('data', data => { stderr += data.toString(); });
+    proc.on('close', () => resolve(parseLeadingSilence(stderr)));
+    proc.on('error', () => resolve(0));
+  });
+}
+
 function getFontPath() {
   return fixAsarPath(path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans-Bold.ttf'));
 }
@@ -418,6 +450,7 @@ async function renderVideo(options) {
   const subtitlesEnabled = !!(payload.config.subtitles && payload.config.subtitles.enabled);
   let subtitlesDir = null;
   let fontsDir;
+  let subtitleTimeOffset = 0;
   if (subtitlesEnabled) {
     try {
       subtitlesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-subs-'));
@@ -426,6 +459,15 @@ async function renderVideo(options) {
     } catch (err) {
       throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
     }
+
+    const subtitleConfig = payload.config.subtitles;
+    const delay = typeof subtitleConfig.delay === 'number' && !isNaN(subtitleConfig.delay)
+      ? subtitleConfig.delay
+      : 0;
+    const voiceStart = subtitleConfig.autoVoiceStart !== false
+      ? await detectLeadingSilence(payload.narration.path)
+      : 0;
+    subtitleTimeOffset = delay + voiceStart;
   }
 
   try {
@@ -438,7 +480,7 @@ async function renderVideo(options) {
         subtitlesPath = path.join(subtitlesDir, `subs-${outputConfig.id.replace(/[:]/g, '')}.ass`);
         let content;
         try {
-          content = buildAss(scenes, payload.config.subtitles, outputConfig);
+          content = buildAss(scenes, payload.config.subtitles, outputConfig, { timeOffset: subtitleTimeOffset });
           fs.writeFileSync(subtitlesPath, content, 'utf-8');
         } catch (err) {
           throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
@@ -503,6 +545,8 @@ module.exports = {
   getFfmpegPath,
   getFontsDir,
   detectEncoders,
+  parseLeadingSilence,
+  detectLeadingSilence,
   verifyBinaries,
   validateInputPaths,
   parseFfmpegProgress,

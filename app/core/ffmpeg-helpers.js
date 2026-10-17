@@ -550,7 +550,13 @@ function calculateTotalDuration(scenes) {
 function normalizeScenesToDuration(scenes, targetDuration) {
   const total = scenes.reduce((sum, s) => sum + s.duration, 0);
   if (!targetDuration || targetDuration <= 0 || total <= 0) {
-    return scenes.map(s => ({ ...s }));
+    let cursor = 0;
+    return scenes.map((scene) => {
+      const start = num(cursor);
+      const duration = num(scene.duration);
+      cursor = num(cursor + duration);
+      return { ...scene, start, duration };
+    });
   }
 
   const scale = targetDuration / total;

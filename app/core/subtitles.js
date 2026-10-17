@@ -19,6 +19,8 @@ const DEFAULT_SUBTITLE_STYLE = {
   alignment: 2,
   marginH: 40,
   marginV: 40,
+  delay: 0,
+  autoVoiceStart: true,
   background: { enabled: false, color: '#000000', opacity: 0.5 },
   shadow: { enabled: false, color: '#000000', opacity: 0.7, distance: 3, angle: 45, blur: 4 },
   animation: 'none'
@@ -148,26 +150,35 @@ function applyKeywordColors(line, style) {
   return result;
 }
 
-function buildSubtitleEvents(scenes, style) {
+function buildSubtitleEvents(scenes, style, options = {}) {
   const resolvedStyle = { ...DEFAULT_SUBTITLE_STYLE, ...(style || {}) };
+  const timeOffset = typeof options.timeOffset === 'number' && !isNaN(options.timeOffset)
+    ? options.timeOffset
+    : 0;
   const events = [];
   for (const scene of scenes || []) {
     if (!scene || !scene.text) continue;
+    const sceneStart = typeof scene.start === 'number' && !isNaN(scene.start) ? scene.start : 0;
+    const sceneDuration = typeof scene.duration === 'number' && !isNaN(scene.duration) ? scene.duration : 0;
+    const sceneEnd = sceneStart + sceneDuration;
     const phrases = splitIntoPhrases(scene.text);
-    const timed = distributeTimings(phrases, scene.start || 0, scene.duration || 0);
+    const timed = distributeTimings(phrases, sceneStart, sceneDuration);
     for (const item of timed) {
+      const start = Math.max(sceneStart, Math.min(item.start + timeOffset, sceneEnd));
+      const end = Math.min(sceneEnd, Math.max(item.end + timeOffset, sceneStart));
+      if (end <= start) continue;
       const plainLines = item.text.split('\n').map(line => escapeAssText(line));
       const colored = plainLines.map(line => applyKeywordColors(line, resolvedStyle)).join('\\N');
       if (resolvedStyle.shadow && resolvedStyle.shadow.enabled) {
-        events.push({ layer: 0, shadow: true, start: item.start, end: item.end, text: plainLines.join('\\N') });
+        events.push({ layer: 0, shadow: true, start, end, text: plainLines.join('\\N') });
       }
-      events.push({ layer: 1, shadow: false, start: item.start, end: item.end, text: colored });
+      events.push({ layer: 1, shadow: false, start, end, text: colored });
     }
   }
   return events;
 }
 
-function buildAss(scenes, style, outputConfig) {
+function buildAss(scenes, style, outputConfig, options = {}) {
   const resolvedStyle = { ...DEFAULT_SUBTITLE_STYLE, ...(style || {}) };
   const w = outputConfig && outputConfig.w ? outputConfig.w : 1920;
   const h = outputConfig && outputConfig.h ? outputConfig.h : 1080;
@@ -219,7 +230,7 @@ function buildAss(scenes, style, outputConfig) {
   const dy = Math.round((Number(shadow.distance) || 0) * Math.sin(rad));
   const anim = animationTags(resolvedStyle.animation);
 
-  const events = buildSubtitleEvents(scenes, resolvedStyle);
+  const events = buildSubtitleEvents(scenes, resolvedStyle, options);
   const dialogue = events.map(event => {
     const prefix = event.shadow
       ? `{\\an${alignment}\\pos(${shadowAnchor.x + dx},${shadowAnchor.y + dy})${shadowTags}}`

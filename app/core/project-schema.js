@@ -80,6 +80,7 @@ const subtitleHighlightSchema = z.object({
   enabled: z.boolean().default(false),
   colors: z.record(z.string(), HEX_COLOR).default({}),
   terms: z.array(z.string()).default([]),
+  limit: z.number().int().min(1).max(200).default(30),
   detect: z.object({
     numbers: z.boolean().default(true),
     percent: z.boolean().default(true),
@@ -102,6 +103,8 @@ const subtitlesSchema = z.object({
   alignment: z.number().int().min(1).max(9).default(2),
   marginH: z.number().min(0).max(1000).default(40),
   marginV: z.number().min(0).max(1000).default(40),
+  delay: z.number().min(-2).max(5).default(0),
+  autoVoiceStart: z.boolean().default(true),
   background: subtitleBackgroundSchema,
   shadow: subtitleShadowSchema,
   highlight: subtitleHighlightSchema,

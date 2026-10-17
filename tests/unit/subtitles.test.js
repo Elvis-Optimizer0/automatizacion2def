@@ -176,4 +176,57 @@ test.describe('subtitles core', () => {
       expect(event.start).toBeGreaterThanOrEqual(2);
     }
   });
+
+  test('uses the final timeline starts (scene offsets after audio adjust and transitions)', () => {
+    const timelineScenes = [
+      { text: 'uno dos', start: 0, duration: 3 },
+      { text: 'tres cuatro', start: 3, duration: 3.5 },
+      { text: 'cinco seis', start: 6.5, duration: 2.5 }
+    ];
+    const events = buildSubtitleEvents(timelineScenes, {});
+    expect(events).toHaveLength(3);
+    expect(events[0].start).toBeCloseTo(0, 5);
+    expect(events[1].start).toBeCloseTo(3, 5);
+    expect(events[2].start).toBeCloseTo(6.5, 5);
+    expect(events[2].end).toBeCloseTo(9, 5);
+  });
+
+  test('positive delay shifts subtitles later but never past their scene end', () => {
+    const events = buildSubtitleEvents([{ text: 'hola mundo', start: 2, duration: 4 }], {}, { timeOffset: 1.5 });
+    expect(events[0].start).toBeCloseTo(3.5, 5);
+    expect(events[0].end).toBeCloseTo(6, 5);
+    expect(events[0].end).toBeLessThanOrEqual(6);
+  });
+
+  test('negative delay clamps subtitles so they never start before their scene', () => {
+    const events = buildSubtitleEvents([{ text: 'hola mundo', start: 2, duration: 4 }], {}, { timeOffset: -1 });
+    expect(events[0].start).toBeCloseTo(2, 5);
+    expect(events[0].end).toBeCloseTo(5, 5);
+    expect(events[0].start).toBeGreaterThanOrEqual(2);
+  });
+
+  test('first subtitle never starts before its scene nor ends after it', () => {
+    const events = buildSubtitleEvents(
+      [{ text: 'texto de la primera escena con varias palabras para partir en frases', start: 1.5, duration: 4 }],
+      {},
+      { timeOffset: 3 }
+    );
+    expect(events.length).toBeGreaterThan(0);
+    for (const event of events) {
+      expect(event.start).toBeGreaterThanOrEqual(1.5);
+      expect(event.end).toBeLessThanOrEqual(5.5);
+      expect(event.end).toBeGreaterThan(event.start);
+    }
+  });
+
+  test('ass dialogue starts reflect the scene offsets', () => {
+    const ass = buildAss(
+      [{ text: 'uno dos', start: 0, duration: 3 }, { text: 'tres cuatro', start: 3, duration: 3 }],
+      {},
+      resolveOutputConfig('16:9')
+    );
+    const dialogues = ass.split('\n').filter(line => line.startsWith('Dialogue:'));
+    expect(dialogues[0]).toContain(',0:00:00.00,');
+    expect(dialogues[1]).toContain(',0:00:03.00,');
+  });
 });
