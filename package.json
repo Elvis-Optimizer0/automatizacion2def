@@ -1,6 +1,6 @@
 {
   "name": "video-maker",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Video Maker - Professional video creation tool",
   "main": "app/main.js",
   "scripts": {
