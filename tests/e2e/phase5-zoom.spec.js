@@ -170,8 +170,8 @@ test.describe.serial('Video Maker - Phase 5 Zoom catalog', () => {
 
     const frameA = path.join(testDir, 'pulse_a.png');
     const frameB = path.join(testDir, 'pulse_b.png');
-    extractFrame(outputPath, frameA, 0.3);
-    extractFrame(outputPath, frameB, 2.5);
+    extractFrame(outputPath, frameA, 0.05);
+    extractFrame(outputPath, frameB, 1.5);
     expect(frameSsim(frameA, frameB)).toBeLessThan(0.99);
   });
 
