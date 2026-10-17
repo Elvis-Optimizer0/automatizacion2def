@@ -2,8 +2,17 @@ const { test, expect } = require('@playwright/test');
 const {
   DEFAULT_FINANCIAL_TERMS,
   DEFAULT_HIGHLIGHT_COLOR,
+  DEFAULT_TOP_N,
+  normalizeWord,
   detectKeywords
 } = require('../../app/core/keywords.js');
+
+const SAMPLE_SCRIPT = [
+  'El presupuesto familiar es la base del presupuesto',
+  'La tasa de interés sube y la tasa de interés preocupa',
+  'El presupuesto crece y la deuda baja',
+  'Controlar el presupuesto y la tasa de interés ayuda'
+];
 
 test.describe('keyword detection', () => {
   test('detects numbers, currency and percentages', () => {
@@ -41,5 +50,59 @@ test.describe('keyword detection', () => {
     const deudas = found.filter(item => item.term.toLowerCase() === 'deuda');
     expect(deudas).toHaveLength(1);
     expect(found.map(item => item.term.toLowerCase())).toContain('10');
+  });
+
+  test('proposes relevant words from the whole script, not only symbols', () => {
+    const found = detectKeywords(SAMPLE_SCRIPT);
+    expect(found.length).toBeGreaterThan(0);
+
+    const words = found.filter(item => item.kind === 'word' || item.kind === 'phrase');
+    expect(words.length).toBeGreaterThan(0);
+
+    for (const item of words) {
+      expect(item.kind === 'word' || item.kind === 'phrase').toBe(true);
+      expect(DEFAULT_FINANCIAL_TERMS).not.toContain(item.term.toLowerCase());
+      expect(item.term).not.toMatch(/\d|[$%]/);
+    }
+
+    const presupuesto = found.find(item => normalizeWord(item.term) === 'presupuesto');
+    expect(presupuesto).toBeTruthy();
+    expect(presupuesto.kind).toBe('word');
+    expect(presupuesto.count).toBe(4);
+    expect(presupuesto.scene).toBe(1);
+  });
+
+  test('ignores stopwords and does not surface plain single-use words', () => {
+    const found = detectKeywords(SAMPLE_SCRIPT);
+    const normalized = found.map(item => normalizeWord(item.term));
+    for (const stopword of ['el', 'la', 'de', 'del', 'es', 'y']) {
+      expect(normalized).not.toContain(stopword);
+    }
+    expect(found.find(item => normalizeWord(item.term) === 'controlar')).toBeUndefined();
+    expect(found.find(item => normalizeWord(item.term) === 'familiar')).toBeUndefined();
+  });
+
+  test('detects frequent bigrams and trigrams such as "tasa de interés"', () => {
+    const found = detectKeywords(SAMPLE_SCRIPT);
+    const phrase = found.find(item => normalizeWord(item.term) === 'tasa de interes');
+    expect(phrase).toBeTruthy();
+    expect(phrase.kind).toBe('phrase');
+    expect(phrase.count).toBe(3);
+  });
+
+  test('orders proposals by score and honors the configurable limit', () => {
+    const found = detectKeywords(SAMPLE_SCRIPT, { topN: 2 });
+    expect(found).toHaveLength(2);
+    for (let i = 1; i < found.length; i++) {
+      expect(found[i - 1].score).toBeGreaterThanOrEqual(found[i].score);
+    }
+    const phrase = found.find(item => normalizeWord(item.term) === 'tasa de interes');
+    const presupuesto = found.find(item => normalizeWord(item.term) === 'presupuesto');
+    if (phrase && presupuesto) {
+      expect(phrase.score).toBeGreaterThan(presupuesto.score);
+    }
+
+    const all = detectKeywords(SAMPLE_SCRIPT);
+    expect(all.length).toBeLessThanOrEqual(DEFAULT_TOP_N);
   });
 });
