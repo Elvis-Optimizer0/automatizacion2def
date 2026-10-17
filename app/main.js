@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const ffprobeStatic = require('ffprobe-static');
-const { renderVideo, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_SUBTITLES_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
+const { renderVideo, renderPreview, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_SUBTITLES_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
 const { parseProjectFile, collectProjectPaths } = require('./core/project-schema.js');
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 const { detectKeywords } = require('./core/keywords.js');
@@ -246,6 +246,22 @@ ipcMain.handle('render:video', async (_, options) => {
     return result;
   } catch (err) {
     if (err.message.startsWith(E_FFMPEG_MISSING) || err.message.startsWith(E_INPUT_MISSING) || err.message.startsWith(E_FFMPEG_FAILED) || err.message.startsWith(E_SUBTITLES_FAILED) || err.message.startsWith(E_OUTPUT_CONFIG_MISSING)) {
+      throw err;
+    }
+    throw new Error(`${E_FFMPEG_FAILED}: ${err.message}`);
+  }
+});
+
+ipcMain.handle('preview:render', async (_, options) => {
+  try {
+    const result = await renderPreview({
+      ...options,
+      userFontsDir: getUserFontsDir(app.getPath('userData')),
+      outputPath: process.env.VM_TEST_PREVIEW_OUT || (options && options.outputPath)
+    });
+    return result;
+  } catch (err) {
+    if (err.message.startsWith(E_FFMPEG_MISSING) || err.message.startsWith(E_INPUT_MISSING) || err.message.startsWith(E_FFMPEG_FAILED) || err.message.startsWith(E_SUBTITLES_FAILED)) {
       throw err;
     }
     throw new Error(`${E_FFMPEG_FAILED}: ${err.message}`);

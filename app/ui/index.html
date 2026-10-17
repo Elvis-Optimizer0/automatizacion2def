@@ -535,6 +535,13 @@
           <div id="subtitle-preview" class="subtitle-preview" aria-label="Vista previa de subtítulos">
             <span id="subtitle-preview-text" class="subtitle-preview-text">La deuda sube 30% y el interés afecta tu sueldo</span>
           </div>
+          <div class="export-control-row">
+            <label for="preview-scene-select">Escena de la vista previa</label>
+            <select id="preview-scene-select" class="export-select"></select>
+          </div>
+          <button id="preview-btn" class="btn btn-secondary btn-sm" type="button">Vista previa (5 s)</button>
+          <video id="preview-video" class="preview-video" controls hidden></video>
+          <p class="subtitle-notice">La vista previa es aproximada (640 px de ancho) y usa la escena elegida; el video final es el que manda.</p>
         </fieldset>
       </div>
 

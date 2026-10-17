@@ -667,6 +667,7 @@ function updateTimeline() {
   const adjustToAudio = state.timelineOptions.adjustToAudio;
   state.timeline = buildTimeline(state.script.scenes, state.images, state.audioDuration, { adjustToAudio });
   renderTimeline();
+  refreshPreviewScenes();
   updateExportButton();
 }
 
@@ -887,6 +888,69 @@ async function handleDeletePreset() {
     showToast(`Preset "${name}" eliminado`, 'info');
   } catch (err) {
     showToast(`No se pudo eliminar: ${err.message}`, 'error');
+  }
+}
+
+function refreshPreviewScenes() {
+  const select = document.getElementById('preview-scene-select');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '';
+  if (state.timeline.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Sin escenas';
+    select.appendChild(option);
+    return;
+  }
+  state.timeline.forEach((scene, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = `Escena ${scene.number}`;
+    select.appendChild(option);
+  });
+  if (current !== '' && Number(current) < state.timeline.length) {
+    select.value = current;
+  }
+}
+
+async function handlePreview() {
+  const video = document.getElementById('preview-video');
+  const select = document.getElementById('preview-scene-select');
+  const index = select ? parseInt(select.value, 10) : NaN;
+  const scene = state.timeline[Number.isInteger(index) ? index : 0];
+
+  if (!scene || !scene.image) {
+    showToast('Selecciona una escena con imagen para la vista previa', 'warning');
+    return;
+  }
+  if (!window.api || typeof window.api.renderPreview !== 'function') {
+    showToast('La vista previa no está disponible', 'error');
+    return;
+  }
+
+  try {
+    const result = await window.api.renderPreview({
+      imagePath: scene.image.path,
+      text: scene.text || '',
+      duration: Math.min(5, scene.duration || 5),
+      format: state.config.outputs[0] || '16:9',
+      subtitles: state.config.subtitles
+    });
+    if (!result || !result.outputPath) return;
+    if (video) {
+      video.hidden = false;
+      video.src = `file://${result.outputPath.replace(/\\/g, '/')}`;
+      video.load();
+      try {
+        await video.play();
+      } catch {
+        // autoplay may be blocked; controls remain available
+      }
+    }
+    showToast('Vista previa lista', 'success');
+  } catch (err) {
+    showToast(`No se pudo generar la vista previa: ${err.message}`, 'error');
   }
 }
 
@@ -1394,6 +1458,7 @@ function loadProject(project, missing = []) {
   syncSubtitleControls();
   refreshFontList(state.config.subtitles.fontFamily);
   refreshKeywordList();
+  refreshPreviewScenes();
 }
 
 async function handleOpenProject() {
@@ -2290,6 +2355,19 @@ const CONTROLS = [
     id: 'delete-preset-btn',
     tipo: 'button',
     handler: handleDeletePreset
+  },
+  {
+    id: 'preview-scene-select',
+    tipo: 'select',
+    handler: () => {
+      const video = document.getElementById('preview-video');
+      if (video) video.hidden = true;
+    }
+  },
+  {
+    id: 'preview-btn',
+    tipo: 'button',
+    handler: handlePreview
   }
 ];
 
@@ -2452,8 +2530,8 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle };
-window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes };
+window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();
@@ -2469,6 +2547,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSubtitlePreview();
   refreshKeywordList();
   refreshPresets();
+  refreshPreviewScenes();
 
   console.log('Video Maker v0.5.1 - Renderer loaded');
 });

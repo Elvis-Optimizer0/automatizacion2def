@@ -976,3 +976,12 @@ body {
   color: var(--color-text-primary);
   word-break: break-word;
 }
+
+.preview-video {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-top: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  background-color: #000;
+}

@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   getAudioDuration: (filePath) => ipcRenderer.invoke('ffprobe:duration', filePath),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   renderVideo: (options) => ipcRenderer.invoke('render:video', options),
+  renderPreview: (options) => ipcRenderer.invoke('preview:render', options),
   saveProject: (data, filePath) => ipcRenderer.invoke('project:save', data, filePath),
   openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
   verifyBinaries: () => ipcRenderer.invoke('verify:binaries'),

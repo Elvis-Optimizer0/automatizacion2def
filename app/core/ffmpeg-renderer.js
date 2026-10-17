@@ -7,6 +7,7 @@ const {
   FPS,
   fixAsarPath,
   buildFullFilterGraph,
+  buildSubtitlesFilter,
   calculateTotalDuration,
   normalizeScenesToDuration,
   resolveInputDurations
@@ -252,6 +253,94 @@ function runFfmpeg(ffmpegPath, args, totalDuration, onProgress, errorPrefix = E_
   });
 }
 
+async function renderPreview(options = {}) {
+  const { imagePath, text = '', duration = 5, format = '16:9', subtitles, outputPath, userFontsDir } = options;
+
+  verifyBinaries();
+
+  if (!imagePath || !fs.existsSync(imagePath)) {
+    throw new Error(`${E_INPUT_MISSING}: preview image not found: ${imagePath}`);
+  }
+
+  const outputConfig = resolveOutputConfig(format);
+  const width = 640;
+  const height = Math.round((width * outputConfig.h) / outputConfig.w / 2) * 2;
+  const previewDuration = Math.min(5, Math.max(1, Number(duration) || 5));
+  const previewConfig = { id: 'preview', w: width, h: height };
+  const subtitlesEnabled = !!(subtitles && subtitles.enabled && String(text).trim());
+
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-preview-'));
+  const assetsDir = path.join(workDir, 'assets');
+  const finalOutput = outputPath || path.join(workDir, 'preview.mp4');
+  const ffmpegPath = getFfmpegPath();
+
+  try {
+    let graph = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,format=yuv420p[base]`;
+    let mapLabel = '[base]';
+
+    if (subtitlesEnabled) {
+      fs.mkdirSync(assetsDir, { recursive: true });
+      const scale = width / outputConfig.w;
+      const scaledStyle = {
+        ...subtitles,
+        fontSizeH: Math.max(8, Math.round(subtitles.fontSizeH * scale)),
+        fontSizeV: Math.max(8, Math.round(subtitles.fontSizeV * scale)),
+        marginH: Math.round(subtitles.marginH * scale),
+        marginV: Math.round(subtitles.marginV * scale),
+        letterSpacing: (subtitles.letterSpacing || 0) * scale,
+        outlineWidth: (subtitles.outlineWidth || 0) * scale,
+        shadow: subtitles.shadow
+          ? {
+            ...subtitles.shadow,
+            distance: (subtitles.shadow.distance || 0) * scale,
+            blur: (subtitles.shadow.blur || 0) * scale
+          }
+          : subtitles.shadow
+      };
+
+      const subtitlesPath = path.join(assetsDir, 'preview.ass');
+      const fontsDir = path.join(assetsDir, 'fonts');
+      try {
+        mergeFontsIntoDir(fontsDir, [getBundledFontsDir(), userFontsDir]);
+        fs.writeFileSync(subtitlesPath, buildAss([{ text, start: 0, duration: previewDuration }], scaledStyle, previewConfig), 'utf-8');
+      } catch (err) {
+        throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
+      }
+
+      graph += `;${buildSubtitlesFilter({ subtitlesPath, fontsDir, inputLabel: 'base', outputLabel: 'vout' })}`;
+      mapLabel = '[vout]';
+    }
+
+    const args = [
+      '-y',
+      '-framerate', String(FPS),
+      '-loop', '1',
+      '-i', imagePath,
+      '-filter_complex', graph,
+      '-map', mapLabel,
+      '-t', String(previewDuration),
+      '-r', String(FPS),
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      finalOutput
+    ];
+
+    validateInputPaths([{ name: path.basename(imagePath), path: imagePath }]);
+    await runFfmpeg(ffmpegPath, args, previewDuration, undefined, subtitlesEnabled ? E_SUBTITLES_FAILED : E_FFMPEG_FAILED);
+
+    return { outputPath: finalOutput, width, height, duration: previewDuration };
+  } finally {
+    if (subtitlesEnabled) {
+      try {
+        fs.rmSync(assetsDir, { recursive: true, force: true });
+      } catch {
+        // temp asset cleanup is best-effort
+      }
+    }
+  }
+}
+
 async function renderVideo(options) {
   const { onProgress, userFontsDir } = options;
 
@@ -354,6 +443,7 @@ async function renderVideo(options) {
 
 module.exports = {
   renderVideo,
+  renderPreview,
   buildFfmpegArgs,
   resolveOutputConfigs,
   getFfmpegPath,
