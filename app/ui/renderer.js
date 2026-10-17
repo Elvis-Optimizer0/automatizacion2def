@@ -1046,7 +1046,7 @@ async function handleExport() {
   if (!outputPath) return;
 
   const scenes = state.timeline.map(s => {
-    const scene = { number: s.number, duration: s.duration };
+    const scene = { number: s.number, duration: s.duration, text: s.text || '' };
     if (s.zoom) scene.zoom = { ...s.zoom };
     if (s.transition) scene.transition = { ...s.transition };
     return scene;

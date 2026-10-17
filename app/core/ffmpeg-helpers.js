@@ -459,16 +459,61 @@ function buildExtrasFilter(options = {}) {
   return `[${inputLabel}]${filters.join(',')}[${outputLabel}]`;
 }
 
+function escapeSubtitlePath(filePath) {
+  return String(filePath).replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, '\\\'');
+}
+
+function buildSubtitlesFilter(options = {}) {
+  const { subtitlesPath, fontsDir, inputLabel = 'vpre', outputLabel = 'vout' } = options;
+  if (!subtitlesPath) return '';
+  const parts = [`filename='${escapeSubtitlePath(subtitlesPath)}'`];
+  if (fontsDir) parts.push(`fontsdir='${escapeSubtitlePath(fontsDir)}'`);
+  return `[${inputLabel}]subtitles=${parts.join(':')}[${outputLabel}]`;
+}
+
 function buildFullFilterGraph(scenes, options = {}) {
   assertOutputConfig(options.outputConfig);
 
-  const { hasMusic = false, totalDuration, musicVolume = 0.3, extras, fontPath } = options;
+  const { hasMusic = false, totalDuration, musicVolume = 0.3, extras, fontPath, subtitlesPath, fontsDir } = options;
   const extrasEnabled = hasExtras(extras);
-  const videoLabel = extrasEnabled ? 'vmain' : 'vout';
-  const videoGraph = buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: videoLabel });
-  const extrasGraph = extrasEnabled
-    ? buildExtrasFilter({ extras, outputConfig: options.outputConfig, totalDuration, fontPath, inputLabel: 'vmain', outputLabel: 'vout' })
-    : '';
+  const subsEnabled = !!subtitlesPath;
+
+  let videoParts;
+  if (!subsEnabled) {
+    const videoLabel = extrasEnabled ? 'vmain' : 'vout';
+    const videoGraph = buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: videoLabel });
+    const extrasGraph = extrasEnabled
+      ? buildExtrasFilter({ extras, outputConfig: options.outputConfig, totalDuration, fontPath, inputLabel: 'vmain', outputLabel: 'vout' })
+      : '';
+    videoParts = [videoGraph, extrasGraph].filter(Boolean).join(';');
+  } else {
+    const graphs = [buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: 'vstage0' })];
+    let currentLabel = 'vstage0';
+    let stageIndex = 1;
+
+    if (extrasEnabled) {
+      const outLabel = `vstage${stageIndex}`;
+      graphs.push(buildExtrasFilter({
+        extras,
+        outputConfig: options.outputConfig,
+        totalDuration,
+        fontPath,
+        inputLabel: currentLabel,
+        outputLabel: outLabel
+      }));
+      currentLabel = outLabel;
+      stageIndex += 1;
+    }
+
+    graphs.push(buildSubtitlesFilter({
+      subtitlesPath,
+      fontsDir,
+      inputLabel: currentLabel,
+      outputLabel: 'vout'
+    }));
+    videoParts = graphs.filter(Boolean).join(';');
+  }
+
   const audioGraph = buildAudioFilterGraph({
     inputCount: scenes.length,
     hasMusic,
@@ -476,7 +521,6 @@ function buildFullFilterGraph(scenes, options = {}) {
     musicVolume
   });
 
-  const videoParts = [videoGraph, extrasGraph].filter(Boolean).join(';');
   if (!videoParts) return audioGraph;
   if (!audioGraph) return videoParts;
   return `${videoParts};${audioGraph}`;
@@ -559,6 +603,8 @@ module.exports = {
   hasExtras,
   escapeDrawtext,
   escapeFilterPath,
+  escapeSubtitlePath,
+  buildSubtitlesFilter,
   buildFullFilterGraph,
   validateOffsets,
   calculateTotalDuration,

@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const ffmpegStatic = require('ffmpeg-static');
 const {
@@ -17,6 +18,7 @@ const {
   E_OUTPUT_CONFIG_MISSING
 } = require('./output-formats.js');
 const { parseRenderPayload, imageFocus } = require('./project-schema.js');
+const { buildAss, E_SUBTITLES_FAILED } = require('./subtitles.js');
 
 const E_FFMPEG_MISSING = 'E_FFMPEG_MISSING';
 const E_INPUT_MISSING = 'E_INPUT_MISSING';
@@ -28,6 +30,10 @@ function getFfmpegPath() {
 
 function getFontPath() {
   return fixAsarPath(path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans-Bold.ttf'));
+}
+
+function getFontsDir() {
+  return fixAsarPath(path.join(__dirname, '..', 'assets', 'fonts'));
 }
 
 function verifyBinaries() {
@@ -95,7 +101,9 @@ function buildFfmpegArgs(options) {
     outputPath,
     outputConfig,
     config = {},
-    renderOptions = {}
+    renderOptions = {},
+    subtitlesPath,
+    fontsDir
   } = options;
 
   assertOutputConfig(outputConfig);
@@ -166,6 +174,8 @@ function buildFfmpegArgs(options) {
     backgroundColor,
     extras: config.extras,
     fontPath: getFontPath(),
+    subtitlesPath,
+    fontsDir,
     hasMusic,
     totalDuration,
     musicVolume,
@@ -200,7 +210,7 @@ function buildFfmpegArgs(options) {
   return { args, totalDuration, inputLabels };
 }
 
-function runFfmpeg(ffmpegPath, args, totalDuration, onProgress) {
+function runFfmpeg(ffmpegPath, args, totalDuration, onProgress, errorPrefix = E_FFMPEG_FAILED) {
   return new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath, args, { windowsHide: true });
 
@@ -228,7 +238,7 @@ function runFfmpeg(ffmpegPath, args, totalDuration, onProgress) {
         resolve();
       } else {
         const lastLines = stderr.trim().split('\n').slice(-15).join('\n');
-        const error = new Error(`${E_FFMPEG_FAILED}: ffmpeg exited with code ${code}\n${lastLines}`);
+        const error = new Error(`${errorPrefix}: ffmpeg exited with code ${code}\n${lastLines}`);
         error.code = code;
         error.stderr = stderr;
         reject(error);
@@ -236,7 +246,7 @@ function runFfmpeg(ffmpegPath, args, totalDuration, onProgress) {
     });
 
     proc.on('error', err => {
-      reject(new Error(`${E_FFMPEG_FAILED}: ${err.message}`));
+      reject(new Error(`${errorPrefix}: ${err.message}`));
     });
   });
 }
@@ -264,31 +274,71 @@ async function renderVideo(options) {
   const ffmpegPath = getFfmpegPath();
   const outputs = [];
 
-  for (let index = 0; index < totalFiles; index++) {
-    const outputConfig = outputConfigs[index];
-    const outputPath = withOutputSuffix(payload.outputPath, outputConfig);
+  const subtitlesEnabled = !!(payload.config.subtitles && payload.config.subtitles.enabled);
+  let subtitlesDir = null;
+  if (subtitlesEnabled) {
+    try {
+      subtitlesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-subs-'));
+    } catch (err) {
+      throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
+    }
+  }
 
-    const built = buildFfmpegArgs({
-      scenes,
-      images: payload.images,
-      narration: payload.narration,
-      music: payload.music,
-      outputPath,
-      outputConfig,
-      config: payload.config,
-      renderOptions: payload.renderOptions
-    });
-    validateInputPaths(built.inputLabels);
+  try {
+    for (let index = 0; index < totalFiles; index++) {
+      const outputConfig = outputConfigs[index];
+      const outputPath = withOutputSuffix(payload.outputPath, outputConfig);
 
-    const onFileProgress = onProgress
-      ? (p) => {
-        const overall = Math.round(((index + p.progress / 100) / totalFiles) * 100);
-        onProgress({ current: p.current, progress: overall, fileIndex: index, fileProgress: p.progress, totalFiles });
+      let subtitlesPath;
+      if (subtitlesEnabled) {
+        subtitlesPath = path.join(subtitlesDir, `subs-${outputConfig.id.replace(/[:]/g, '')}.ass`);
+        let content;
+        try {
+          content = buildAss(scenes, payload.config.subtitles, outputConfig);
+          fs.writeFileSync(subtitlesPath, content, 'utf-8');
+        } catch (err) {
+          throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
+        }
       }
-      : undefined;
 
-    await runFfmpeg(ffmpegPath, built.args, built.totalDuration, onFileProgress);
-    outputs.push({ id: outputConfig.id, outputPath, duration: totalDuration });
+      const built = buildFfmpegArgs({
+        scenes,
+        images: payload.images,
+        narration: payload.narration,
+        music: payload.music,
+        outputPath,
+        outputConfig,
+        config: payload.config,
+        renderOptions: payload.renderOptions,
+        subtitlesPath,
+        fontsDir: subtitlesEnabled ? getFontsDir() : undefined
+      });
+      validateInputPaths(built.inputLabels);
+
+      const onFileProgress = onProgress
+        ? (p) => {
+          const overall = Math.round(((index + p.progress / 100) / totalFiles) * 100);
+          onProgress({ current: p.current, progress: overall, fileIndex: index, fileProgress: p.progress, totalFiles });
+        }
+        : undefined;
+
+      await runFfmpeg(
+        ffmpegPath,
+        built.args,
+        built.totalDuration,
+        onFileProgress,
+        subtitlesEnabled ? E_SUBTITLES_FAILED : E_FFMPEG_FAILED
+      );
+      outputs.push({ id: outputConfig.id, outputPath, duration: totalDuration });
+    }
+  } finally {
+    if (subtitlesDir) {
+      try {
+        fs.rmSync(subtitlesDir, { recursive: true, force: true });
+      } catch {
+        // temp cleanup is best-effort; the render result is already reported
+      }
+    }
   }
 
   return {
@@ -303,11 +353,13 @@ module.exports = {
   buildFfmpegArgs,
   resolveOutputConfigs,
   getFfmpegPath,
+  getFontsDir,
   verifyBinaries,
   validateInputPaths,
   parseFfmpegProgress,
   E_FFMPEG_MISSING,
   E_INPUT_MISSING,
   E_FFMPEG_FAILED,
+  E_SUBTITLES_FAILED,
   E_OUTPUT_CONFIG_MISSING
 };

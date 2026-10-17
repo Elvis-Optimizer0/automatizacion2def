@@ -20,6 +20,9 @@ const {
   TRANSITION_MODES,
   DEFAULT_TRANSITION_SEED
 } = require('./ffmpeg-helpers.js');
+const { SUBTITLE_ANIMATIONS } = require('./subtitles.js');
+
+const HEX_COLOR = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
 const FOCUS_KEYS_TUPLE = FOCUS_KEYS;
 const OUTPUT_IDS_TUPLE = OUTPUT_IDS;
@@ -58,6 +61,52 @@ const extrasSchema = z.object({
   }).default({})
 }).default({});
 
+const subtitleShadowSchema = z.object({
+  enabled: z.boolean().default(false),
+  color: HEX_COLOR.default('#000000'),
+  opacity: z.number().min(0).max(1).default(0.7),
+  distance: z.number().min(0).max(100).default(3),
+  angle: z.number().min(0).max(360).default(45),
+  blur: z.number().min(0).max(100).default(4)
+}).default({});
+
+const subtitleBackgroundSchema = z.object({
+  enabled: z.boolean().default(false),
+  color: HEX_COLOR.default('#000000'),
+  opacity: z.number().min(0).max(1).default(0.5)
+}).default({});
+
+const subtitleHighlightSchema = z.object({
+  enabled: z.boolean().default(false),
+  colors: z.record(z.string(), HEX_COLOR).default({}),
+  detect: z.object({
+    numbers: z.boolean().default(true),
+    percent: z.boolean().default(true),
+    currency: z.boolean().default(true)
+  }).default({})
+}).default({});
+
+const subtitlesSchema = z.object({
+  enabled: z.boolean().default(false),
+  fontFamily: z.string().default('Roboto'),
+  fontFile: z.string().default(''),
+  fontSizeH: z.number().min(8).max(400).default(48),
+  fontSizeV: z.number().min(8).max(400).default(64),
+  bold: z.boolean().default(false),
+  italic: z.boolean().default(false),
+  letterSpacing: z.number().min(-20).max(50).default(0),
+  textColor: HEX_COLOR.default('#ffffff'),
+  outlineWidth: z.number().min(0).max(50).default(0),
+  outlineColor: HEX_COLOR.default('#000000'),
+  alignment: z.number().int().min(1).max(9).default(2),
+  marginH: z.number().min(0).max(1000).default(40),
+  marginV: z.number().min(0).max(1000).default(40),
+  background: subtitleBackgroundSchema,
+  shadow: subtitleShadowSchema,
+  highlight: subtitleHighlightSchema,
+  animation: z.enum(SUBTITLE_ANIMATIONS).default('none')
+}).default({});
+
 const configSchema = z.object({
   outputs: z.array(z.enum(OUTPUT_IDS_TUPLE)).min(1).default([...DEFAULT_OUTPUTS]),
   fitMode: z.enum(['cover', 'blur', 'frame']).default('cover'),
@@ -65,7 +114,8 @@ const configSchema = z.object({
   backgroundMode: z.enum(BACKGROUND_MODES).default(DEFAULT_BACKGROUND_MODE),
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default(DEFAULT_BACKGROUND_COLOR),
   musicVolume: z.number().min(0).max(1).default(0.3),
-  extras: extrasSchema
+  extras: extrasSchema,
+  subtitles: subtitlesSchema
 }).default({});
 
 const renderOptionsSchema = z.object({
@@ -94,6 +144,7 @@ const sceneTransitionSchema = z.object({
 const sceneSchema = z.object({
   number: z.number(),
   duration: z.number().positive(),
+  text: z.string().default(''),
   zoom: sceneZoomSchema,
   transition: sceneTransitionSchema
 });
