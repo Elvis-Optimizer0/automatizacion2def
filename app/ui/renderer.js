@@ -2590,5 +2590,5 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshPreviewScenes();
   detectCodecs();
 
-  console.log('Video Maker v0.5.1 - Renderer loaded');
+  console.log('Video Maker v0.6.0 - Renderer loaded');
 });
