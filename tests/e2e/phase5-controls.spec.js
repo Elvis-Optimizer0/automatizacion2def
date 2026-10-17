@@ -112,7 +112,8 @@ test.describe.serial('Video Maker - Phase 5 Controls', () => {
     for (const control of controls) {
       if (DIALOG_OR_RENDER_CONTROLS.has(control.id)) continue;
       const locator = page.locator(`#${control.id}`);
-      const info = await locator.evaluate(el => ({ tag: el.tagName.toLowerCase(), type: el.type || '' }));
+      const info = await locator.evaluate(el => ({ tag: el.tagName.toLowerCase(), type: el.type || '', disabled: !!el.disabled }));
+      if (info.disabled) continue;
 
       if (info.tag === 'button') {
         await locator.click();

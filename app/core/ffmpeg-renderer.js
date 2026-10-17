@@ -30,6 +30,34 @@ function getFfmpegPath() {
   return fixAsarPath(ffmpegStatic);
 }
 
+let encoderCache = null;
+
+function listEncoders() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(getFfmpegPath(), ['-hide_banner', '-encoders'], { windowsHide: true });
+    let output = '';
+    proc.stdout.on('data', data => { output += data.toString(); });
+    proc.stderr.on('data', data => { output += data.toString(); });
+    proc.on('close', () => resolve(output));
+    proc.on('error', reject);
+  });
+}
+
+async function detectEncoders(force = false) {
+  if (encoderCache && !force) return encoderCache;
+  let output = '';
+  try {
+    output = await listEncoders();
+  } catch {
+    output = '';
+  }
+  encoderCache = {
+    h264_amf: /\bh264_amf\b/.test(output),
+    libx264: /\blibx264\b/.test(output)
+  };
+  return encoderCache;
+}
+
 function getFontPath() {
   return fixAsarPath(path.join(__dirname, '..', 'assets', 'fonts', 'DejaVuSans-Bold.ttf'));
 }
@@ -125,6 +153,7 @@ function buildFfmpegArgs(options) {
   const backgroundMode = config.backgroundMode || 'color';
   const backgroundColor = config.backgroundColor || '#000000';
   const musicVolume = config.musicVolume != null ? config.musicVolume : 0.3;
+  const videoEncoder = options.videoEncoder === 'h264_amf' ? 'h264_amf' : 'libx264';
   const transitionType = renderOptions.transitionType || 'fade';
   const transitionMode = renderOptions.transitionMode || 'fixed';
   const transitionSeed = renderOptions.transitionSeed;
@@ -193,13 +222,15 @@ function buildFfmpegArgs(options) {
     transitionDuration
   });
 
+  const encoderArgs = videoEncoder === 'h264_amf'
+    ? ['-c:v', 'h264_amf', '-quality', 'balanced', '-qp_i', '23', '-qp_p', '23']
+    : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '23'];
+
   args.push(
     '-filter_complex', filterGraph,
     '-map', '[vout]',
     '-map', '[aout]',
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '23',
+    ...encoderArgs,
     '-pix_fmt', 'yuv420p',
     '-r', String(FPS),
     '-c:a', 'aac',
@@ -346,6 +377,12 @@ async function renderVideo(options) {
 
   verifyBinaries();
 
+  const encoders = await detectEncoders();
+  const wantHw = options.useHardwareAcceleration !== false;
+  const useAmf = wantHw && encoders.h264_amf;
+  const videoEncoder = useAmf ? 'h264_amf' : 'libx264';
+  const hwFallback = wantHw && !encoders.h264_amf;
+
   let payload;
   let outputConfigs;
   try {
@@ -404,7 +441,8 @@ async function renderVideo(options) {
         config: payload.config,
         renderOptions: payload.renderOptions,
         subtitlesPath,
-        fontsDir
+        fontsDir,
+        videoEncoder
       });
       validateInputPaths(built.inputLabels);
 
@@ -437,7 +475,9 @@ async function renderVideo(options) {
   return {
     outputs,
     outputPath: outputs.length > 0 ? outputs[0].outputPath : payload.outputPath,
-    duration: totalDuration
+    duration: totalDuration,
+    videoEncoder,
+    hwFallback
   };
 }
 
@@ -448,6 +488,7 @@ module.exports = {
   resolveOutputConfigs,
   getFfmpegPath,
   getFontsDir,
+  detectEncoders,
   verifyBinaries,
   validateInputPaths,
   parseFfmpegProgress,

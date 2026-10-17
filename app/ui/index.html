@@ -543,6 +543,16 @@
           <video id="preview-video" class="preview-video" controls hidden></video>
           <p class="subtitle-notice">La vista previa es aproximada (640 px de ancho) y usa la escena elegida; el video final es el que manda.</p>
         </fieldset>
+
+        <fieldset class="export-fieldset">
+          <legend>Rendimiento</legend>
+          <label class="checkbox-label">
+            <input type="checkbox" id="hwaccel-checkbox" checked>
+            <span class="checkmark"></span>
+            Aceleración por hardware (AMD AMF)
+          </label>
+          <p id="hwaccel-info" class="subtitle-notice">Detectando codificadores…</p>
+        </fieldset>
       </div>
 
       <button id="export-btn" class="btn btn-primary" type="button" disabled>

@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const ffprobeStatic = require('ffprobe-static');
-const { renderVideo, renderPreview, verifyBinaries, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_SUBTITLES_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
+const { renderVideo, renderPreview, verifyBinaries, detectEncoders, E_FFMPEG_MISSING, E_INPUT_MISSING, E_FFMPEG_FAILED, E_SUBTITLES_FAILED, E_OUTPUT_CONFIG_MISSING } = require('./core/ffmpeg-renderer.js');
 const { parseProjectFile, collectProjectPaths } = require('./core/project-schema.js');
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 const { detectKeywords } = require('./core/keywords.js');
@@ -265,6 +265,14 @@ ipcMain.handle('preview:render', async (_, options) => {
       throw err;
     }
     throw new Error(`${E_FFMPEG_FAILED}: ${err.message}`);
+  }
+});
+
+ipcMain.handle('codecs:detect', async () => {
+  try {
+    return await detectEncoders(true);
+  } catch (err) {
+    throw new Error(`${E_FFMPEG_MISSING}: ${err.message}`);
   }
 });
 
