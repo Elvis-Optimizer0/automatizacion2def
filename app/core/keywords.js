@@ -42,9 +42,73 @@ const DEFAULT_FINANCIAL_TERMS = [
   'oferta'
 ];
 
+const ENGLISH_FINANCIAL_TERMS = [
+  'debt',
+  'debts',
+  'interest',
+  'salary',
+  'salaries',
+  'wage',
+  'wages',
+  'tax',
+  'taxes',
+  'saving',
+  'savings',
+  'inflation',
+  'credit',
+  'loan',
+  'loans',
+  'mortgage',
+  'card',
+  'bank',
+  'money',
+  'payment',
+  'payments',
+  'installment',
+  'installments',
+  'rent',
+  'income',
+  'incomes',
+  'profit',
+  'profits',
+  'loss',
+  'losses',
+  'investment',
+  'investments',
+  'cash',
+  'cost',
+  'costs',
+  'price',
+  'prices',
+  'discount',
+  'offer'
+];
+
 const DEFAULT_HIGHLIGHT_COLOR = '#ff0000';
 const DEFAULT_TOP_N = 30;
 const MIN_TERM_LENGTH = 4;
+
+const ENGLISH_STOPWORDS = [
+  'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'as', 'at',
+  'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
+  'can', 'cannot', 'could',
+  'did', 'do', 'does', 'doing', 'down', 'during',
+  'each',
+  'few', 'for', 'from', 'further',
+  'had', 'has', 'have', 'having', 'he', 'her', 'here', 'hers', 'herself', 'him', 'himself', 'his', 'how',
+  'i', 'if', 'in', 'into', 'is', 'it', 'its', 'itself',
+  'just',
+  'me', 'more', 'most', 'my', 'myself',
+  'no', 'nor', 'not', 'now',
+  'of', 'off', 'on', 'once', 'only', 'or', 'other', 'our', 'ours', 'ourselves', 'out', 'over', 'own',
+  'same', 'she', 'should', 'so', 'some', 'such',
+  'than', 'that', 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', 'these', 'they', 'this',
+  'those', 'through', 'to', 'too',
+  'under', 'until', 'up',
+  'very',
+  'was', 'we', 'were', 'what', 'when', 'where', 'which', 'while', 'who', 'whom', 'why', 'will', 'with', 'would',
+  'you', 'your', 'yours', 'yourself', 'yourselves'
+];
 
 const SPANISH_STOPWORDS = [
   'a', 'al', 'algo', 'algun', 'alguna', 'algunas', 'alguno', 'algunos', 'alla', 'alli',
@@ -73,6 +137,30 @@ const SPANISH_STOPWORDS = [
   'y', 'ya', 'yo'
 ];
 
+const STOPWORDS_BY_LANGUAGE = {
+  es: SPANISH_STOPWORDS,
+  en: ENGLISH_STOPWORDS
+};
+
+const FINANCIAL_TERMS_BY_LANGUAGE = {
+  es: DEFAULT_FINANCIAL_TERMS,
+  en: ENGLISH_FINANCIAL_TERMS
+};
+
+function normalizeLanguage(language) {
+  const value = String(language == null ? '' : language).trim().toLowerCase();
+  if (value === 'en' || value === 'eng' || value === 'english') return 'en';
+  return 'es';
+}
+
+function getStopwords(language) {
+  return STOPWORDS_BY_LANGUAGE[normalizeLanguage(language)] || SPANISH_STOPWORDS;
+}
+
+function getFinancialTerms(language) {
+  return FINANCIAL_TERMS_BY_LANGUAGE[normalizeLanguage(language)] || DEFAULT_FINANCIAL_TERMS;
+}
+
 function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -90,8 +178,8 @@ function tokenizeRaw(text) {
   return String(text == null ? '' : text).match(/[\p{L}\p{N}]+/gu) || [];
 }
 
-function isStopword(token) {
-  return SPANISH_STOPWORDS.includes(normalizeWord(token));
+function isStopword(token, language = 'es') {
+  return getStopwords(language).includes(normalizeWord(token));
 }
 
 function isNumberToken(token) {
@@ -108,11 +196,13 @@ function symbolPatterns(options) {
 }
 
 function detectKeywords(texts, options = {}) {
+  const language = normalizeLanguage(options.language);
   const {
-    terms = DEFAULT_FINANCIAL_TERMS,
+    terms = getFinancialTerms(language),
     topN = DEFAULT_TOP_N,
     frequency = true
   } = options;
+  const stopwords = getStopwords(language);
 
   const sceneTexts = (Array.isArray(texts) ? texts : [texts]).map(value => String(value == null ? '' : value));
   const results = new Map();
@@ -192,7 +282,7 @@ function detectKeywords(texts, options = {}) {
       for (let i = 0; i < rawTokens.length; i++) {
         const norm = normTokens[i];
         if (!norm || norm.length < MIN_TERM_LENGTH) continue;
-        if (isNumberToken(rawTokens[i]) || isStopword(rawTokens[i])) continue;
+        if (isNumberToken(rawTokens[i]) || stopwords.includes(norm)) continue;
         bump(unigrams, norm, rawTokens[i], sceneIndex, 1);
       }
       for (let size = 2; size <= 3; size += 1) {
@@ -200,9 +290,9 @@ function detectKeywords(texts, options = {}) {
           const gramNorm = normTokens.slice(i, i + size);
           const gramRaw = rawTokens.slice(i, i + size);
           if (gramNorm.some((token, position) => !token || isNumberToken(gramRaw[position]))) continue;
-          const content = gramNorm.filter(token => !SPANISH_STOPWORDS.includes(token));
+          const content = gramNorm.filter(token => !stopwords.includes(token));
           if (content.length < 2) continue;
-          if (SPANISH_STOPWORDS.includes(gramNorm[0]) || SPANISH_STOPWORDS.includes(gramNorm[gramNorm.length - 1])) continue;
+          if (stopwords.includes(gramNorm[0]) || stopwords.includes(gramNorm[gramNorm.length - 1])) continue;
           bump(ngrams, gramNorm.join(' '), gramRaw.join(' '), sceneIndex, size);
         }
       }
@@ -238,10 +328,17 @@ function detectKeywords(texts, options = {}) {
 
 module.exports = {
   DEFAULT_FINANCIAL_TERMS,
+  ENGLISH_FINANCIAL_TERMS,
   DEFAULT_HIGHLIGHT_COLOR,
   DEFAULT_TOP_N,
   MIN_TERM_LENGTH,
   SPANISH_STOPWORDS,
+  ENGLISH_STOPWORDS,
+  STOPWORDS_BY_LANGUAGE,
+  FINANCIAL_TERMS_BY_LANGUAGE,
+  normalizeLanguage,
+  getStopwords,
+  getFinancialTerms,
   escapeRegExp,
   normalizeWord,
   tokenizeRaw,

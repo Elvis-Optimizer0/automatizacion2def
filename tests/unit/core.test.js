@@ -142,6 +142,19 @@ Tercera línea
     expect(scenes[0].start).toBe(0);
     expect(scenes[0].end).toBe(0);
   });
+
+  test('parses English [Scene N] markers with time ranges', () => {
+    const script = `[Scene 1] 0:00 - 0:03 The household budget rules
+[Scene 2] 0:03 - 0:06 Interest rates rise`;
+    const { scenes, warnings } = parseScenes(script);
+    expect(scenes).toHaveLength(2);
+    expect(scenes.map(s => s.number)).toEqual([1, 2]);
+    expect(scenes[0].start).toBe(0);
+    expect(scenes[0].end).toBe(3);
+    expect(scenes[1].start).toBe(3);
+    expect(scenes[1].end).toBe(6);
+    expect(warnings).toHaveLength(0);
+  });
 });
 
 test.describe('extractSceneNumber', () => {

@@ -1,11 +1,21 @@
 const { test, expect } = require('@playwright/test');
 const {
   DEFAULT_FINANCIAL_TERMS,
+  ENGLISH_FINANCIAL_TERMS,
+  ENGLISH_STOPWORDS,
   DEFAULT_HIGHLIGHT_COLOR,
   DEFAULT_TOP_N,
   normalizeWord,
+  isStopword,
   detectKeywords
 } = require('../../app/core/keywords.js');
+
+const ENGLISH_SCRIPT = [
+  'The debt is the biggest problem of the debt',
+  'Interest rates affect the debt of families',
+  'Families pay interest and debt every month',
+  'Managing the debt and interest is the goal'
+];
 
 const SAMPLE_SCRIPT = [
   'El presupuesto familiar es la base del presupuesto',
@@ -104,5 +114,37 @@ test.describe('keyword detection', () => {
 
     const all = detectKeywords(SAMPLE_SCRIPT);
     expect(all.length).toBeLessThanOrEqual(DEFAULT_TOP_N);
+  });
+
+  test('detects English financial terms with the English list', () => {
+    expect(ENGLISH_FINANCIAL_TERMS).toContain('debt');
+    const found = detectKeywords(['tu deuda y the debt'], { language: 'en' });
+    const debt = found.find(item => normalizeWord(item.term) === 'debt');
+    expect(debt).toBeTruthy();
+    expect(debt.kind).toBe('term');
+
+    expect(isStopword('the', 'en')).toBe(true);
+    expect(isStopword('the', 'es')).toBe(false);
+    expect(ENGLISH_STOPWORDS).toContain('the');
+  });
+
+  test('uses the Spanish stopword list by default and ignores English-only words', () => {
+    const spanish = detectKeywords(['debt'], { language: 'es' });
+    expect(spanish.find(item => normalizeWord(item.term) === 'debt')).toBeUndefined();
+  });
+
+  test('proposes relevant English words while ignoring stopwords', () => {
+    const found = detectKeywords(ENGLISH_SCRIPT, { language: 'en' });
+    const normalized = found.map(item => normalizeWord(item.term));
+    for (const stopword of ['the', 'is', 'of', 'and', 'every']) {
+      expect(normalized).not.toContain(stopword);
+    }
+    const debt = found.find(item => normalizeWord(item.term) === 'debt');
+    expect(debt).toBeTruthy();
+    expect(debt.count).toBe(5);
+
+    const families = found.find(item => normalizeWord(item.term) === 'families');
+    expect(families).toBeTruthy();
+    expect(families.kind).toBe('word');
   });
 });
