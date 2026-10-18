@@ -1007,7 +1007,7 @@ function renderModelsList(models) {
     const status = document.createElement('span');
     const stateClass = model.installed ? (model.verified ? 'ok' : 'warn') : 'missing';
     status.className = `model-status ${stateClass}`;
-    status.textContent = model.installed ? (model.verified ? 'Instalado' : 'Instalado (sin verificar)') : 'Incompleto';
+    status.textContent = model.installed ? (model.verified ? 'Instalado y verificado' : 'Instalado (sin verificar)') : 'Incompleto';
 
     header.appendChild(name);
     header.appendChild(status);
@@ -1022,14 +1022,26 @@ function renderModelsList(models) {
       label.textContent = file.fileName;
 
       const fileState = document.createElement('span');
-      const fileClass = file.exists ? (file.verified ? 'ok' : 'warn') : 'missing';
-      fileState.className = `model-status ${fileClass}`;
-      fileState.textContent = file.exists
-        ? (file.verified ? 'Listo' : 'Sin verificar')
+      let fileClass = 'missing';
+      const fileText = file.exists
+        ? (file.verified ? 'Listo' : (file.verifying ? 'Verificando…' : 'Sin verificar'))
         : `falta ${file.fileName}`;
+      if (file.verifying) fileClass = 'verifying';
+      else if (file.exists) fileClass = file.verified ? 'ok' : 'warn';
+      fileState.className = `model-status ${fileClass}`;
+      fileState.textContent = fileText;
 
-      line.appendChild(label);
-      line.appendChild(fileState);
+      if (file.message && file.message !== fileText) {
+        const msg = document.createElement('span');
+        msg.className = 'model-file-message';
+        msg.textContent = file.message;
+        line.appendChild(label);
+        line.appendChild(fileState);
+        line.appendChild(msg);
+      } else {
+        line.appendChild(label);
+        line.appendChild(fileState);
+      }
       row.appendChild(line);
     });
 
@@ -1045,14 +1057,15 @@ function renderModelsList(models) {
       .join(' · ');
     setModelsStatus(`Faltan archivos (${detail}). Se buscan en userData/models/<id>/<archivo>.`, 'warning');
   } else {
-    setModelsStatus('Todos los modelos están instalados.', 'success');
+    const allVerified = models.every(m => m.verified);
+    setModelsStatus(allVerified ? 'Todos los modelos están instalados y verificados.' : 'Todos los modelos instalados (algunos sin verificar).', allVerified ? 'success' : 'warning');
   }
 }
 
 async function refreshModelsList() {
-  if (!window.api || typeof window.api.listModels !== 'function') return;
+  if (!window.api || typeof window.api.listModelsAsync !== 'function') return;
   try {
-    const info = await window.api.listModels();
+    const info = await window.api.listModelsAsync();
     modelState.models = info.models || [];
     modelState.modelsDir = info.dir || '';
     renderModelsList(modelState.models);
@@ -3445,5 +3458,5 @@ document.addEventListener('DOMContentLoaded', () => {
   detectCodecs();
   handleProbeGpu();
 
-  console.log('Video Maker v0.7.5 - Renderer loaded');
+  console.log('Video Maker v0.7.6 - Renderer loaded');
 });

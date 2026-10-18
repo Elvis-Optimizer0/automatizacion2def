@@ -9,7 +9,7 @@ const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir,
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
-const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
+const { KNOWN_MODELS, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 
@@ -30,7 +30,7 @@ function createWindow() {
     height: 720,
     minWidth: 1024,
     minHeight: 600,
-    title: 'Video Maker v0.7.5',
+    title: 'Video Maker v0.7.6',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -465,6 +465,12 @@ ipcMain.handle('align:scenes', async (_, payload) => {
 ipcMain.handle('models:list', async () => {
   const dir = getModelsDir(app.getPath('userData'));
   return { dir, models: listModels(dir) };
+});
+
+ipcMain.handle('models:listAsync', async () => {
+  const dir = getModelsDir(app.getPath('userData'));
+  const models = await listModelsAsync(dir);
+  return { dir, models };
 });
 
 ipcMain.handle('models:download', async (_, modelId) => {

@@ -15,7 +15,9 @@ const {
   getExpectedModelPath,
   getModelDir,
   normalizeImportPath,
-  normalizeModelId
+  normalizeModelId,
+  verifyModelFileAsync,
+  getVerificationCacheDir
 } = require('../../app/core/models.js');
 
 function sha256Of(buffer) {
@@ -271,6 +273,90 @@ test.describe('simulated model download', () => {
       expect(fs.existsSync(result.path)).toBe(true);
       expect(fs.statSync(result.path).size).toBe(1024);
       expect(progress).toContain(100);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test.describe('model verification', () => {
+  test('verifyModelFileAsync returns verified=true for file with correct hash and size', async () => {
+    const dir = makeDir();
+    try {
+      const content = Buffer.from('test content for verification');
+      const filePath = path.join(dir, 'test.bin');
+      fs.writeFileSync(filePath, content);
+      const expected = { sizeBytes: content.length, sha256: sha256Of(content) };
+      const result = await verifyModelFileAsync(filePath, expected);
+      expect(result.exists).toBe(true);
+      expect(result.size).toBe(content.length);
+      expect(result.sizeMatches).toBe(true);
+      expect(result.shaMatches).toBe(true);
+      expect(result.verified).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('verifyModelFileAsync returns verified=false for wrong hash', async () => {
+    const dir = makeDir();
+    try {
+      const content = Buffer.from('correct content');
+      const filePath = path.join(dir, 'test.bin');
+      fs.writeFileSync(filePath, content);
+      const expected = { sizeBytes: content.length, sha256: '0000000000000000000000000000000000000000000000000000000000000000' };
+      const result = await verifyModelFileAsync(filePath, expected);
+      expect(result.exists).toBe(true);
+      expect(result.shaMatches).toBe(false);
+      expect(result.verified).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('verifyModelFileAsync returns verified=false for wrong size', async () => {
+    const dir = makeDir();
+    try {
+      const content = Buffer.from('short');
+      const filePath = path.join(dir, 'test.bin');
+      fs.writeFileSync(filePath, content);
+      const expected = { sizeBytes: 100, sha256: sha256Of(content) };
+      const result = await verifyModelFileAsync(filePath, expected);
+      expect(result.exists).toBe(true);
+      expect(result.sizeMatches).toBe(false);
+      expect(result.verified).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('verifyModelFileAsync caches result and uses cache on second call', async () => {
+    const dir = makeDir();
+    try {
+      const content = Buffer.from('cached content');
+      const filePath = path.join(dir, 'cached.bin');
+      fs.writeFileSync(filePath, content);
+      const expected = { sizeBytes: content.length, sha256: sha256Of(content) };
+      const result1 = await verifyModelFileAsync(filePath, expected);
+      expect(result1.verified).toBe(true);
+      const cacheDir = getVerificationCacheDir();
+      expect(fs.existsSync(cacheDir)).toBe(true);
+      const result2 = await verifyModelFileAsync(filePath, expected);
+      expect(result2.verified).toBe(true);
+      expect(result2.sha256).toBe(result1.sha256);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('verifyModelFileAsync returns exists=false for missing file', async () => {
+    const dir = makeDir();
+    try {
+      const filePath = path.join(dir, 'missing.bin');
+      const expected = { sizeBytes: 100, sha256: 'abc' };
+      const result = await verifyModelFileAsync(filePath, expected);
+      expect(result.exists).toBe(false);
+      expect(result.verified).toBe(false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

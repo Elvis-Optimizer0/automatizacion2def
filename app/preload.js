@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
   alignScenes: (payload) => ipcRenderer.invoke('align:scenes', payload),
   getCapabilities: (options) => ipcRenderer.invoke('capabilities:get', options),
   listModels: () => ipcRenderer.invoke('models:list'),
+  listModelsAsync: () => ipcRenderer.invoke('models:listAsync'),
   downloadModels: (modelId) => ipcRenderer.invoke('models:download', modelId),
   importModel: (filePath) => ipcRenderer.invoke('models:import', filePath),
   cancelModels: () => ipcRenderer.invoke('models:cancel'),

@@ -2,48 +2,118 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
+const { CATALOG: MODEL_CATALOG } = require('./model-specs.js');
 
 const E_MODEL_DOWNLOAD_FAILED = 'E_MODEL_DOWNLOAD_FAILED';
 const E_MODEL_IMPORT_FAILED = 'E_MODEL_IMPORT_FAILED';
 const E_MODEL_PATH_INVALID = 'E_MODEL_PATH_INVALID';
 const E_MODEL_CANCELLED = 'E_MODEL_CANCELLED';
 
-const MODEL_CATALOG = [
-  {
-    id: 'kokoro',
-    name: 'Kokoro voz (ONNX)',
-    engine: 'kokoro',
-    files: [
-      {
-        fileName: 'kokoro-v1.0.onnx',
-        sizeBytes: 310000000,
-        sha256: null,
-        url: 'https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx'
-      },
-      {
-        fileName: 'voices-v1.0.bin',
-        sizeBytes: 27000000,
-        sha256: null,
-        url: 'https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin'
-      }
-    ]
-  },
-  {
-    id: 'whisper',
-    name: 'Whisper ggml base',
-    engine: 'whisper',
-    files: [
-      {
-        fileName: 'ggml-base.bin',
-        sizeBytes: 148000000,
-        sha256: null,
-        url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin'
-      }
-    ]
-  }
-];
-
 const KNOWN_MODELS = MODEL_CATALOG;
+
+const os = require('os');
+
+const VERIFICATION_CACHE_DIR = '.model-verification-cache';
+
+function getVerificationCacheDir() {
+  const home = process.env.USERPROFILE || process.env.HOME || os.tmpdir();
+  return path.join(home, VERIFICATION_CACHE_DIR);
+}
+
+function getVerificationCacheKey(filePath) {
+  const stat = fs.statSync(filePath);
+  const keyBase = `${filePath}:${stat.size}:${stat.mtimeMs}`;
+  return crypto.createHash('sha256').update(keyBase).digest('hex');
+}
+
+function readVerificationCache(key) {
+  try {
+    const cacheDir = getVerificationCacheDir();
+    const cacheFile = path.join(cacheDir, `${key}.json`);
+    if (fs.existsSync(cacheFile)) {
+      return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+    }
+  } catch (_err) { void _err; }
+  return null;
+}
+
+function writeVerificationCache(key, result) {
+  try {
+    const cacheDir = getVerificationCacheDir();
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const cacheFile = path.join(cacheDir, `${key}.json`);
+    fs.writeFileSync(cacheFile, JSON.stringify({ ...result, timestamp: Date.now() }));
+  } catch (_err) { void _err; }
+}
+
+function verifyModelFileAsync(filePath, expected = {}) {
+  return new Promise((resolve) => {
+    const result = {
+      exists: false,
+      size: 0,
+      expectedSize: expected.sizeBytes || null,
+      sizeMatches: true,
+      sha256: null,
+      expectedSha256: expected.sha256 || null,
+      shaMatches: true,
+      verified: false
+    };
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      resolve(result);
+      return;
+    }
+
+    const stat = fs.statSync(filePath);
+    result.exists = true;
+    result.size = stat.size;
+    result.sizeMatches = expected.sizeBytes ? stat.size === expected.sizeBytes : true;
+
+    const key = getVerificationCacheKey(filePath);
+    const cached = readVerificationCache(key);
+
+    if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+      result.sha256 = cached.sha256;
+      result.shaMatches = cached.shaMatches;
+      result.verified = result.sizeMatches && result.shaMatches;
+      resolve(result);
+      return;
+    }
+
+    if (expected.sha256) {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('error', () => {
+        result.shaMatches = false;
+        result.verified = false;
+        resolve(result);
+      });
+      stream.on('end', () => {
+        result.sha256 = hash.digest('hex');
+        result.shaMatches = result.sha256 === expected.sha256;
+        result.verified = result.sizeMatches && result.shaMatches;
+        writeVerificationCache(key, {
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+          sha256: result.sha256,
+          shaMatches: result.shaMatches
+        });
+        resolve(result);
+      });
+    } else {
+      result.shaMatches = true;
+      result.verified = result.sizeMatches;
+      writeVerificationCache(key, {
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        sha256: null,
+        shaMatches: true
+      });
+      resolve(result);
+    }
+  });
+}
 
 function isTestMode(env = process.env) {
   return env.NODE_ENV === 'test' || env.ELECTRON_TEST === '1' || env.VM_TEST_MODELS === '1';
@@ -111,23 +181,24 @@ function verifyModelFile(filePath, expected = {}) {
 }
 
 function listModels(modelsDir, catalog = MODEL_CATALOG) {
-  return normalizeCatalog(catalog).map((model) => {
+  const models = normalizeCatalog(catalog).map((model) => {
     const dir = getModelDir(modelsDir, model);
     const files = model.files.map((file) => {
       const filePath = getModelFilePath(modelsDir, model, file);
-      const verification = verifyModelFile(filePath, file);
+      const syncVerification = verifyModelFile(filePath, file);
       return {
         fileName: file.fileName,
         path: filePath,
-        exists: verification.exists,
-        verified: verification.verified,
-        size: verification.size,
-        expectedSize: verification.expectedSize,
-        missing: !verification.exists,
-        status: !verification.exists ? 'missing' : (verification.verified ? 'ok' : 'unverified'),
-        message: !verification.exists
+        exists: syncVerification.exists,
+        verified: syncVerification.verified,
+        size: syncVerification.size,
+        expectedSize: syncVerification.expectedSize,
+        missing: !syncVerification.exists,
+        status: !syncVerification.exists ? 'missing' : (syncVerification.verified ? 'ok' : 'unverified'),
+        verifying: false,
+        message: !syncVerification.exists
           ? `falta ${file.fileName}`
-          : (verification.verified ? `${file.fileName} listo` : `${file.fileName} sin verificar`)
+          : (syncVerification.verified ? `${file.fileName} listo` : `${file.fileName} sin verificar`)
       };
     });
 
@@ -152,6 +223,59 @@ function listModels(modelsDir, catalog = MODEL_CATALOG) {
         ? (verified ? 'Instalado y verificado' : 'Instalado (sin verificar)')
         : `Incompleto: falta ${missingFiles.join(', ')}`
     };
+  });
+
+  return models;
+}
+
+function listModelsAsync(modelsDir, catalog = MODEL_CATALOG) {
+  return new Promise((resolve) => {
+    const models = listModels(modelsDir, catalog);
+    const verifyPromises = [];
+
+    models.forEach((model) => {
+      model.files.forEach((file) => {
+        if (file.exists && !file.verified) {
+          file.verifying = true;
+          file.message = `Verificando ${file.fileName}…`;
+          const filePath = file.path;
+          const expected = MODEL_CATALOG.flatMap(m => m.files).find(f => f.fileName === file.fileName);
+          const p = verifyModelFileAsync(filePath, expected).then((result) => {
+            file.verified = result.verified;
+            file.size = result.size;
+            file.verifying = false;
+            file.status = result.verified ? 'ok' : 'error';
+            if (result.exists) {
+              if (result.verified) {
+                file.message = `${file.fileName} listo`;
+              } else if (!result.sizeMatches) {
+                file.message = `Tamaño incorrecto: esperado ${result.expectedSize}, recibido ${result.size}`;
+              } else if (!result.shaMatches) {
+                file.message = `Hash no coincide: esperado ${result.expectedSha256?.slice(0, 16)}..., recibido ${result.sha256?.slice(0, 16)}...`;
+              } else {
+                file.message = `${file.fileName} sin verificar`;
+              }
+            }
+          });
+          verifyPromises.push(p);
+        }
+      });
+    });
+
+    Promise.all(verifyPromises).then(() => {
+      models.forEach((model) => {
+        const installed = model.files.every(file => file.exists);
+        const verified = installed && model.files.every(file => file.verified);
+        model.installed = installed;
+        model.verified = verified;
+        model.complete = installed;
+        model.missing = !installed;
+        model.message = installed
+          ? (verified ? 'Instalado y verificado' : 'Instalado (sin verificar)')
+          : `Incompleto: falta ${model.missingFiles.join(', ')}`;
+      });
+      resolve(models);
+    });
   });
 }
 
@@ -382,11 +506,14 @@ module.exports = {
   computeSha256,
   verifyModelFile,
   listModels,
+  listModelsAsync,
   findModel,
   listKnownFileNames,
   checkModelFiles,
   normalizeImportPath,
   normalizeModelId,
+  verifyModelFileAsync,
+  getVerificationCacheDir,
   importModel,
   downloadToFile,
   downloadModel
