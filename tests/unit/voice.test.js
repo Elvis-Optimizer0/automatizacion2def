@@ -77,13 +77,13 @@ test.describe('voice duration estimation', () => {
 
 test.describe('voice engine resolution', () => {
   test('returns null when no engine binary is configured', () => {
-    expect(resolveEngine('ef_dora', {})).toBeNull();
+    expect(resolveEngine('ef_dora', {}, { bundled: false })).toBeNull();
   });
 
   test('reports the exact missing model files and their search paths', () => {
     const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-voice-models-'));
     try {
-      const readiness = checkVoiceEngine('ef_dora', {}, modelsDir);
+      const readiness = checkVoiceEngine('ef_dora', {}, modelsDir, { bundled: false });
       expect(readiness.ready).toBe(false);
       expect(readiness.modelDir).toBe(path.join(modelsDir, 'kokoro'));
       expect(readiness.missingFiles.map(file => file.fileName))
@@ -93,7 +93,6 @@ test.describe('voice engine resolution', () => {
       expect(message).toContain('falta kokoro-v1.0.onnx');
       expect(message).toContain(path.join(modelsDir, 'kokoro', 'voices-v1.0.bin'));
       expect(message).toContain('falta el runtime de kokoro');
-      expect(message).toContain('vendor');
     } finally {
       fs.rmSync(modelsDir, { recursive: true, force: true });
     }
@@ -103,7 +102,7 @@ test.describe('voice engine resolution', () => {
     const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-voice-models-'));
     const outputPath = path.join(modelsDir, 'voz.wav');
     try {
-      await expect(synthesizeVoice({ text: 'hola', outputPath, env: {}, modelsDir }))
+      await expect(synthesizeVoice({ text: 'hola', outputPath, env: {}, modelsDir, bundled: false }))
         .rejects.toThrow(/voices-v1\.0\.bin/);
     } finally {
       fs.rmSync(modelsDir, { recursive: true, force: true });

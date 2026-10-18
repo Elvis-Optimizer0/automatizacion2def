@@ -31,7 +31,10 @@ Los binarios de FFmpeg/FFprobe se desempaquetan con `asarUnpack` y se invocan co
 - Nota G2P: el español requiere `espeak-ng` (**GPL-3.0**) como motor
   grafema-a-fonema. El inglés no lo requiere (misaki, MIT).
 - `onnxruntime` (Microsoft): **MIT**.
-- Python embebido (python-build-standalone, astral-sh): **Apache-2.0/MIT** según build.
+- `soundfile` (libsndfile, Bastian Bechtold / Erik de Castro Lopo): **BSD-3-Clause**.
+- `numpy`: **BSD-3-Clause**. `phonemizer` (Mathieu Bernard): **GPL-3.0**.
+- `espeakng-loader`: **GPL-3.0** (empaqueta espeak-ng).
+- Python embebido (python.org, PSF): **PSF-2.0**.
 
 > **AVISO GPL-3.0:** este paquete (uso personal, no distribuido) incrusta `espeak-ng`,
 > que es **GPL-3.0**. Mientras la app **solo se use de forma personal y no se
@@ -54,29 +57,49 @@ Los binarios de FFmpeg/FFprobe se desempaquetan con `asarUnpack` y se invocan co
 
 ## Empaquetado de los motores (extraResources)
 
-El instalador incluye los motores completos, sin variables de entorno. En desarrollo
-se leen desde `vendor/`; en la app instalada desde `resources/` (el
-`extraResources` de `package.json` copia `vendor/kokoro` → `resources/kokoro` y
-`vendor/whisper` → `resources/whisper`). La app resuelve estas rutas sola
-(`app/core/runtime-paths.js`).
+Motores completos dentro del instalador, sin variables de entorno. **El instalador
+pesa ~400 MB más** (≈ 250 MB de Python + paquetes y ≈ 490 MB de modelos; total
+final del instalador del orden de ~700 MB). Los binarios **no se versionan** (límite
+de 100 MB de GitHub): se obtienen con `npm run fetch-engines`, que descarga, verifica
+SHA-256 y deja todo en `vendor/`. En la app instalada, `extraResources` copia
+`vendor/kokoro` → `resources/kokoro` y `vendor/whisper` → `resources/whisper`; la app
+resuelve las rutas sola (`app/core/runtime-paths.js`). `vendor/` está en `.gitignore`.
 
-Layout esperado (coloca aquí los binarios; no se versionan):
+Versiones fijadas por el script (verificadas 2026-10-18):
+
+| Componente | Origen | Versión |
+| --- | --- | --- |
+| Python embebido Windows x64 | python.org | 3.13.16 |
+| pip (bootstrap) | PyPI (`pip`) | 26.2.1 |
+| kokoro-onnx | PyPI | 0.6.1 |
+| onnxruntime | PyPI | 1.31.0 |
+| numpy | PyPI | 2.5.4 |
+| soundfile | PyPI | 0.14.0 |
+| phonemizer | PyPI | 3.4.0 |
+| espeakng-loader | PyPI | 0.2.4 |
+| espeak-ng (datos + DLL) | GitHub espeak-ng | 1.52.0 |
+| whisper.cpp (Windows x64) | GitHub whisper.cpp | b5454 |
+| Kokoro-82M ONNX + voces | GitHub kokoro-onnx | v1.0 / v1.1 |
+| ggml-base.bin (Whisper) | Hugging Face whisper.cpp | base |
+
+Layout generado:
 
 ```
 vendor/kokoro/                      -> resources/kokoro/
-  runtime/kokoro-runtime.exe        (lanzador del Python embebido + kokoro-onnx)
-  espeak-ng/                        (datos/dlls G2P español, GPL-3.0)
+  runtime/kokoro-runtime.exe        (lanzador C# compilado que invoca el Python embebido)
+  runtime/runner.py                 (síntesis kokoro-onnx -> wav 24 kHz)
+  runtime/python/                   (Python 3.13.16 embebido + pip + paquetes)
+  espeak-ng/                        (espeak-ng.exe, libespeak-ng.dll, espeak-ng-data; GPL-3.0)
   models/kokoro-v1.0.onnx
   models/voices-v1.0.bin
 
 vendor/whisper/                     -> resources/whisper/
-  bin/whisper-cli.exe               (whisper.cpp, build CPU o Vulkan)
+  bin/whisper-cli.exe + DLLs        (whisper.cpp, build CPU)
   models/ggml-base.bin
 ```
 
-El runtime de Kokoro (Python embebido + `kokoro-onnx` + `onnxruntime` + `espeak-ng`)
-puede ser un `.exe` autocontenido o un lanzador que invoque el intérprete embebido.
-El wrapper debe aceptar `--output <ruta.wav> --voice <id> --lang <es|en> [--speed]`.
+`kokoro-runtime.exe` acepta `--output <ruta.wav> --voice <id> --lang <es|en> [--speed]`
+y además recibe el texto por stdin como JSON (lo envía la app).
 
 ### Vulkan
 

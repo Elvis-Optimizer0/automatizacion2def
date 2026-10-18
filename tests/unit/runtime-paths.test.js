@@ -39,9 +39,10 @@ test.describe('bundled runtime resolution', () => {
   test('returns null when the runtime folder is absent', () => {
     const resourcesDir = makeTemp('vm-res-');
     try {
-      expect(resolveBundledDir('no-such-runtime', { resourcesDir })).toBeNull();
-      expect(resolveKokoroRuntime({ resourcesDir }).executable).toBeNull();
-      expect(resolveWhisperRuntime({ resourcesDir }).executable).toBeNull();
+      const opts = { resourcesDir, bundled: false };
+      expect(resolveBundledDir('no-such-runtime', opts)).toBeNull();
+      expect(resolveKokoroRuntime(opts).executable).toBeNull();
+      expect(resolveWhisperRuntime(opts).executable).toBeNull();
     } finally {
       fs.rmSync(resourcesDir, { recursive: true, force: true });
     }
@@ -95,7 +96,7 @@ test.describe('engines use the bundled runtime without VM_* variables', () => {
   test('voice error names the searched runtime folders when nothing is installed', () => {
     const resourcesDir = makeTemp('vm-res-');
     try {
-      const readiness = checkVoiceEngine('ef_dora', {}, null, { resourcesDir });
+      const readiness = checkVoiceEngine('ef_dora', {}, null, { resourcesDir, bundled: false });
       expect(readiness.ready).toBe(false);
       expect(readiness.runtimeSearchDirs.some(dir => dir.includes('kokoro'))).toBe(true);
     } finally {
@@ -118,10 +119,10 @@ test.describe('engines use the bundled runtime without VM_* variables', () => {
   test('alignment error says what is missing and where it is searched', () => {
     const resourcesDir = makeTemp('vm-res-');
     try {
-      const message = describeAlignmentMissing({ resourcesDir });
+      const message = describeAlignmentMissing({ resourcesDir, bundled: false });
       expect(message).toContain('E_ALIGN_ENGINE_MISSING');
       expect(message).toContain('whisper-cli');
-      expect(message).toContain('vendor');
+      expect(message).toContain(resourcesDir);
     } finally {
       fs.rmSync(resourcesDir, { recursive: true, force: true });
     }

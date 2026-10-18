@@ -9,8 +9,11 @@ const WHISPER_MODEL_FILES = ['ggml-base.bin'];
 function bundledSearchDirs(name, options = {}) {
   const dirs = [];
   if (options.resourcesDir) dirs.push(path.join(options.resourcesDir, name));
-  dirs.push(path.join(APP_ROOT, 'vendor', name));
-  if (process.resourcesPath) dirs.push(path.join(process.resourcesPath, name));
+  if (options.vendorDir) dirs.push(path.join(options.vendorDir, name));
+  if (options.bundled !== false) {
+    dirs.push(path.join(APP_ROOT, 'vendor', name));
+    if (process.resourcesPath) dirs.push(path.join(process.resourcesPath, name));
+  }
   return dirs;
 }
 

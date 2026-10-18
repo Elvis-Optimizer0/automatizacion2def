@@ -1,4 +1,5 @@
 module.exports = {
+  ignorePatterns: ['vendor/', '.engine-cache/', 'dist/', 'out/', 'test-results/', 'playwright-report/'],
   env: {
     browser: true,
     es2022: true,

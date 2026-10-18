@@ -30,7 +30,7 @@ function createWindow() {
     height: 720,
     minWidth: 1024,
     minHeight: 600,
-    title: 'Video Maker v0.7.4',
+    title: 'Video Maker v0.7.5',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

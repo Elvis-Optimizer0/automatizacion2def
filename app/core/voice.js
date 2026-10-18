@@ -202,12 +202,13 @@ function synthesizeVoice(options, hooks = {}) {
 
     let command;
     let args;
+    let engine = null;
     if (testMode) {
       command = process.execPath;
       args = [path.join(__dirname, '..', 'workers', 'voice-worker.js')];
     } else {
-      const engineOptions = { resourcesDir: opts.resourcesDir };
-      const engine = resolveEngine(opts.voiceId, env, engineOptions);
+      const engineOptions = { resourcesDir: opts.resourcesDir, bundled: opts.bundled };
+      engine = resolveEngine(opts.voiceId, env, engineOptions);
       const readiness = checkVoiceEngine(opts.voiceId, env, opts.modelsDir, engineOptions);
       if (!engine || !readiness.ready) {
         reject(new Error(buildVoiceEngineError(readiness)));
@@ -279,8 +280,9 @@ function synthesizeVoice(options, hooks = {}) {
 
     child.stderr.on('data', (data) => { stderr += data.toString(); });
 
-    if (testMode) {
-      child.stdin.write(JSON.stringify({ outputPath, duration, text, language, speed, pause }));
+    const wantsStdin = testMode || (engine && engine.engine === 'kokoro');
+    if (wantsStdin) {
+      child.stdin.write(JSON.stringify({ outputPath, duration, text, language, speed, pause, voiceId: opts.voiceId }));
       child.stdin.end();
     }
 

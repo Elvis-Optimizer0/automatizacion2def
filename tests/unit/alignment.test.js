@@ -23,8 +23,8 @@ test.describe('alignment language and engine', () => {
   });
 
   test('returns no engine when whisper paths are missing', () => {
-    expect(resolveEngine({})).toBeNull();
-    expect(resolveEngine({ VM_WHISPER_BIN: 'relative', VM_WHISPER_MODEL: 'relative' })).toBeNull();
+    expect(resolveEngine({}, { bundled: false })).toBeNull();
+    expect(resolveEngine({ VM_WHISPER_BIN: 'relative', VM_WHISPER_MODEL: 'relative' }, { bundled: false })).toBeNull();
   });
 });
 
@@ -105,7 +105,7 @@ test.describe('alignment entry points', () => {
 
   test('reports a missing engine outside test mode with a valid file', async () => {
     const path = require('path');
-    await expect(alignAudio({ audioPath: path.join(__dirname, 'alignment.test.js'), text: 'hola', env: {} }))
+    await expect(alignAudio({ audioPath: path.join(__dirname, 'alignment.test.js'), text: 'hola', env: {}, options: { bundled: false } }))
       .rejects.toThrow(E_ALIGN_ENGINE_MISSING);
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "video-maker",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Video Maker - Professional video creation tool",
   "main": "app/main.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "lint": "eslint . --ext .js",
     "test": "playwright test",
     "e2e": "playwright test",
+    "fetch-engines": "node scripts/fetch-engines.js",
     "dist": "electron-builder --publish=never",
     "postinstall": "electron-builder install-app-deps"
   },
