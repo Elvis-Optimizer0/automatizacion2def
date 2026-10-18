@@ -197,6 +197,26 @@ function normalizeModelId(providedId) {
   return trimmed || null;
 }
 
+function checkModelFiles(modelsBaseDir, modelId, catalog = MODEL_CATALOG) {
+  if (typeof modelsBaseDir !== 'string' || !modelsBaseDir.trim()) {
+    return { modelId, modelFound: false, modelDir: null, missingFiles: [] };
+  }
+  const model = normalizeCatalog(catalog).find(item => item.id === modelId);
+  if (!model) {
+    return { modelId, modelFound: false, modelDir: null, missingFiles: [] };
+  }
+  const modelDir = path.join(modelsBaseDir, modelId);
+  const missingFiles = [];
+  for (const file of model.files) {
+    const perModel = path.join(modelDir, file.fileName);
+    const flat = path.join(modelsBaseDir, file.fileName);
+    if (!fs.existsSync(perModel) && !fs.existsSync(flat)) {
+      missingFiles.push({ fileName: file.fileName, path: perModel });
+    }
+  }
+  return { modelId, modelFound: true, modelDir, missingFiles };
+}
+
 function importModel(sourcePath, modelsDir, catalog = MODEL_CATALOG) {
   if (typeof sourcePath !== 'string' || !sourcePath.trim()) {
     throw toTypeError('sourcePath', sourcePath);
@@ -364,6 +384,7 @@ module.exports = {
   listModels,
   findModel,
   listKnownFileNames,
+  checkModelFiles,
   normalizeImportPath,
   normalizeModelId,
   importModel,

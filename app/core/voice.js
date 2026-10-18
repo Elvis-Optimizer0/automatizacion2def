@@ -1,7 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const { listModels } = require('./models.js');
+const { checkModelFiles } = require('./models.js');
+const { resolveKokoroRuntime } = require('./runtime-paths.js');
 
 const E_VOICE_ENGINE_MISSING = 'E_VOICE_ENGINE_MISSING';
 const E_VOICE_FAILED = 'E_VOICE_FAILED';
@@ -77,54 +78,70 @@ function simulateSpeechDuration(text, options = {}) {
   return Math.round((base + pauseTotal) * 100) / 100;
 }
 
-function resolveEngine(voiceId, env = process.env) {
+function isUsableBinary(value) {
+  return !!(value && path.isAbsolute(value) && fs.existsSync(value));
+}
+
+function resolveEngine(voiceId, env = process.env, options = {}) {
   const voice = getVoice(voiceId);
   const engine = voice ? voice.engine : 'kokoro';
 
-  if (engine === 'piper') {
-    const bin = env.VM_PIPER_BIN;
-    if (bin && path.isAbsolute(bin) && fs.existsSync(bin)) {
-      return { engine: 'piper', executable: bin, model: env.VM_PIPER_MODEL || '' };
+  if (engine === 'kokoro') {
+    const bundled = resolveKokoroRuntime(options);
+    if (bundled.executable) {
+      return {
+        engine: 'kokoro',
+        executable: bundled.executable,
+        modelsDir: bundled.modelsDir,
+        model: env.VM_KOKORO_MODEL || '',
+        source: 'bundled'
+      };
     }
+    if (isUsableBinary(env.VM_KOKORO_BIN)) {
+      return { engine: 'kokoro', executable: env.VM_KOKORO_BIN, model: env.VM_KOKORO_MODEL || '', source: 'env' };
+    }
+    if (isUsableBinary(env.VM_PIPER_BIN)) {
+      return { engine: 'piper', executable: env.VM_PIPER_BIN, model: env.VM_PIPER_MODEL || '', source: 'env' };
+    }
+    return null;
   }
 
-  const kokoroBin = env.VM_KOKORO_BIN;
-  if (kokoroBin && path.isAbsolute(kokoroBin) && fs.existsSync(kokoroBin)) {
-    return { engine: 'kokoro', executable: kokoroBin, model: env.VM_KOKORO_MODEL || '' };
-  }
-
-  if (env.VM_PIPER_BIN && path.isAbsolute(env.VM_PIPER_BIN) && fs.existsSync(env.VM_PIPER_BIN)) {
-    return { engine: 'piper', executable: env.VM_PIPER_BIN, model: env.VM_PIPER_MODEL || '' };
+  if (isUsableBinary(env.VM_PIPER_BIN)) {
+    return { engine: 'piper', executable: env.VM_PIPER_BIN, model: env.VM_PIPER_MODEL || '', source: 'env' };
   }
 
   return null;
 }
 
-function isUsableBinary(value) {
-  return !!(value && path.isAbsolute(value) && fs.existsSync(value));
-}
-
-function checkVoiceEngine(voiceId, env = process.env, modelsDir) {
+function checkVoiceEngine(voiceId, env = process.env, modelsDir, options = {}) {
   const voice = getVoice(voiceId);
   const engine = voice ? voice.engine : 'kokoro';
   const runtimeEnv = engine === 'piper' ? 'VM_PIPER_BIN' : 'VM_KOKORO_BIN';
-  const runtime = isUsableBinary(env[runtimeEnv]) ? env[runtimeEnv] : null;
 
-  const models = modelsDir ? listModels(modelsDir) : [];
-  const model = models.find(item => item.engine === engine) || null;
-  const missingFiles = model
-    ? model.files.filter(file => !file.exists).map(file => ({ fileName: file.fileName, path: file.path }))
-    : [];
+  const bundled = engine === 'kokoro'
+    ? resolveKokoroRuntime(options)
+    : { dir: null, executable: null, modelsDir: null, searched: [] };
+
+  const runtime = bundled.executable
+    || (isUsableBinary(env[runtimeEnv]) ? env[runtimeEnv] : null);
+
+  const modelsBaseDir = (bundled.executable && bundled.modelsDir) || modelsDir || null;
+  const modelInfo = engine === 'piper'
+    ? { modelFound: true, modelDir: null, missingFiles: [] }
+    : checkModelFiles(modelsBaseDir, engine);
 
   return {
     engine,
     runtimeEnv,
     runtime,
-    modelsDir: modelsDir || null,
-    modelDir: model ? model.dir : null,
-    modelFound: !!model,
-    missingFiles,
-    ready: !!runtime && missingFiles.length === 0
+    bundled: !!bundled.executable,
+    bundledDir: bundled.dir,
+    runtimeSearchDirs: bundled.searched || [],
+    modelsDir: modelsBaseDir,
+    modelDir: modelInfo.modelDir,
+    modelFound: modelInfo.modelFound,
+    missingFiles: modelInfo.missingFiles,
+    ready: !!runtime && modelInfo.missingFiles.length === 0
   };
 }
 
@@ -135,10 +152,13 @@ function buildVoiceEngineError(readiness) {
       details.push(`falta ${file.fileName} (se busca en ${file.path})`);
     });
   } else if (!readiness.modelFound) {
-    details.push(`no se encontró el modelo ${readiness.engine} en ${readiness.modelsDir || 'userData/models'}`);
+    details.push(`no se encontraron los archivos del modelo ${readiness.engine} en ${readiness.modelsDir || 'userData/models'}`);
   }
   if (!readiness.runtime) {
-    details.push(`runtime no configurado: define ${readiness.runtimeEnv}`);
+    const where = readiness.runtimeSearchDirs && readiness.runtimeSearchDirs.length
+      ? ` (se busca en ${readiness.runtimeSearchDirs.join(' o ')})`
+      : '';
+    details.push(`falta el runtime de ${readiness.engine}${where}`);
   }
   return `${E_VOICE_ENGINE_MISSING}: ${details.length ? details.join('; ') : 'no hay motor de voz local instalado'}`;
 }
@@ -186,9 +206,10 @@ function synthesizeVoice(options, hooks = {}) {
       command = process.execPath;
       args = [path.join(__dirname, '..', 'workers', 'voice-worker.js')];
     } else {
-      const engine = resolveEngine(opts.voiceId, env);
-      const readiness = checkVoiceEngine(opts.voiceId, env, opts.modelsDir);
-      if (!engine || (opts.modelsDir && readiness.missingFiles.length > 0)) {
+      const engineOptions = { resourcesDir: opts.resourcesDir };
+      const engine = resolveEngine(opts.voiceId, env, engineOptions);
+      const readiness = checkVoiceEngine(opts.voiceId, env, opts.modelsDir, engineOptions);
+      if (!engine || !readiness.ready) {
         reject(new Error(buildVoiceEngineError(readiness)));
         return;
       }

@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { resolveWhisperRuntime } = require('./runtime-paths.js');
 
 const E_ALIGN_ENGINE_MISSING = 'E_ALIGN_ENGINE_MISSING';
 const E_ALIGN_FAILED = 'E_ALIGN_FAILED';
@@ -40,12 +41,30 @@ function simulateWordTimings(text, duration, options = {}) {
   }));
 }
 
-function resolveEngine(env = process.env) {
+function resolveEngine(env = process.env, options = {}) {
+  const bundled = resolveWhisperRuntime(options);
+  if (bundled.executable && bundled.modelPath) {
+    return { executable: bundled.executable, modelPath: bundled.modelPath, source: 'bundled' };
+  }
+
   const executable = env.VM_WHISPER_BIN;
   const modelPath = env.VM_WHISPER_MODEL;
   if (!executable || !path.isAbsolute(executable) || !fs.existsSync(executable)) return null;
   if (!modelPath || !path.isAbsolute(modelPath) || !fs.existsSync(modelPath)) return null;
-  return { executable, modelPath };
+  return { executable, modelPath, source: 'env' };
+}
+
+function describeAlignmentMissing(options = {}) {
+  const bundled = resolveWhisperRuntime(options);
+  const details = [];
+  if (!bundled.executable) {
+    details.push(`falta whisper-cli (se busca en ${bundled.searched.join(' o ')})`);
+  }
+  if (!bundled.modelPath) {
+    details.push('falta el modelo ggml-base.bin (se busca en <whisper>/models o <whisper>)');
+  }
+  if (details.length === 0) details.push('el runtime de whisper.cpp empaquetado está incompleto');
+  return `${E_ALIGN_ENGINE_MISSING}: ${details.join('; ')}`;
 }
 
 function parseWhisperJson(data) {
@@ -125,9 +144,9 @@ async function alignAudio({ audioPath, text, duration, language, env = process.e
     return simulateWordTimings(text, duration, options);
   }
 
-  const engine = resolveEngine(env);
+  const engine = resolveEngine(env, options);
   if (!engine) {
-    throw new Error(`${E_ALIGN_ENGINE_MISSING}: falta el binario de whisper.cpp (VM_WHISPER_BIN) o el modelo (VM_WHISPER_MODEL)`);
+    throw new Error(describeAlignmentMissing(options));
   }
   return runWhisper({ ...engine, audioPath, language: lang }, options);
 }
@@ -214,6 +233,7 @@ module.exports = {
   tokenize,
   simulateWordTimings,
   resolveEngine,
+  describeAlignmentMissing,
   parseWhisperJson,
   runWhisper,
   alignAudio,

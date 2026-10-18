@@ -92,7 +92,8 @@ test.describe('voice engine resolution', () => {
       const message = buildVoiceEngineError(readiness);
       expect(message).toContain('falta kokoro-v1.0.onnx');
       expect(message).toContain(path.join(modelsDir, 'kokoro', 'voices-v1.0.bin'));
-      expect(message).toContain('VM_KOKORO_BIN');
+      expect(message).toContain('falta el runtime de kokoro');
+      expect(message).toContain('vendor');
     } finally {
       fs.rmSync(modelsDir, { recursive: true, force: true });
     }
