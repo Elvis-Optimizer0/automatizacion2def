@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   generateVoiceSample: (options) => ipcRenderer.invoke('voice:sample', options),
   cancelVoice: () => ipcRenderer.invoke('voice:cancel'),
   alignScenes: (payload) => ipcRenderer.invoke('align:scenes', payload),
+  getCapabilities: (options) => ipcRenderer.invoke('capabilities:get', options),
   listModels: () => ipcRenderer.invoke('models:list'),
   downloadModels: (modelId) => ipcRenderer.invoke('models:download', modelId),
   importModel: () => ipcRenderer.invoke('models:import'),

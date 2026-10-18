@@ -11,6 +11,7 @@ const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/p
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice } = require('./core/voice.js');
 const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
+const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
@@ -414,6 +415,15 @@ ipcMain.handle('voice:cancel', async () => {
     return { cancelled: true };
   }
   return { cancelled: false };
+});
+
+ipcMain.handle('capabilities:get', async (_, options) => {
+  const requested = options && options.directml === false ? false : true;
+  const capabilities = getCapabilities({});
+  return {
+    ...capabilities,
+    acceleration: resolveAcceleration({ gpu: capabilities.gpu, directmlRequested: requested })
+  };
 });
 
 ipcMain.handle('align:scenes', async (_, payload) => {

@@ -240,7 +240,8 @@ const state = {
     outputFolder: null,
     status: ''
   },
-  hwAccel: { enabled: true, available: false }
+  hwAccel: { enabled: true, available: false },
+  capabilities: null
 };
 
 const voiceState = {
@@ -2007,6 +2008,46 @@ async function detectCodecs() {
   }
 }
 
+function renderCapabilities(capabilities) {
+  const info = document.getElementById('gpu-info');
+  const checkbox = document.getElementById('directml-checkbox');
+  if (!info) return;
+  if (!capabilities || !capabilities.acceleration) {
+    info.textContent = 'No se pudo determinar la aceleración disponible.';
+    return;
+  }
+  const accel = capabilities.acceleration;
+  if (checkbox) {
+    checkbox.checked = accel.voiceBackend === 'directml';
+  }
+  const label = accel.accelerated
+    ? `Aceleración activa: ${accel.alignBackend.toUpperCase()} (alineación) · ${accel.voiceBackend.toUpperCase()} (voz)`
+    : 'Sin GPU compatible: se usará CPU para voz y alineación (más lento).';
+  info.textContent = label;
+}
+
+async function handleProbeGpu() {
+  const checkbox = document.getElementById('directml-checkbox');
+  const directml = checkbox ? checkbox.checked : true;
+  if (!window.api || typeof window.api.getCapabilities !== 'function') {
+    const info = document.getElementById('gpu-info');
+    if (info) info.textContent = 'No se pudo consultar la aceleración disponible.';
+    return;
+  }
+  try {
+    const capabilities = await window.api.getCapabilities({ directml });
+    state.capabilities = capabilities;
+    renderCapabilities(capabilities);
+    if (checkbox) checkbox.disabled = !(capabilities.gpu && capabilities.gpu.directml);
+    if (directml && capabilities.acceleration && capabilities.acceleration.voiceBackend === 'cpu') {
+      showToast('DirectML no disponible; la voz se generará en CPU', 'warning');
+    }
+  } catch (err) {
+    const info = document.getElementById('gpu-info');
+    if (info) info.textContent = `No se pudo detectar la GPU: ${err.message}`;
+  }
+}
+
 async function handleExport() {
   if (state.export.isRendering) return;
   if (state.timeline.length === 0) {
@@ -2946,6 +2987,19 @@ const CONTROLS = [
     }
   },
   {
+    id: 'directml-checkbox',
+    tipo: 'checkbox',
+    handler: (e) => {
+      if (state.capabilities) state.capabilities.directmlRequested = e.target.checked;
+      handleProbeGpu();
+    }
+  },
+  {
+    id: 'gpu-probe-btn',
+    tipo: 'button',
+    handler: handleProbeGpu
+  },
+  {
     id: 'voice-panel-toggle-btn',
     tipo: 'button',
     handler: showVoicePanel
@@ -3210,6 +3264,7 @@ document.addEventListener('DOMContentLoaded', () => {
   syncVoiceControls();
   refreshModelsList();
   detectCodecs();
+  handleProbeGpu();
 
   console.log('Video Maker v0.6.1 - Renderer loaded');
 });

@@ -631,6 +631,15 @@
             Aceleración por hardware (AMD AMF)
           </label>
           <p id="hwaccel-info" class="subtitle-notice">Detectando codificadores…</p>
+          <label class="checkbox-label">
+            <input type="checkbox" id="directml-checkbox" checked>
+            <span class="checkmark"></span>
+            Probar DirectML para la voz (con respaldo a CPU)
+          </label>
+          <div class="export-control-row">
+            <button id="gpu-probe-btn" class="btn btn-secondary btn-sm" type="button">Detectar aceleración</button>
+          </div>
+          <p id="gpu-info" class="subtitle-notice">Detectando GPU.</p>
         </fieldset>
       </div>
 
