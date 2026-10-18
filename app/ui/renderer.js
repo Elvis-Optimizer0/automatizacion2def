@@ -249,12 +249,14 @@ const voiceState = {
   languages: [],
   voices: [],
   samples: {},
+  modelsDir: '',
   generating: false,
   sampleAudio: null
 };
 
 const modelState = {
   models: [],
+  modelsDir: '',
   downloading: false
 };
 
@@ -706,6 +708,7 @@ async function refreshVoiceLanguages() {
     voiceState.languages = info.languages || [];
     voiceState.voices = info.voices || [];
     voiceState.samples = info.samples || {};
+    voiceState.modelsDir = info.modelsDir || '';
 
     select.innerHTML = '';
     voiceState.languages.forEach((lang) => {
@@ -745,6 +748,15 @@ function refreshVoiceSelect() {
   }
   const sampleBtn = document.getElementById('voice-sample-btn');
   if (sampleBtn) sampleBtn.disabled = voices.length === 0;
+
+  const selected = voices.find(voice => voice.id === select.value) || null;
+  if (selected && selected.available === false) {
+    const missing = (selected.missingFiles || [])
+      .map(file => `${file.fileName} (${file.path})`)
+      .join(', ');
+    const dir = selected.modelDir || voiceState.modelsDir || 'userData/models';
+    setVoiceStatus(`Faltan archivos del modelo de voz: ${missing || 'ninguno detectado'}. Carpeta: ${dir}.`, 'warning');
+  }
 }
 
 function syncVoiceControls() {
@@ -854,8 +866,9 @@ async function handleGenerateVoice() {
   } catch (err) {
     const message = String(err.message || err);
     if (message.includes('E_VOICE_ENGINE_MISSING')) {
-      setVoiceStatus('Motor de voz no instalado. Instala Kokoro (ONNX) o Piper (ver LICENSES.md).', 'error');
-      showToast('Motor de voz no instalado (ver LICENSES.md)', 'error');
+      const detail = message.replace(/^E_VOICE_ENGINE_MISSING:\s*/, '');
+      setVoiceStatus(`No se puede generar voz: ${detail}`, 'error');
+      showToast('Faltan archivos del modelo de voz', 'error');
     } else if (message.includes('E_VOICE_CANCELLED')) {
       setVoiceStatus('Generación cancelada', 'warning');
     } else {
@@ -982,7 +995,10 @@ function renderModelsList(models) {
   container.innerHTML = '';
   models.forEach((model) => {
     const row = document.createElement('div');
-    row.className = 'model-row';
+    row.className = 'model-row model-row-stack';
+
+    const header = document.createElement('div');
+    header.className = 'model-row-head';
 
     const name = document.createElement('span');
     name.className = 'model-name';
@@ -991,20 +1007,45 @@ function renderModelsList(models) {
     const status = document.createElement('span');
     const stateClass = model.installed ? (model.verified ? 'ok' : 'warn') : 'missing';
     status.className = `model-status ${stateClass}`;
-    status.textContent = model.installed ? (model.verified ? 'Listo' : 'Sin verificar') : 'Falta';
+    status.textContent = model.installed ? (model.verified ? 'Instalado' : 'Instalado (sin verificar)') : 'Incompleto';
 
-    row.appendChild(name);
-    row.appendChild(status);
+    header.appendChild(name);
+    header.appendChild(status);
+    row.appendChild(header);
+
+    (model.files || []).forEach((file) => {
+      const line = document.createElement('div');
+      line.className = 'model-file';
+
+      const label = document.createElement('span');
+      label.className = 'model-file-name';
+      label.textContent = file.fileName;
+
+      const fileState = document.createElement('span');
+      const fileClass = file.exists ? (file.verified ? 'ok' : 'warn') : 'missing';
+      fileState.className = `model-status ${fileClass}`;
+      fileState.textContent = file.exists
+        ? (file.verified ? 'Listo' : 'Sin verificar')
+        : `falta ${file.fileName}`;
+
+      line.appendChild(label);
+      line.appendChild(fileState);
+      row.appendChild(line);
+    });
+
     container.appendChild(row);
   });
 
-  const missing = models.filter(model => !model.installed);
+  const incomplete = models.filter(model => !model.installed);
   if (models.length === 0) {
     setModelsStatus('No hay modelos registrados.', 'warning');
-  } else if (missing.length > 0) {
-    setModelsStatus(`Faltan ${missing.length} modelo(s). Descárgalos o impórtalos manualmente.`, 'warning');
+  } else if (incomplete.length > 0) {
+    const detail = incomplete
+      .map(model => `${model.name}: ${(model.missingFiles || []).join(', ')}`)
+      .join(' · ');
+    setModelsStatus(`Faltan archivos (${detail}). Se buscan en userData/models/<id>/<archivo>.`, 'warning');
   } else {
-    setModelsStatus('Todos los modelos están disponibles.', 'success');
+    setModelsStatus('Todos los modelos están instalados.', 'success');
   }
 }
 
@@ -1013,6 +1054,7 @@ async function refreshModelsList() {
   try {
     const info = await window.api.listModels();
     modelState.models = info.models || [];
+    modelState.modelsDir = info.dir || '';
     renderModelsList(modelState.models);
   } catch (err) {
     setModelsStatus(`No se pudo leer la carpeta de modelos: ${err.message}`, 'error');
@@ -1031,6 +1073,7 @@ async function handleDownloadModels() {
     const result = await window.api.downloadModels();
     modelState.models = result.models || [];
     renderModelsList(modelState.models);
+    await refreshVoiceLanguages();
     setModelsProgress(100);
     showToast('Modelos descargados', 'success');
   } catch (err) {
@@ -1043,16 +1086,18 @@ async function handleDownloadModels() {
   }
 }
 
-async function handleImportModel() {
+async function handleImportModel(filePath) {
   try {
-    const result = await window.api.importModel();
+    const result = await window.api.importModel(filePath);
     if (!result) return;
     modelState.models = result.models || [];
     renderModelsList(modelState.models);
-    showToast(`Modelo importado: ${result.imported.fileName}`, 'success');
+    await refreshVoiceLanguages();
+    const imported = result.imported || {};
+    showToast(`Modelo importado: ${imported.fileName || 'archivo'} → ${imported.path || ''}`, 'success');
   } catch (err) {
     setModelsStatus(`Error al importar el modelo: ${err.message}`, 'error');
-    showToast('Error al importar el modelo', 'error');
+    showToast(`No se pudo importar el modelo: ${err.message}`, 'error');
   }
 }
 
@@ -2250,7 +2295,7 @@ async function handleGenerateFullVideo() {
   } catch (err) {
     const message = String(err.message || err);
     if (message.includes('E_VOICE_ENGINE_MISSING')) {
-      setPipelineStatus('Motor de voz no instalado (ver LICENSES.md).', 'error');
+      setPipelineStatus(message.replace(/^E_VOICE_ENGINE_MISSING:\s*/, 'No se puede generar voz: '), 'error');
     } else if (message.includes('E_ALIGN_ENGINE_MISSING')) {
       setPipelineStatus('Motor de alineación no instalado (ver LICENSES.md).', 'error');
     } else {
@@ -3375,7 +3420,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice, refreshModelsList, handleDownloadModels, handleSyncScenes, handleGenerateFullVideo, handleProbeGpu, renderCapabilities };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice, refreshModelsList, handleDownloadModels, handleImportModel, handleSyncScenes, handleGenerateFullVideo, handleProbeGpu, renderCapabilities };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3399,5 +3444,5 @@ document.addEventListener('DOMContentLoaded', () => {
   detectCodecs();
   handleProbeGpu();
 
-  console.log('Video Maker v0.7.0 - Renderer loaded');
+  console.log('Video Maker v0.7.2 - Renderer loaded');
 });

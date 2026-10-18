@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { listModels } = require('./models.js');
 
 const E_VOICE_ENGINE_MISSING = 'E_VOICE_ENGINE_MISSING';
 const E_VOICE_FAILED = 'E_VOICE_FAILED';
@@ -99,6 +100,49 @@ function resolveEngine(voiceId, env = process.env) {
   return null;
 }
 
+function isUsableBinary(value) {
+  return !!(value && path.isAbsolute(value) && fs.existsSync(value));
+}
+
+function checkVoiceEngine(voiceId, env = process.env, modelsDir) {
+  const voice = getVoice(voiceId);
+  const engine = voice ? voice.engine : 'kokoro';
+  const runtimeEnv = engine === 'piper' ? 'VM_PIPER_BIN' : 'VM_KOKORO_BIN';
+  const runtime = isUsableBinary(env[runtimeEnv]) ? env[runtimeEnv] : null;
+
+  const models = modelsDir ? listModels(modelsDir) : [];
+  const model = models.find(item => item.engine === engine) || null;
+  const missingFiles = model
+    ? model.files.filter(file => !file.exists).map(file => ({ fileName: file.fileName, path: file.path }))
+    : [];
+
+  return {
+    engine,
+    runtimeEnv,
+    runtime,
+    modelsDir: modelsDir || null,
+    modelDir: model ? model.dir : null,
+    modelFound: !!model,
+    missingFiles,
+    ready: !!runtime && missingFiles.length === 0
+  };
+}
+
+function buildVoiceEngineError(readiness) {
+  const details = [];
+  if (readiness.modelFound && readiness.missingFiles.length > 0) {
+    readiness.missingFiles.forEach((file) => {
+      details.push(`falta ${file.fileName} (se busca en ${file.path})`);
+    });
+  } else if (!readiness.modelFound) {
+    details.push(`no se encontró el modelo ${readiness.engine} en ${readiness.modelsDir || 'userData/models'}`);
+  }
+  if (!readiness.runtime) {
+    details.push(`runtime no configurado: define ${readiness.runtimeEnv}`);
+  }
+  return `${E_VOICE_ENGINE_MISSING}: ${details.length ? details.join('; ') : 'no hay motor de voz local instalado'}`;
+}
+
 function buildEngineArgs(engine, options) {
   if (engine.engine === 'piper') {
     const args = ['-m', engine.model || '', '-f', options.outputPath];
@@ -143,8 +187,9 @@ function synthesizeVoice(options, hooks = {}) {
       args = [path.join(__dirname, '..', 'workers', 'voice-worker.js')];
     } else {
       const engine = resolveEngine(opts.voiceId, env);
-      if (!engine) {
-        reject(new Error(`${E_VOICE_ENGINE_MISSING}: no local voice engine found. Instala Kokoro (ONNX) o Piper y define VM_KOKORO_BIN / VM_PIPER_BIN.`));
+      const readiness = checkVoiceEngine(opts.voiceId, env, opts.modelsDir);
+      if (!engine || (opts.modelsDir && readiness.missingFiles.length > 0)) {
+        reject(new Error(buildVoiceEngineError(readiness)));
         return;
       }
       command = engine.executable;
@@ -249,5 +294,7 @@ module.exports = {
   isTestMode,
   simulateSpeechDuration,
   resolveEngine,
+  checkVoiceEngine,
+  buildVoiceEngineError,
   synthesizeVoice
 };

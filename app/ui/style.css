@@ -1028,6 +1028,31 @@ body {
   font-size: var(--font-size-sm, 13px);
 }
 
+.model-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.model-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.model-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.model-file-name {
+  font-family: monospace;
+}
+
 .model-status.ok { color: #4caf50; }
 .model-status.warn { color: #ffb300; }
 .model-status.missing { color: #ef5350; }

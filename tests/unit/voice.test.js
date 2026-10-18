@@ -9,6 +9,8 @@ const {
   isTestMode,
   simulateSpeechDuration,
   resolveEngine,
+  checkVoiceEngine,
+  buildVoiceEngineError,
   synthesizeVoice,
   VOICE_CATALOG
 } = require('../../app/core/voice.js');
@@ -76,6 +78,35 @@ test.describe('voice duration estimation', () => {
 test.describe('voice engine resolution', () => {
   test('returns null when no engine binary is configured', () => {
     expect(resolveEngine('ef_dora', {})).toBeNull();
+  });
+
+  test('reports the exact missing model files and their search paths', () => {
+    const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-voice-models-'));
+    try {
+      const readiness = checkVoiceEngine('ef_dora', {}, modelsDir);
+      expect(readiness.ready).toBe(false);
+      expect(readiness.modelDir).toBe(path.join(modelsDir, 'kokoro'));
+      expect(readiness.missingFiles.map(file => file.fileName))
+        .toEqual(['kokoro-v1.0.onnx', 'voices-v1.0.bin']);
+
+      const message = buildVoiceEngineError(readiness);
+      expect(message).toContain('falta kokoro-v1.0.onnx');
+      expect(message).toContain(path.join(modelsDir, 'kokoro', 'voices-v1.0.bin'));
+      expect(message).toContain('VM_KOKORO_BIN');
+    } finally {
+      fs.rmSync(modelsDir, { recursive: true, force: true });
+    }
+  });
+
+  test('names the missing file when synthesis has no usable engine', async () => {
+    const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-voice-models-'));
+    const outputPath = path.join(modelsDir, 'voz.wav');
+    try {
+      await expect(synthesizeVoice({ text: 'hola', outputPath, env: {}, modelsDir }))
+        .rejects.toThrow(/voices-v1\.0\.bin/);
+    } finally {
+      fs.rmSync(modelsDir, { recursive: true, force: true });
+    }
   });
 
   test('rejects a relative or empty output path', async () => {

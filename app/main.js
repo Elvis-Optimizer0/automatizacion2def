@@ -8,12 +8,16 @@ const { parseProjectFile, collectProjectPaths } = require('./core/project-schema
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
-const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice } = require('./core/voice.js');
+const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
 const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
+
+if (process.env.VM_TEST_USERDATA) {
+  app.setPath('userData', process.env.VM_TEST_USERDATA);
+}
 
 let mainWindow;
 let activeVoiceController = null;
@@ -26,7 +30,7 @@ function createWindow() {
     height: 720,
     minWidth: 1024,
     minHeight: 600,
-    title: 'Video Maker v0.7.0',
+    title: 'Video Maker v0.7.2',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -359,9 +363,22 @@ function getUserVoicesDir() {
 }
 
 ipcMain.handle('voice:list', async () => {
+  const modelsDir = getModelsDir(app.getPath('userData'));
+  const simulated = isVoiceTestMode();
+  const voices = listVoiceCatalog().map((voice) => {
+    const readiness = checkVoiceEngine(voice.id, process.env, modelsDir);
+    return {
+      ...voice,
+      available: simulated || readiness.ready,
+      modelsDir,
+      modelDir: readiness.modelDir,
+      missingFiles: readiness.missingFiles
+    };
+  });
   return {
+    modelsDir,
     languages: SUPPORTED_LANGUAGES,
-    voices: listVoiceCatalog(),
+    voices,
     samples: {
       es: getSamplePhrase('es'),
       en: getSamplePhrase('en')
@@ -380,6 +397,7 @@ async function runVoiceGeneration(text, options) {
   fs.mkdirSync(voicesDir, { recursive: true });
   const stamp = `voz-${Date.now()}.wav`;
   const outputPath = process.env.VM_TEST_VOICE_OUT || (options && options.outputPath) || path.join(voicesDir, stamp);
+  const modelsDir = getModelsDir(app.getPath('userData'));
 
   const onProgress = (progress) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -388,7 +406,7 @@ async function runVoiceGeneration(text, options) {
   };
 
   try {
-    const result = await synthesizeVoice({ ...options, text, outputPath }, { onProgress, signal: controller.signal });
+    const result = await synthesizeVoice({ ...options, text, outputPath, modelsDir }, { onProgress, signal: controller.signal });
     return { path: result.outputPath, name: path.basename(result.outputPath), duration: result.duration };
   } finally {
     if (activeVoiceController === controller) activeVoiceController = null;
@@ -468,8 +486,14 @@ ipcMain.handle('models:download', async (_, modelId) => {
   try {
     const results = [];
     for (const model of selected) {
-      const result = await downloadModel(model, dir, { onProgress, signal: controller.signal });
-      results.push(result);
+      for (const file of model.files) {
+        const result = await downloadModel(model, dir, {
+          fileName: file.fileName,
+          onProgress,
+          signal: controller.signal
+        });
+        results.push(result);
+      }
     }
     return { results, models: listModels(dir) };
   } finally {
@@ -477,10 +501,10 @@ ipcMain.handle('models:download', async (_, modelId) => {
   }
 });
 
-ipcMain.handle('models:import', async () => {
+ipcMain.handle('models:import', async (_, providedPath) => {
   const dir = getModelsDir(app.getPath('userData'));
 
-  let filePath = process.env.VM_TEST_MODEL_IN;
+  let filePath = providedPath || process.env.VM_TEST_MODEL_IN;
   if (!filePath) {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Importar modelo',
@@ -496,7 +520,7 @@ ipcMain.handle('models:import', async () => {
 
   try {
     const imported = importModel(filePath, dir);
-    return { imported, models: listModels(dir) };
+    return { imported, models: imported.models || listModels(dir) };
   } catch (err) {
     if (err.message.startsWith(E_MODEL_IMPORT_FAILED) || err.message.startsWith(E_MODEL_PATH_INVALID)) {
       throw err;

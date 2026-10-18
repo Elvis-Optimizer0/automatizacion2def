@@ -4,13 +4,16 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const {
-  KNOWN_MODELS,
+  MODEL_CATALOG,
   verifyModelFile,
   computeSha256,
   listModels,
   importModel,
   downloadModel,
-  getModelsDir
+  getModelsDir,
+  getModelFilePath,
+  getExpectedModelPath,
+  getModelDir
 } = require('../../app/core/models.js');
 
 function sha256Of(buffer) {
@@ -19,6 +22,20 @@ function sha256Of(buffer) {
 
 function makeDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'vm-models-'));
+}
+
+function kokoroCatalog() {
+  return [
+    {
+      id: 'kokoro',
+      name: 'Kokoro voz (ONNX)',
+      engine: 'kokoro',
+      files: [
+        { fileName: 'kokoro-v1.0.onnx', sizeBytes: 8 },
+        { fileName: 'voices-v1.0.bin', sizeBytes: 8 }
+      ]
+    }
+  ];
 }
 
 test.describe('model verification', () => {
@@ -66,20 +83,40 @@ test.describe('model verification', () => {
   });
 });
 
-test.describe('model catalog and import', () => {
-  test('lists every known model as missing on an empty folder', () => {
+test.describe('unified model paths', () => {
+  test('builds <modelsDir>/<id>/<file> for catalog entries', () => {
+    const modelsDir = getModelsDir('C:\\base');
+    expect(modelsDir).toBe(path.join('C:\\base', 'models'));
+
+    const model = MODEL_CATALOG[0];
+    expect(getModelDir(modelsDir, model)).toBe(path.join(modelsDir, 'kokoro'));
+    expect(getModelFilePath(modelsDir, model, model.files[0]))
+      .toBe(path.join(modelsDir, 'kokoro', 'kokoro-v1.0.onnx'));
+    expect(getExpectedModelPath(modelsDir, 'kokoro', 'voices-v1.0.bin'))
+      .toBe(path.join(modelsDir, 'kokoro', 'voices-v1.0.bin'));
+    expect(getExpectedModelPath(modelsDir, 'kokoro', 'desconocido.bin')).toBeNull();
+  });
+
+  test('lists per-file state on an empty folder', () => {
     const dir = makeDir();
     try {
       const models = listModels(dir);
-      expect(models).toHaveLength(KNOWN_MODELS.length);
+      expect(models).toHaveLength(MODEL_CATALOG.length);
       expect(models.every(model => model.missing)).toBe(true);
-      expect(getModelsDir('C:\\base')).toBe(path.join('C:\\base', 'models'));
+      const kokoro = models.find(model => model.id === 'kokoro');
+      expect(kokoro.files.map(file => file.fileName))
+        .toEqual(['kokoro-v1.0.onnx', 'voices-v1.0.bin']);
+      expect(kokoro.installed).toBe(false);
+      expect(kokoro.missingFiles).toEqual(['kokoro-v1.0.onnx', 'voices-v1.0.bin']);
+      expect(kokoro.files[0].message).toBe('falta kokoro-v1.0.onnx');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
-  test('rejects relative and missing source paths on import', () => {
+test.describe('model import', () => {
+  test('rejects relative and missing source paths', () => {
     const dir = makeDir();
     try {
       expect(() => importModel('relativo.bin', dir)).toThrow(/E_MODEL_PATH_INVALID/);
@@ -89,19 +126,70 @@ test.describe('model catalog and import', () => {
     }
   });
 
-  test('imports a matching model file and verifies it', () => {
+  test('rejects an unrecognized file name and lists expected names', () => {
     const dir = makeDir();
     const sourceDir = makeDir();
     try {
-      const buffer = Buffer.from('ABCDEFGH');
-      const sourcePath = path.join(sourceDir, 'ggml-base.bin');
-      fs.writeFileSync(sourcePath, buffer);
+      const sourcePath = path.join(sourceDir, 'otro-modelo.onnx');
+      fs.writeFileSync(sourcePath, Buffer.from('ABCDEFGH'));
+      expect(() => importModel(sourcePath, dir, kokoroCatalog())).toThrow(/archivo no reconocido/);
+      expect(() => importModel(sourcePath, dir, kokoroCatalog())).toThrow(/kokoro-v1\.0\.onnx/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(sourceDir, { recursive: true, force: true });
+    }
+  });
 
-      const catalog = [{ id: 'whisper-model', name: 'W', fileName: 'ggml-base.bin', sizeBytes: buffer.length, sha256: sha256Of(buffer) }];
-      const result = importModel(sourcePath, dir, catalog);
-      expect(fs.existsSync(result.path)).toBe(true);
-      expect(result.verification.verified).toBe(true);
-      expect(result.fileName).toBe('ggml-base.bin');
+  test('importing both kokoro files marks the model installed at the detected path', () => {
+    const dir = makeDir();
+    const sourceDir = makeDir();
+    try {
+      const catalog = kokoroCatalog();
+      const onnxSource = path.join(sourceDir, 'kokoro-v1.0.onnx');
+      const voicesSource = path.join(sourceDir, 'voices-v1.0.bin');
+      fs.writeFileSync(onnxSource, Buffer.from('ABCDEFGH'));
+      fs.writeFileSync(voicesSource, Buffer.from('IJKLMNOP'));
+
+      const first = importModel(onnxSource, dir, catalog);
+      expect(first.modelId).toBe('kokoro');
+      expect(first.path).toBe(path.join(dir, 'kokoro', 'kokoro-v1.0.onnx'));
+
+      let models = listModels(dir, catalog);
+      expect(models[0].installed).toBe(false);
+      expect(models[0].missingFiles).toEqual(['voices-v1.0.bin']);
+
+      const second = importModel(voicesSource, dir, catalog);
+      expect(second.path).toBe(getExpectedModelPath(dir, 'kokoro', 'voices-v1.0.bin'));
+
+      models = listModels(dir, catalog);
+      expect(models[0].installed).toBe(true);
+      expect(models[0].complete).toBe(true);
+      expect(models[0].verified).toBe(true);
+      expect(models[0].missingFiles).toEqual([]);
+      expect(models[0].files.every(file => file.exists && file.verified)).toBe(true);
+
+      expect(fs.existsSync(second.path)).toBe(true);
+      expect(fs.existsSync(path.join(dir, 'kokoro', 'kokoro-v1.0.onnx'))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(sourceDir, { recursive: true, force: true });
+    }
+  });
+
+  test('importing only one kokoro file leaves the model incomplete', () => {
+    const dir = makeDir();
+    const sourceDir = makeDir();
+    try {
+      const catalog = kokoroCatalog();
+      const sourcePath = path.join(sourceDir, 'kokoro-v1.0.onnx');
+      fs.writeFileSync(sourcePath, Buffer.from('ABCDEFGH'));
+
+      importModel(sourcePath, dir, catalog);
+      const models = listModels(dir, catalog);
+      expect(models[0].installed).toBe(false);
+      expect(models[0].complete).toBe(false);
+      expect(models[0].missingFiles).toEqual(['voices-v1.0.bin']);
+      expect(models[0].message).toContain('voices-v1.0.bin');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
       fs.rmSync(sourceDir, { recursive: true, force: true });
@@ -110,12 +198,18 @@ test.describe('model catalog and import', () => {
 });
 
 test.describe('simulated model download', () => {
-  test('writes the file, reports progress and verifies the size', async () => {
+  test('writes each file to its unified per-model path and reports progress', async () => {
     const dir = makeDir();
     const progress = [];
     try {
-      const model = { id: 'test-model', name: 'Test', fileName: 'test.bin', sizeBytes: 1024, url: 'https://example.invalid/x' };
+      const model = {
+        id: 'test-model',
+        name: 'Test',
+        engine: 'kokoro',
+        files: [{ fileName: 'test.bin', sizeBytes: 1024, url: 'https://example.invalid/x' }]
+      };
       const result = await downloadModel(model, dir, {
+        fileName: 'test.bin',
         simulate: true,
         simulateBytes: 1024,
         onProgress: (p) => progress.push(p.progress)
@@ -123,6 +217,7 @@ test.describe('simulated model download', () => {
 
       expect(result.simulated).toBe(true);
       expect(result.verified).toBe(true);
+      expect(result.path).toBe(path.join(dir, 'test-model', 'test.bin'));
       expect(fs.existsSync(result.path)).toBe(true);
       expect(fs.statSync(result.path).size).toBe(1024);
       expect(progress).toContain(100);

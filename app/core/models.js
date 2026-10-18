@@ -8,35 +8,42 @@ const E_MODEL_IMPORT_FAILED = 'E_MODEL_IMPORT_FAILED';
 const E_MODEL_PATH_INVALID = 'E_MODEL_PATH_INVALID';
 const E_MODEL_CANCELLED = 'E_MODEL_CANCELLED';
 
-const KNOWN_MODELS = [
+const MODEL_CATALOG = [
   {
-    id: 'kokoro-model',
+    id: 'kokoro',
     name: 'Kokoro voz (ONNX)',
     engine: 'kokoro',
-    fileName: 'kokoro-v1.0.onnx',
-    sizeBytes: 310000000,
-    sha256: null,
-    url: 'https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx'
+    files: [
+      {
+        fileName: 'kokoro-v1.0.onnx',
+        sizeBytes: 310000000,
+        sha256: null,
+        url: 'https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/kokoro-v1.0.onnx'
+      },
+      {
+        fileName: 'voices-v1.0.bin',
+        sizeBytes: 27000000,
+        sha256: null,
+        url: 'https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin'
+      }
+    ]
   },
   {
-    id: 'kokoro-voices',
-    name: 'Kokoro voces (bin)',
-    engine: 'kokoro',
-    fileName: 'voices-v1.0.bin',
-    sizeBytes: 27000000,
-    sha256: null,
-    url: 'https://github.com/nazdridoy/kokoro-tts/releases/download/v1.0.0/voices-v1.0.bin'
-  },
-  {
-    id: 'whisper-model',
+    id: 'whisper',
     name: 'Whisper ggml base',
     engine: 'whisper',
-    fileName: 'ggml-base.bin',
-    sizeBytes: 148000000,
-    sha256: null,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin'
+    files: [
+      {
+        fileName: 'ggml-base.bin',
+        sizeBytes: 148000000,
+        sha256: null,
+        url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin'
+      }
+    ]
   }
 ];
+
+const KNOWN_MODELS = MODEL_CATALOG;
 
 function isTestMode(env = process.env) {
   return env.NODE_ENV === 'test' || env.ELECTRON_TEST === '1' || env.VM_TEST_MODELS === '1';
@@ -44,6 +51,29 @@ function isTestMode(env = process.env) {
 
 function getModelsDir(userDataDir) {
   return path.join(userDataDir, 'models');
+}
+
+function normalizeCatalog(catalog = MODEL_CATALOG) {
+  return (Array.isArray(catalog) ? catalog : []).map(model => ({
+    ...model,
+    files: Array.isArray(model.files) && model.files.length ? model.files : [model]
+  }));
+}
+
+function getModelDir(modelsDir, model) {
+  return path.join(modelsDir, model.id);
+}
+
+function getModelFilePath(modelsDir, model, file) {
+  return path.join(getModelDir(modelsDir, model), file.fileName);
+}
+
+function getExpectedModelPath(modelsDir, modelId, fileName, catalog = MODEL_CATALOG) {
+  const model = normalizeCatalog(catalog).find(item => item.id === modelId);
+  if (!model) return null;
+  const file = model.files.find(item => item.fileName === fileName);
+  if (!file) return null;
+  return getModelFilePath(modelsDir, model, file);
 }
 
 function computeSha256(filePath) {
@@ -80,30 +110,65 @@ function verifyModelFile(filePath, expected = {}) {
   return result;
 }
 
-function listModels(baseDir, catalog = KNOWN_MODELS) {
-  return catalog.map((model) => {
-    const filePath = path.join(baseDir, model.fileName);
-    const verification = verifyModelFile(filePath, model);
+function listModels(modelsDir, catalog = MODEL_CATALOG) {
+  return normalizeCatalog(catalog).map((model) => {
+    const dir = getModelDir(modelsDir, model);
+    const files = model.files.map((file) => {
+      const filePath = getModelFilePath(modelsDir, model, file);
+      const verification = verifyModelFile(filePath, file);
+      return {
+        fileName: file.fileName,
+        path: filePath,
+        exists: verification.exists,
+        verified: verification.verified,
+        size: verification.size,
+        expectedSize: verification.expectedSize,
+        missing: !verification.exists,
+        status: !verification.exists ? 'missing' : (verification.verified ? 'ok' : 'unverified'),
+        message: !verification.exists
+          ? `falta ${file.fileName}`
+          : (verification.verified ? `${file.fileName} listo` : `${file.fileName} sin verificar`)
+      };
+    });
+
+    const installed = files.every(file => file.exists);
+    const verified = installed && files.every(file => file.verified);
+    const missingFiles = files.filter(file => !file.exists).map(file => file.fileName);
+
     return {
       id: model.id,
       name: model.name,
       engine: model.engine,
-      fileName: model.fileName,
-      path: filePath,
-      installed: verification.exists,
-      verified: verification.verified,
-      size: verification.size,
-      expectedSize: verification.expectedSize,
-      missing: !verification.exists
+      dir,
+      files,
+      installed,
+      verified,
+      complete: installed,
+      missing: !installed,
+      missingFiles,
+      path: files.length === 1 ? files[0].path : null,
+      fileName: files.length === 1 ? files[0].fileName : null,
+      message: installed
+        ? (verified ? 'Instalado y verificado' : 'Instalado (sin verificar)')
+        : `Incompleto: falta ${missingFiles.join(', ')}`
     };
   });
 }
 
-function findModel(fileName, catalog = KNOWN_MODELS) {
-  return catalog.find(model => model.fileName === fileName) || null;
+function findModel(fileName, catalog = MODEL_CATALOG) {
+  const wanted = String(fileName || '').toLowerCase();
+  for (const model of normalizeCatalog(catalog)) {
+    const file = model.files.find(item => item.fileName.toLowerCase() === wanted);
+    if (file) return { model, file };
+  }
+  return null;
 }
 
-function importModel(sourcePath, baseDir, catalog = KNOWN_MODELS) {
+function listKnownFileNames(catalog = MODEL_CATALOG) {
+  return normalizeCatalog(catalog).reduce((names, model) => names.concat(model.files.map(file => file.fileName)), []);
+}
+
+function importModel(sourcePath, modelsDir, catalog = MODEL_CATALOG) {
   if (!sourcePath || !path.isAbsolute(sourcePath)) {
     throw new Error(`${E_MODEL_PATH_INVALID}: sourcePath must be an absolute path`);
   }
@@ -115,16 +180,28 @@ function importModel(sourcePath, baseDir, catalog = KNOWN_MODELS) {
     throw new Error(`${E_MODEL_IMPORT_FAILED}: not a file: ${sourcePath}`);
   }
 
-  fs.mkdirSync(baseDir, { recursive: true });
-  const fileName = path.basename(sourcePath);
-  const dest = path.join(baseDir, fileName);
+  const baseName = path.basename(sourcePath);
+  const match = findModel(baseName, catalog);
+  if (!match) {
+    throw new Error(`${E_MODEL_IMPORT_FAILED}: archivo no reconocido "${baseName}". Nombres esperados: ${listKnownFileNames(catalog).join(', ')}`);
+  }
+
+  const dest = getModelFilePath(modelsDir, match.model, match.file);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(sourcePath, dest);
 
-  const model = findModel(fileName, catalog);
-  const verification = model
-    ? verifyModelFile(dest, model)
-    : { exists: true, size: fs.statSync(dest).size, verified: false, expectedSize: null };
-  return { fileName, path: dest, verification };
+  const verification = verifyModelFile(dest, match.file);
+  if (!verification.exists) {
+    throw new Error(`${E_MODEL_IMPORT_FAILED}: no se pudo copiar ${baseName} a ${dest}`);
+  }
+
+  return {
+    modelId: match.model.id,
+    fileName: match.file.fileName,
+    path: dest,
+    verification,
+    models: listModels(modelsDir, catalog)
+  };
 }
 
 function downloadToFile(url, dest, hooks = {}) {
@@ -150,10 +227,6 @@ function downloadToFile(url, dest, hooks = {}) {
       if (signal.aborted) { reject(new Error(`${E_MODEL_CANCELLED}: download cancelled`)); return; }
       if (typeof signal.addEventListener === 'function') signal.addEventListener('abort', onAbort);
     }
-
-    const cleanup = () => {
-      if (signal && typeof signal.removeEventListener === 'function') signal.removeEventListener('abort', onAbort);
-    };
 
     const handleResponse = (response) => {
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
@@ -184,14 +257,16 @@ function downloadToFile(url, dest, hooks = {}) {
       else finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: ${err.message}`));
     });
     request.setTimeout(120000, () => { request.destroy(); finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: timeout`)); });
-    void cleanup;
   });
 }
 
-async function downloadModel(model, baseDir, options = {}) {
+async function downloadModel(model, modelsDir, options = {}) {
   const env = options.env || process.env;
-  const dest = options.destination || path.join(baseDir, model.fileName);
-  fs.mkdirSync(baseDir, { recursive: true });
+  const target = normalizeCatalog([model])[0];
+  const file = (options.fileName && target.files.find(item => item.fileName === options.fileName))
+    || target.files[0];
+  const dest = options.destination || getModelFilePath(modelsDir, target, file);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   const simulated = options.simulate === true || isTestMode(env);
   const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
@@ -203,15 +278,31 @@ async function downloadModel(model, baseDir, options = {}) {
     fs.writeFileSync(dest, buffer);
     onProgress({ progress: 100, received: bytes, total: bytes });
     const verification = verifyModelFile(dest, { sizeBytes: bytes, sha256: options.simulateSha256 || null });
-    return { model: model.id, path: dest, bytes, simulated: true, verified: verification.verified, verification };
+    return {
+      model: target.id,
+      fileName: file.fileName,
+      path: dest,
+      bytes,
+      simulated: true,
+      verified: verification.verified,
+      verification
+    };
   }
 
-  const result = await downloadToFile(model.url, dest, { onProgress, signal: options.signal });
-  const verification = verifyModelFile(dest, model);
+  const result = await downloadToFile(file.url, dest, { onProgress, signal: options.signal });
+  const verification = verifyModelFile(dest, file);
   if (!verification.verified) {
-    throw new Error(`${E_MODEL_DOWNLOAD_FAILED}: verification failed for ${model.fileName}`);
+    throw new Error(`${E_MODEL_DOWNLOAD_FAILED}: verification failed for ${file.fileName}`);
   }
-  return { model: model.id, path: dest, bytes: result.bytes, simulated: false, verified: true, verification };
+  return {
+    model: target.id,
+    fileName: file.fileName,
+    path: dest,
+    bytes: result.bytes,
+    simulated: false,
+    verified: true,
+    verification
+  };
 }
 
 module.exports = {
@@ -219,13 +310,19 @@ module.exports = {
   E_MODEL_IMPORT_FAILED,
   E_MODEL_PATH_INVALID,
   E_MODEL_CANCELLED,
+  MODEL_CATALOG,
   KNOWN_MODELS,
   isTestMode,
   getModelsDir,
+  normalizeCatalog,
+  getModelDir,
+  getModelFilePath,
+  getExpectedModelPath,
   computeSha256,
   verifyModelFile,
   listModels,
   findModel,
+  listKnownFileNames,
   importModel,
   downloadToFile,
   downloadModel

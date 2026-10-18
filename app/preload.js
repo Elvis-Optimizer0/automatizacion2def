@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('api', {
   getCapabilities: (options) => ipcRenderer.invoke('capabilities:get', options),
   listModels: () => ipcRenderer.invoke('models:list'),
   downloadModels: (modelId) => ipcRenderer.invoke('models:download', modelId),
-  importModel: () => ipcRenderer.invoke('models:import'),
+  importModel: (filePath) => ipcRenderer.invoke('models:import', filePath),
   cancelModels: () => ipcRenderer.invoke('models:cancel'),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
