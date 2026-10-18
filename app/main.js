@@ -9,7 +9,7 @@ const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir,
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
-const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
+const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 
@@ -470,8 +470,16 @@ ipcMain.handle('models:list', async () => {
 ipcMain.handle('models:download', async (_, modelId) => {
   const dir = getModelsDir(app.getPath('userData'));
   const catalog = KNOWN_MODELS;
-  const targets = modelId ? catalog.filter(model => model.id === modelId) : catalog;
-  const selected = targets.length ? targets : catalog;
+
+  const wanted = normalizeModelId(modelId);
+
+  let selected = catalog;
+  if (wanted) {
+    selected = catalog.filter(model => model.id === wanted);
+    if (selected.length === 0) {
+      throw new Error(`${E_MODEL_PATH_INVALID}: modelo desconocido "${wanted}". Válidos: ${catalog.map(model => model.id).join(', ')}`);
+    }
+  }
 
   if (activeModelController) activeModelController.abort();
   const controller = new AbortController();
@@ -504,7 +512,9 @@ ipcMain.handle('models:download', async (_, modelId) => {
 ipcMain.handle('models:import', async (_, providedPath) => {
   const dir = getModelsDir(app.getPath('userData'));
 
-  let filePath = providedPath || process.env.VM_TEST_MODEL_IN;
+  const normalized = normalizeImportPath(providedPath, process.env.VM_TEST_MODEL_IN);
+  let filePath = normalized.filePath;
+
   if (!filePath) {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Importar modelo',
@@ -516,6 +526,10 @@ ipcMain.handle('models:import', async (_, providedPath) => {
       return null;
     }
     filePath = result.filePaths[0];
+  }
+
+  if (typeof filePath !== 'string' || !filePath.trim()) {
+    return null;
   }
 
   try {

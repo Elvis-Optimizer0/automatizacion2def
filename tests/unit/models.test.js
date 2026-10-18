@@ -13,7 +13,9 @@ const {
   getModelsDir,
   getModelFilePath,
   getExpectedModelPath,
-  getModelDir
+  getModelDir,
+  normalizeImportPath,
+  normalizeModelId
 } = require('../../app/core/models.js');
 
 function sha256Of(buffer) {
@@ -115,11 +117,49 @@ test.describe('unified model paths', () => {
   });
 });
 
+test.describe('ipc argument normalization', () => {
+  test('ignores a non-string argument and asks for the native dialog', () => {
+    expect(normalizeImportPath({ hi: 1 }, undefined)).toEqual({ filePath: null, source: 'dialog' });
+    expect(normalizeImportPath(123, undefined)).toEqual({ filePath: null, source: 'dialog' });
+    expect(normalizeImportPath('', undefined)).toEqual({ filePath: null, source: 'dialog' });
+    expect(normalizeImportPath('   ', undefined)).toEqual({ filePath: null, source: 'dialog' });
+    expect(normalizeImportPath([1, 2], undefined)).toEqual({ filePath: null, source: 'dialog' });
+  });
+
+  test('accepts a valid string argument and falls back to the env path', () => {
+    expect(normalizeImportPath('C:\\modelos\\voices-v1.0.bin', undefined))
+      .toEqual({ filePath: 'C:\\modelos\\voices-v1.0.bin', source: 'argument' });
+    expect(normalizeImportPath({ event: true }, 'C:\\env\\ggml-base.bin'))
+      .toEqual({ filePath: 'C:\\env\\ggml-base.bin', source: 'env' });
+  });
+
+  test('normalizes the model id and rejects an object with a clear message', () => {
+    expect(normalizeModelId(undefined)).toBeNull();
+    expect(normalizeModelId(null)).toBeNull();
+    expect(normalizeModelId('')).toBeNull();
+    expect(normalizeModelId('  ')).toBeNull();
+    expect(normalizeModelId('kokoro')).toBe('kokoro');
+    expect(() => normalizeModelId({ id: 'kokoro' })).toThrow(/E_MODEL_PATH_INVALID/);
+    expect(() => normalizeModelId({ id: 'kokoro' })).toThrow(/modelId debe ser un texto \(recibido object\)/);
+  });
+});
+
 test.describe('model import', () => {
-  test('rejects relative and missing source paths', () => {
+  test('rejects a non-string source with a clear typed error', () => {
+    const dir = makeDir();
+    try {
+      expect(() => importModel({ path: 'x' }, dir)).toThrow(/sourcePath debe ser un texto \(recibido object\)/);
+      expect(() => importModel(undefined, dir)).toThrow(/E_MODEL_PATH_INVALID/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects relative and missing source paths with a clear message', () => {
     const dir = makeDir();
     try {
       expect(() => importModel('relativo.bin', dir)).toThrow(/E_MODEL_PATH_INVALID/);
+      expect(() => importModel('relativo.bin', dir)).toThrow(/la ruta debe ser absoluta/);
       expect(() => importModel(path.join(dir, 'no-existe.bin'), dir)).toThrow(/E_MODEL_PATH_INVALID/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -198,6 +238,16 @@ test.describe('model import', () => {
 });
 
 test.describe('simulated model download', () => {
+  test('rejects a non-object model and a bad fileName with clear errors', async () => {
+    const dir = makeDir();
+    try {
+      await expect(downloadModel('kokoro', dir)).rejects.toThrow(/model debe ser un objeto de catálogo \(recibido string\)/);
+      await expect(downloadModel({ id: 'x' }, dir, { fileName: 42 })).rejects.toThrow(/fileName debe ser un texto/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('writes each file to its unified per-model path and reports progress', async () => {
     const dir = makeDir();
     const progress = [];

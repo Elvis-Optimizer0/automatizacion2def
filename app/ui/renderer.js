@@ -1087,8 +1087,9 @@ async function handleDownloadModels() {
 }
 
 async function handleImportModel(filePath) {
+  const target = typeof filePath === 'string' && filePath.trim() ? filePath : undefined;
   try {
-    const result = await window.api.importModel(filePath);
+    const result = await window.api.importModel(target);
     if (!result) return;
     modelState.models = result.models || [];
     renderModelsList(modelState.models);
@@ -3247,17 +3248,17 @@ const CONTROLS = [
   {
     id: 'models-download-btn',
     tipo: 'button',
-    handler: handleDownloadModels
+    handler: () => handleDownloadModels()
   },
   {
     id: 'models-import-btn',
     tipo: 'button',
-    handler: handleImportModel
+    handler: () => handleImportModel()
   },
   {
     id: 'models-cancel-btn',
     tipo: 'button',
-    handler: handleCancelModels
+    handler: () => handleCancelModels()
   }
 ];
 

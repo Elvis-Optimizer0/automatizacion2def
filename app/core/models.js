@@ -168,9 +168,41 @@ function listKnownFileNames(catalog = MODEL_CATALOG) {
   return normalizeCatalog(catalog).reduce((names, model) => names.concat(model.files.map(file => file.fileName)), []);
 }
 
+function describeType(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function toTypeError(label, value) {
+  return new Error(`${E_MODEL_PATH_INVALID}: ${label} debe ser un texto (recibido ${describeType(value)})`);
+}
+
+function normalizeImportPath(providedPath, envPath) {
+  if (typeof providedPath === 'string' && providedPath.trim()) {
+    return { filePath: providedPath, source: 'argument' };
+  }
+  if (typeof envPath === 'string' && envPath.trim()) {
+    return { filePath: envPath, source: 'env' };
+  }
+  return { filePath: null, source: 'dialog' };
+}
+
+function normalizeModelId(providedId) {
+  if (providedId == null || providedId === '') return null;
+  if (typeof providedId !== 'string') {
+    throw toTypeError('modelId', providedId);
+  }
+  const trimmed = providedId.trim();
+  return trimmed || null;
+}
+
 function importModel(sourcePath, modelsDir, catalog = MODEL_CATALOG) {
-  if (!sourcePath || !path.isAbsolute(sourcePath)) {
-    throw new Error(`${E_MODEL_PATH_INVALID}: sourcePath must be an absolute path`);
+  if (typeof sourcePath !== 'string' || !sourcePath.trim()) {
+    throw toTypeError('sourcePath', sourcePath);
+  }
+  if (!path.isAbsolute(sourcePath)) {
+    throw new Error(`${E_MODEL_PATH_INVALID}: la ruta debe ser absoluta: ${sourcePath}`);
   }
   if (!fs.existsSync(sourcePath)) {
     throw new Error(`${E_MODEL_PATH_INVALID}: file not found: ${sourcePath}`);
@@ -261,6 +293,15 @@ function downloadToFile(url, dest, hooks = {}) {
 }
 
 async function downloadModel(model, modelsDir, options = {}) {
+  if (!model || typeof model !== 'object') {
+    throw new Error(`${E_MODEL_PATH_INVALID}: model debe ser un objeto de catálogo (recibido ${describeType(model)})`);
+  }
+  if (typeof modelsDir !== 'string' || !modelsDir.trim()) {
+    throw toTypeError('modelsDir', modelsDir);
+  }
+  if (options.fileName != null && typeof options.fileName !== 'string') {
+    throw toTypeError('fileName', options.fileName);
+  }
   const env = options.env || process.env;
   const target = normalizeCatalog([model])[0];
   const file = (options.fileName && target.files.find(item => item.fileName === options.fileName))
@@ -323,6 +364,8 @@ module.exports = {
   listModels,
   findModel,
   listKnownFileNames,
+  normalizeImportPath,
+  normalizeModelId,
   importModel,
   downloadToFile,
   downloadModel
