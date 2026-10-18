@@ -197,7 +197,8 @@ function moveContents(fromDir, toDir) {
     const source = path.join(fromDir, entry);
     const target = path.join(toDir, entry);
     fs.rmSync(target, { recursive: true, force: true });
-    fs.renameSync(source, target);
+    fs.cpSync(source, target, { recursive: true, dereference: true });
+    fs.rmSync(source, { recursive: true, force: true });
   }
 }
 
