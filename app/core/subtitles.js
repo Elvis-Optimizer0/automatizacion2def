@@ -21,6 +21,7 @@ const DEFAULT_SUBTITLE_STYLE = {
   marginV: 40,
   delay: 0,
   autoVoiceStart: true,
+  wordHighlight: false,
   background: { enabled: false, color: '#000000', opacity: 0.5 },
   shadow: { enabled: false, color: '#000000', opacity: 0.7, distance: 3, angle: 45, blur: 4 },
   animation: 'none'
@@ -161,6 +162,27 @@ function buildSubtitleEvents(scenes, style, options = {}) {
     const sceneStart = typeof scene.start === 'number' && !isNaN(scene.start) ? scene.start : 0;
     const sceneDuration = typeof scene.duration === 'number' && !isNaN(scene.duration) ? scene.duration : 0;
     const sceneEnd = sceneStart + sceneDuration;
+
+    const wordTimings = Array.isArray(scene.words) ? scene.words : null;
+    if (resolvedStyle.wordHighlight && wordTimings && wordTimings.length > 0) {
+      const shadowOn = resolvedStyle.shadow && resolvedStyle.shadow.enabled;
+      for (const timing of wordTimings) {
+        if (!timing || typeof timing.word !== 'string') continue;
+        const wordStart = typeof timing.start === 'number' && !isNaN(timing.start) ? timing.start : sceneStart;
+        const wordEnd = typeof timing.end === 'number' && !isNaN(timing.end) ? timing.end : wordStart;
+        const start = Math.max(sceneStart, Math.min(wordStart + timeOffset, sceneEnd));
+        const end = Math.min(sceneEnd, Math.max(wordEnd + timeOffset, sceneStart));
+        if (end <= start) continue;
+        const plain = escapeAssText(timing.word);
+        const colored = applyKeywordColors(plain, resolvedStyle);
+        if (shadowOn) {
+          events.push({ layer: 0, shadow: true, start, end, text: plain });
+        }
+        events.push({ layer: 1, shadow: false, start, end, text: colored });
+      }
+      continue;
+    }
+
     const phrases = splitIntoPhrases(scene.text);
     const timed = distributeTimings(phrases, sceneStart, sceneDuration);
     for (const item of timed) {

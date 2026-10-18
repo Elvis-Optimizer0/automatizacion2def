@@ -210,6 +210,7 @@ const state = {
       marginV: 40,
       delay: 0,
       autoVoiceStart: true,
+      wordHighlight: false,
       background: { enabled: false, color: '#000000', opacity: 0.5 },
       shadow: { enabled: false, color: '#000000', opacity: 0.7, distance: 3, angle: 45, blur: 4 },
       highlight: { enabled: false, colors: {}, terms: [], limit: 30, detect: { numbers: true, percent: true, currency: true } },
@@ -892,6 +893,60 @@ async function handleVoiceSample() {
     } else {
       showToast(`No se pudo reproducir la muestra: ${message}`, 'error');
     }
+  }
+}
+
+async function handleSyncScenes() {
+  if (!state.audio.narration || !state.audio.narration.path) {
+    showToast('Genera o importa la narración antes de sincronizar', 'warning');
+    return;
+  }
+  if (state.timeline.length === 0) {
+    showToast('No hay escenas en la línea de tiempo', 'warning');
+    return;
+  }
+
+  const button = document.getElementById('sync-scenes-btn');
+  if (button) button.disabled = true;
+  setVoiceStatus('Alineando escenas con la voz…');
+
+  try {
+    const payload = {
+      audioPath: state.audio.narration.path,
+      language: state.config.voice.language,
+      duration: state.audioDuration,
+      scenes: state.timeline.map(scene => ({
+        number: scene.number,
+        duration: scene.duration,
+        text: scene.text || ''
+      }))
+    };
+    const result = await window.api.alignScenes(payload);
+    const aligned = result && Array.isArray(result.scenes) ? result.scenes : [];
+    if (aligned.length !== state.timeline.length) {
+      throw new Error('La alineación devolvió un número de escenas distinto');
+    }
+    state.timeline = state.timeline.map((scene, index) => ({
+      ...scene,
+      start: aligned[index].start,
+      end: aligned[index].end,
+      duration: aligned[index].duration,
+      words: Array.isArray(aligned[index].words) ? aligned[index].words : []
+    }));
+    renderTimeline();
+    setVoiceStatus('Escenas sincronizadas con la voz.', 'success');
+    showToast('Escenas sincronizadas con la voz', 'success');
+  } catch (err) {
+    const message = String(err.message || err);
+    if (message.includes('E_ALIGN_ENGINE_MISSING')) {
+      setVoiceStatus('Falta el binario de Whisper o el modelo (ver LICENSES.md).', 'error');
+      showToast('Motor de alineación no instalado', 'error');
+    } else {
+      setVoiceStatus(`Error al sincronizar: ${message}`, 'error');
+      showToast('No se pudo sincronizar las escenas', 'error');
+    }
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -1579,6 +1634,7 @@ function syncSubtitleControls() {
   setValue('subtitle-margin-v', s.marginV);
   setValue('subtitle-delay', s.delay);
   setValue('subtitles-voice-detect', s.autoVoiceStart);
+  setValue('subtitles-word-highlight', s.wordHighlight);
   setValue('subtitles-background-enabled', s.background.enabled);
   setValue('subtitles-background-color', s.background.color);
   setValue('subtitles-background-opacity', s.background.opacity);
@@ -1778,6 +1834,9 @@ function buildProjectData() {
     script: { raw: state.script.raw },
     timeline: state.timeline.map(scene => {
       const item = { number: scene.number, duration: scene.duration, text: scene.text || '' };
+      if (Array.isArray(scene.words) && scene.words.length) {
+        item.words = scene.words.map(word => ({ word: word.word, start: word.start, end: word.end }));
+      }
       if (scene.zoom) item.zoom = { ...scene.zoom };
       if (scene.transition) item.transition = { ...scene.transition };
       return item;
@@ -1861,6 +1920,9 @@ function loadProject(project, missing = []) {
       image: state.images[index] || null,
       text: scene.text || ''
     };
+    if (Array.isArray(scene.words) && scene.words.length) {
+      item.words = scene.words.map(word => ({ word: word.word, start: word.start, end: word.end }));
+    }
     if (scene.zoom) item.zoom = { ...scene.zoom };
     if (scene.transition) item.transition = { ...scene.transition };
     return item;
@@ -1977,6 +2039,9 @@ async function handleExport() {
 
   const scenes = state.timeline.map(s => {
     const scene = { number: s.number, duration: s.duration, text: s.text || '' };
+    if (Array.isArray(s.words) && s.words.length) {
+      scene.words = s.words.map(word => ({ word: word.word, start: word.start, end: word.end }));
+    }
     if (s.zoom) scene.zoom = { ...s.zoom };
     if (s.transition) scene.transition = { ...s.transition };
     return scene;
@@ -2782,6 +2847,14 @@ const CONTROLS = [
     }
   },
   {
+    id: 'subtitles-word-highlight',
+    tipo: 'checkbox',
+    rutaConfig: 'config.subtitles.wordHighlight',
+    handler: (e) => {
+      state.config.subtitles.wordHighlight = e.target.checked;
+    }
+  },
+  {
     id: 'subtitle-terms-limit',
     tipo: 'input',
     rutaConfig: 'config.subtitles.highlight.limit',
@@ -2933,6 +3006,11 @@ const CONTROLS = [
     id: 'voice-cancel-btn',
     tipo: 'button',
     handler: handleCancelVoice
+  },
+  {
+    id: 'sync-scenes-btn',
+    tipo: 'button',
+    handler: handleSyncScenes
   },
   {
     id: 'models-download-btn',

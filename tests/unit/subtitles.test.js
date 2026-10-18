@@ -230,3 +230,36 @@ test.describe('subtitles core', () => {
     expect(dialogues[1]).toContain(',0:00:03.00,');
   });
 });
+
+test.describe('word level subtitles', () => {
+  const wordScene = {
+    text: 'uno dos tres',
+    start: 2,
+    duration: 3,
+    words: [
+      { word: 'uno', start: 2, end: 3 },
+      { word: 'dos', start: 3, end: 4 },
+      { word: 'tres', start: 4, end: 5 }
+    ]
+  };
+
+  test('emits one event per word when wordHighlight is enabled', () => {
+    const events = buildSubtitleEvents([wordScene], { wordHighlight: true }, {});
+    expect(events).toHaveLength(3);
+    expect(events.map(e => e.text)).toEqual(['uno', 'dos', 'tres']);
+    expect(events[0].start).toBe(2);
+    expect(events[2].end).toBe(5);
+  });
+
+  test('falls back to phrase timing when wordHighlight is disabled', () => {
+    const events = buildSubtitleEvents([wordScene], { wordHighlight: false }, {});
+    expect(events).toHaveLength(1);
+    expect(events[0].text).toContain('uno dos');
+  });
+
+  test('respects the time offset and clamps inside the scene', () => {
+    const events = buildSubtitleEvents([wordScene], { wordHighlight: true }, { timeOffset: 1 });
+    expect(events[0].start).toBe(3);
+    expect(events[events.length - 1].end).toBeLessThanOrEqual(5);
+  });
+});

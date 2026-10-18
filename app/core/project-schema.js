@@ -105,6 +105,7 @@ const subtitlesSchema = z.object({
   marginV: z.number().min(0).max(1000).default(40),
   delay: z.number().min(-2).max(5).default(0),
   autoVoiceStart: z.boolean().default(true),
+  wordHighlight: z.boolean().default(false),
   background: subtitleBackgroundSchema,
   shadow: subtitleShadowSchema,
   highlight: subtitleHighlightSchema,
@@ -153,10 +154,17 @@ const sceneTransitionSchema = z.object({
   type: z.enum(TRANSITION_TYPES).optional()
 }).optional();
 
+const sceneWordSchema = z.object({
+  word: z.string(),
+  start: z.number(),
+  end: z.number()
+});
+
 const sceneSchema = z.object({
   number: z.number(),
   duration: z.number().positive(),
   text: z.string().default(''),
+  words: z.array(sceneWordSchema).optional(),
   zoom: sceneZoomSchema,
   transition: sceneTransitionSchema
 });

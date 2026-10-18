@@ -124,6 +124,9 @@
           <button id="voice-generate-btn" class="btn btn-primary btn-sm" type="button">Generar voz</button>
           <button id="voice-cancel-btn" class="btn btn-secondary btn-sm" type="button" disabled>Cancelar</button>
         </div>
+        <div class="voice-actions">
+          <button id="sync-scenes-btn" class="btn btn-secondary btn-sm" type="button">Sincronizar escenas con la voz</button>
+        </div>
         <div id="voice-progress" class="export-progress" hidden>
           <div class="progress-bar"><div id="voice-progress-fill" class="progress-fill"></div></div>
           <div class="progress-info"><span id="voice-progress-text">0%</span></div>
@@ -566,6 +569,11 @@
             <input type="checkbox" id="subtitles-highlight-enabled">
             <span class="checkmark"></span>
             Resaltar palabras clave
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="subtitles-word-highlight">
+            <span class="checkmark"></span>
+            Subtítulos por palabra (tiempos de Whisper)
           </label>
           <div class="export-control-row">
             <label for="subtitle-terms-input">Términos financieros</label>

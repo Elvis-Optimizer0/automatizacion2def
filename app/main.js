@@ -10,12 +10,14 @@ const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice } = require('./core/voice.js');
 const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
+const { alignScenes } = require('./core/alignment.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
 let mainWindow;
 let activeVoiceController = null;
 let activeModelController = null;
+let activeAlignController = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -412,6 +414,24 @@ ipcMain.handle('voice:cancel', async () => {
     return { cancelled: true };
   }
   return { cancelled: false };
+});
+
+ipcMain.handle('align:scenes', async (_, payload) => {
+  const data = payload || {};
+  if (activeAlignController) activeAlignController.abort();
+  const controller = new AbortController();
+  activeAlignController = controller;
+  try {
+    return await alignScenes({
+      audioPath: data.audioPath,
+      scenes: data.scenes,
+      language: data.language,
+      duration: data.duration,
+      options: { signal: controller.signal }
+    });
+  } finally {
+    if (activeAlignController === controller) activeAlignController = null;
+  }
 });
 
 ipcMain.handle('models:list', async () => {
