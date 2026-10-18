@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('api', {
   generateVoice: (options) => ipcRenderer.invoke('voice:generate', options),
   generateVoiceSample: (options) => ipcRenderer.invoke('voice:sample', options),
   cancelVoice: () => ipcRenderer.invoke('voice:cancel'),
+  listModels: () => ipcRenderer.invoke('models:list'),
+  downloadModels: (modelId) => ipcRenderer.invoke('models:download', modelId),
+  importModel: () => ipcRenderer.invoke('models:import'),
+  cancelModels: () => ipcRenderer.invoke('models:cancel'),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('render:progress', handler);
@@ -35,5 +39,10 @@ contextBridge.exposeInMainWorld('api', {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('voice:progress', handler);
     return () => ipcRenderer.removeListener('voice:progress', handler);
+  },
+  onModelsProgress: (callback) => {
+    const handler = (_, progress) => callback(progress);
+    ipcRenderer.on('models:progress', handler);
+    return () => ipcRenderer.removeListener('models:progress', handler);
   }
 });

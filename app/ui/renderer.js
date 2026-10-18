@@ -250,6 +250,11 @@ const voiceState = {
   sampleAudio: null
 };
 
+const modelState = {
+  models: [],
+  downloading: false
+};
+
 function ensureFocus(image) {
   if (!image) return image;
   Object.values(FORMAT_FOCUS_KEY).forEach(key => {
@@ -887,6 +892,118 @@ async function handleVoiceSample() {
     } else {
       showToast(`No se pudo reproducir la muestra: ${message}`, 'error');
     }
+  }
+}
+
+function setModelsStatus(message, type = '') {
+  const status = document.getElementById('models-status');
+  if (!status) return;
+  status.textContent = message;
+  status.className = `export-status${type ? ' ' + type : ''}`;
+}
+
+function setModelsProgress(progress) {
+  const container = document.getElementById('models-progress');
+  const fill = document.getElementById('models-progress-fill');
+  const text = document.getElementById('models-progress-text');
+  if (!container) return;
+  container.hidden = progress <= 0;
+  if (fill) fill.style.width = `${progress}%`;
+  if (text) text.textContent = `${Math.round(progress)}%`;
+}
+
+function updateModelsButtons() {
+  const download = document.getElementById('models-download-btn');
+  const cancel = document.getElementById('models-cancel-btn');
+  if (download) download.disabled = modelState.downloading;
+  if (cancel) cancel.disabled = !modelState.downloading;
+}
+
+function renderModelsList(models) {
+  const container = document.getElementById('models-list');
+  if (!container) return;
+  container.innerHTML = '';
+  models.forEach((model) => {
+    const row = document.createElement('div');
+    row.className = 'model-row';
+
+    const name = document.createElement('span');
+    name.className = 'model-name';
+    name.textContent = model.name;
+
+    const status = document.createElement('span');
+    const stateClass = model.installed ? (model.verified ? 'ok' : 'warn') : 'missing';
+    status.className = `model-status ${stateClass}`;
+    status.textContent = model.installed ? (model.verified ? 'Listo' : 'Sin verificar') : 'Falta';
+
+    row.appendChild(name);
+    row.appendChild(status);
+    container.appendChild(row);
+  });
+
+  const missing = models.filter(model => !model.installed);
+  if (models.length === 0) {
+    setModelsStatus('No hay modelos registrados.', 'warning');
+  } else if (missing.length > 0) {
+    setModelsStatus(`Faltan ${missing.length} modelo(s). Descárgalos o impórtalos manualmente.`, 'warning');
+  } else {
+    setModelsStatus('Todos los modelos están disponibles.', 'success');
+  }
+}
+
+async function refreshModelsList() {
+  if (!window.api || typeof window.api.listModels !== 'function') return;
+  try {
+    const info = await window.api.listModels();
+    modelState.models = info.models || [];
+    renderModelsList(modelState.models);
+  } catch (err) {
+    setModelsStatus(`No se pudo leer la carpeta de modelos: ${err.message}`, 'error');
+  }
+}
+
+async function handleDownloadModels() {
+  if (modelState.downloading) return;
+  modelState.downloading = true;
+  updateModelsButtons();
+  setModelsStatus('Descargando modelos…');
+  setModelsProgress(5);
+  const removeListener = window.api.onModelsProgress((progress) => setModelsProgress(progress.progress));
+
+  try {
+    const result = await window.api.downloadModels();
+    modelState.models = result.models || [];
+    renderModelsList(modelState.models);
+    setModelsProgress(100);
+    showToast('Modelos descargados', 'success');
+  } catch (err) {
+    setModelsStatus(`Error al descargar modelos: ${err.message}`, 'error');
+    showToast('Error al descargar modelos', 'error');
+  } finally {
+    modelState.downloading = false;
+    updateModelsButtons();
+    if (typeof removeListener === 'function') removeListener();
+  }
+}
+
+async function handleImportModel() {
+  try {
+    const result = await window.api.importModel();
+    if (!result) return;
+    modelState.models = result.models || [];
+    renderModelsList(modelState.models);
+    showToast(`Modelo importado: ${result.imported.fileName}`, 'success');
+  } catch (err) {
+    setModelsStatus(`Error al importar el modelo: ${err.message}`, 'error');
+    showToast('Error al importar el modelo', 'error');
+  }
+}
+
+async function handleCancelModels() {
+  try {
+    await window.api.cancelModels();
+  } catch (err) {
+    showToast(`No se pudo cancelar: ${err.message}`, 'error');
   }
 }
 
@@ -2816,6 +2933,21 @@ const CONTROLS = [
     id: 'voice-cancel-btn',
     tipo: 'button',
     handler: handleCancelVoice
+  },
+  {
+    id: 'models-download-btn',
+    tipo: 'button',
+    handler: handleDownloadModels
+  },
+  {
+    id: 'models-import-btn',
+    tipo: 'button',
+    handler: handleImportModel
+  },
+  {
+    id: 'models-cancel-btn',
+    tipo: 'button',
+    handler: handleCancelModels
   }
 ];
 
@@ -2978,7 +3110,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice, refreshModelsList, handleDownloadModels };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2998,6 +3130,7 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshPreviewScenes();
   refreshVoiceLanguages();
   syncVoiceControls();
+  refreshModelsList();
   detectCodecs();
 
   console.log('Video Maker v0.6.1 - Renderer loaded');

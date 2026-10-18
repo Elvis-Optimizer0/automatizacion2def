@@ -130,6 +130,21 @@
         </div>
         <div id="voice-status" class="export-status"></div>
       </div>
+
+      <div id="models-panel" class="voice-panel">
+        <h3 class="models-title">Modelos locales (voz y alineación)</h3>
+        <div id="models-list" class="models-list"></div>
+        <div class="voice-actions">
+          <button id="models-download-btn" class="btn btn-secondary btn-sm" type="button">Descargar modelos</button>
+          <button id="models-import-btn" class="btn btn-secondary btn-sm" type="button">Importar modelo…</button>
+          <button id="models-cancel-btn" class="btn btn-secondary btn-sm" type="button" disabled>Cancelar</button>
+        </div>
+        <div id="models-progress" class="export-progress" hidden>
+          <div class="progress-bar"><div id="models-progress-fill" class="progress-fill"></div></div>
+          <div class="progress-info"><span id="models-progress-text">0%</span></div>
+        </div>
+        <div id="models-status" class="export-status"></div>
+      </div>
     </section>
 
     <section class="import-section" aria-label="Guion">

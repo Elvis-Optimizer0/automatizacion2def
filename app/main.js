@@ -9,11 +9,13 @@ const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir,
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice } = require('./core/voice.js');
+const { KNOWN_MODELS, getModelsDir, listModels, importModel, downloadModel, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
 let mainWindow;
 let activeVoiceController = null;
+let activeModelController = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -407,6 +409,76 @@ ipcMain.handle('voice:cancel', async () => {
   if (activeVoiceController) {
     activeVoiceController.abort();
     activeVoiceController = null;
+    return { cancelled: true };
+  }
+  return { cancelled: false };
+});
+
+ipcMain.handle('models:list', async () => {
+  const dir = getModelsDir(app.getPath('userData'));
+  return { dir, models: listModels(dir) };
+});
+
+ipcMain.handle('models:download', async (_, modelId) => {
+  const dir = getModelsDir(app.getPath('userData'));
+  const catalog = KNOWN_MODELS;
+  const targets = modelId ? catalog.filter(model => model.id === modelId) : catalog;
+  const selected = targets.length ? targets : catalog;
+
+  if (activeModelController) activeModelController.abort();
+  const controller = new AbortController();
+  activeModelController = controller;
+
+  const onProgress = (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('models:progress', progress);
+    }
+  };
+
+  try {
+    const results = [];
+    for (const model of selected) {
+      const result = await downloadModel(model, dir, { onProgress, signal: controller.signal });
+      results.push(result);
+    }
+    return { results, models: listModels(dir) };
+  } finally {
+    if (activeModelController === controller) activeModelController = null;
+  }
+});
+
+ipcMain.handle('models:import', async () => {
+  const dir = getModelsDir(app.getPath('userData'));
+
+  let filePath = process.env.VM_TEST_MODEL_IN;
+  if (!filePath) {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Importar modelo',
+      buttonLabel: 'Importar',
+      filters: [{ name: 'Modelos', extensions: ['onnx', 'bin', 'gguf'] }],
+      properties: ['openFile']
+    });
+    if (result.canceled || !result.filePaths.length) {
+      return null;
+    }
+    filePath = result.filePaths[0];
+  }
+
+  try {
+    const imported = importModel(filePath, dir);
+    return { imported, models: listModels(dir) };
+  } catch (err) {
+    if (err.message.startsWith(E_MODEL_IMPORT_FAILED) || err.message.startsWith(E_MODEL_PATH_INVALID)) {
+      throw err;
+    }
+    throw new Error(`${E_MODEL_IMPORT_FAILED}: ${err.message}`);
+  }
+});
+
+ipcMain.handle('models:cancel', async () => {
+  if (activeModelController) {
+    activeModelController.abort();
+    activeModelController = null;
     return { cancelled: true };
   }
   return { cancelled: false };
