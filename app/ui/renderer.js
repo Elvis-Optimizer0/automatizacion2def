@@ -241,7 +241,8 @@ const state = {
     status: ''
   },
   hwAccel: { enabled: true, available: false },
-  capabilities: null
+  capabilities: null,
+  pipeline: { running: false, stage: '' }
 };
 
 const voiceState = {
@@ -1856,6 +1857,13 @@ function setProjectStatus(text, type) {
   if (type) el.classList.add(type);
 }
 
+async function saveProjectSilently() {
+  if (!state.project.filePath) return null;
+  const result = await window.api.saveProject(buildProjectData(), state.project.filePath);
+  if (result && result.filePath) state.project.filePath = result.filePath;
+  return result;
+}
+
 async function handleSaveProject() {
   try {
     const result = await window.api.saveProject(buildProjectData());
@@ -2126,13 +2134,133 @@ async function handleExport() {
     const summary = outputs.map(o => `${o.id}: ${o.outputPath.split(/[\\/]/).pop()}`).join(' · ');
     setExportStatus(`Video exportado → ${summary}`, 'success');
     showToast(`Exportados ${outputs.length} formato(s)`, 'success');
+    return true;
   } catch (err) {
     setExportStatus(`Error al exportar: ${err.message}`, 'error');
     showToast('Error al exportar el video', 'error');
+    return false;
   } finally {
     state.export.isRendering = false;
     updateExportButton();
     if (typeof removeListener === 'function') removeListener();
+  }
+}
+
+function setPipelineStatus(message, type = '') {
+  const status = document.getElementById('pipeline-status');
+  if (status) {
+    status.textContent = message;
+    status.className = `export-status${type ? ' ' + type : ''}`;
+  }
+  setVoiceStatus(message, type);
+}
+
+function updateFullVideoButton() {
+  const button = document.getElementById('generate-full-btn');
+  const busy = state.pipeline.running || state.export.isRendering || voiceState.generating;
+  if (button) {
+    button.disabled = busy || state.timeline.length === 0;
+    button.textContent = state.pipeline.running ? 'Generando video completo…' : 'Generar video completo';
+  }
+}
+
+async function generateFullVideoPipeline() {
+  const sourceText = state.script.raw || state.timeline.map(scene => scene.text || '').join('\n\n');
+  const cleaned = cleanScriptForVoice(sourceText, state.config.voice.language);
+  const voiceText = cleaned && cleaned.trim() ? cleaned : sourceText;
+
+  setPipelineStatus('1/5 Preparando el guion…');
+  const voiceResult = await window.api.generateVoice({
+    language: state.config.voice.language,
+    voiceId: state.config.voice.voiceId,
+    speed: state.config.voice.speed,
+    pause: state.config.voice.pause,
+    text: voiceText
+  });
+  await applyGeneratedNarration(voiceResult);
+  if (!state.audio.narration || !state.audio.narration.path) {
+    throw new Error('No se pudo generar la narración');
+  }
+
+  setPipelineStatus('2/5 Alineando escenas con la voz…');
+  const aligned = await window.api.alignScenes({
+    audioPath: state.audio.narration.path,
+    language: state.config.voice.language,
+    duration: state.audioDuration,
+    scenes: state.timeline.map(scene => ({
+      number: scene.number,
+      duration: scene.duration,
+      text: scene.text || ''
+    }))
+  });
+  if (!aligned || !Array.isArray(aligned.scenes) || aligned.scenes.length !== state.timeline.length) {
+    throw new Error('La alineación no devolvió las escenas esperadas');
+  }
+  state.timeline = state.timeline.map((scene, index) => ({
+    ...scene,
+    start: aligned.scenes[index].start,
+    end: aligned.scenes[index].end,
+    duration: aligned.scenes[index].duration,
+    words: Array.isArray(aligned.scenes[index].words) ? aligned.scenes[index].words : []
+  }));
+  renderTimeline();
+
+  setPipelineStatus('3/5 Activando subtítulos…');
+  state.config.subtitles.enabled = true;
+  const subtitlesToggle = document.getElementById('subtitles-enabled');
+  if (subtitlesToggle) subtitlesToggle.checked = true;
+
+  setPipelineStatus('4/5 Guardando el proyecto…');
+  try {
+    await saveProjectSilently();
+  } catch (err) {
+    showToast(`No se pudo guardar el proyecto: ${err.message}`, 'warning');
+  }
+
+  setPipelineStatus('5/5 Exportando el video…');
+  const exported = await handleExport();
+  if (!exported) throw new Error('La exportación no se completó');
+  return true;
+}
+
+async function handleGenerateFullVideo() {
+  if (state.pipeline.running) return;
+  if (state.export.isRendering || voiceState.generating) {
+    showToast('Ya hay una tarea en curso', 'warning');
+    return;
+  }
+  if (state.timeline.length === 0) {
+    showToast('Genera la línea de tiempo primero', 'warning');
+    return;
+  }
+  const missing = state.timeline.filter(scene => !scene.image);
+  if (missing.length > 0) {
+    showToast(`Faltan imágenes en ${missing.length} escena(s)`, 'error');
+    return;
+  }
+
+  state.pipeline.running = true;
+  state.pipeline.stage = 'script';
+  updateFullVideoButton();
+
+  try {
+    await generateFullVideoPipeline();
+    setPipelineStatus('Video completo generado.', 'success');
+    showToast('Video completo generado', 'success');
+  } catch (err) {
+    const message = String(err.message || err);
+    if (message.includes('E_VOICE_ENGINE_MISSING')) {
+      setPipelineStatus('Motor de voz no instalado (ver LICENSES.md).', 'error');
+    } else if (message.includes('E_ALIGN_ENGINE_MISSING')) {
+      setPipelineStatus('Motor de alineación no instalado (ver LICENSES.md).', 'error');
+    } else {
+      setPipelineStatus(`Error: ${message}`, 'error');
+    }
+    showToast('No se pudo generar el video completo', 'error');
+  } finally {
+    state.pipeline.running = false;
+    state.pipeline.stage = '';
+    updateFullVideoButton();
   }
 }
 
@@ -2487,6 +2615,11 @@ const CONTROLS = [
     tipo: 'button',
     rutaConfig: 'export',
     handler: handleExport
+  },
+  {
+    id: 'generate-full-btn',
+    tipo: 'button',
+    handler: handleGenerateFullVideo
   },
   {
     id: 'open-output-folder-btn',
@@ -3242,7 +3375,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice, refreshModelsList, handleDownloadModels };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice, refreshModelsList, handleDownloadModels, handleSyncScenes, handleGenerateFullVideo, handleProbeGpu, renderCapabilities };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
 document.addEventListener('DOMContentLoaded', () => {
