@@ -22,9 +22,18 @@ contextBridge.exposeInMainWorld('api', {
   addPreset: (name, style) => ipcRenderer.invoke('presets:add', name, style),
   renamePreset: (oldName, newName) => ipcRenderer.invoke('presets:rename', oldName, newName),
   deletePreset: (name) => ipcRenderer.invoke('presets:delete', name),
+  listVoices: () => ipcRenderer.invoke('voice:list'),
+  generateVoice: (options) => ipcRenderer.invoke('voice:generate', options),
+  generateVoiceSample: (options) => ipcRenderer.invoke('voice:sample', options),
+  cancelVoice: () => ipcRenderer.invoke('voice:cancel'),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('render:progress', handler);
     return () => ipcRenderer.removeListener('render:progress', handler);
+  },
+  onVoiceProgress: (callback) => {
+    const handler = (_, progress) => callback(progress);
+    ipcRenderer.on('voice:progress', handler);
+    return () => ipcRenderer.removeListener('voice:progress', handler);
   }
 });

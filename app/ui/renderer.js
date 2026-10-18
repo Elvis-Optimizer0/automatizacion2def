@@ -187,6 +187,7 @@ const state = {
     backgroundMode: 'color',
     backgroundColor: '#000000',
     musicVolume: 0.3,
+    voice: { language: 'es', voiceId: '', speed: 1, pause: 0.3 },
     extras: {
       badge: { enabled: false, text: '', position: 'topRight', animation: 'fade' },
       lowerThird: { enabled: false, text: '', opacity: 0.6 },
@@ -239,6 +240,14 @@ const state = {
     status: ''
   },
   hwAccel: { enabled: true, available: false }
+};
+
+const voiceState = {
+  languages: [],
+  voices: [],
+  samples: {},
+  generating: false,
+  sampleAudio: null
 };
 
 function ensureFocus(image) {
@@ -650,6 +659,234 @@ async function handleAudioImport(type, filePath) {
   } catch (err) {
     console.error('Error getting audio duration:', err);
     showToast(`Error al leer duración del audio: ${err.message}`, 'error');
+  }
+}
+
+function cleanScriptForVoice(script) {
+  const sceneMarker = /^\s*(?:\[|\()?\s*(?:escena|scene|parte|part)\s*[:#]?\s*\d+\s*(?:\]|\))?/i;
+  const timeRange = /\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\s*[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?/gi;
+  const timeRangeWords = /(?:de|from)\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\s+(?:a|to)\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?/gi;
+  const technical = /(?:voz en off|voice ?over|narrador|narrator|locutor|plano|toma|shot|b-?roll|texto en pantalla|música|musica|music|sfx|transition|transición)\s*[:#]\s*/gi;
+  const timestampOnly = /^\s*\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\s*(?:[-–—]\s*\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?)?\s*$/;
+  const out = [];
+
+  String(script == null ? '' : script).split(/\r?\n/).forEach((raw) => {
+    let text = raw.trim();
+    if (!text || timestampOnly.test(text)) return;
+    text = text
+      .replace(sceneMarker, ' ')
+      .replace(timeRange, ' ')
+      .replace(timeRangeWords, ' ')
+      .replace(technical, ' ')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\([^)]{0,80}\)/g, ' ')
+      .replace(/^[-–—•·*]\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!text || timestampOnly.test(text)) return;
+    out.push(text);
+  });
+
+  return out.join('\n');
+}
+
+async function refreshVoiceLanguages() {
+  const select = document.getElementById('voice-language');
+  if (!select || !window.api || typeof window.api.listVoices !== 'function') return;
+  try {
+    const info = await window.api.listVoices();
+    voiceState.languages = info.languages || [];
+    voiceState.voices = info.voices || [];
+    voiceState.samples = info.samples || {};
+
+    select.innerHTML = '';
+    voiceState.languages.forEach((lang) => {
+      const option = document.createElement('option');
+      option.value = lang.code;
+      option.textContent = lang.label;
+      select.appendChild(option);
+    });
+
+    if (!voiceState.languages.some(l => l.code === state.config.voice.language) && voiceState.languages[0]) {
+      state.config.voice.language = voiceState.languages[0].code;
+    }
+    select.value = state.config.voice.language;
+    refreshVoiceSelect();
+  } catch (err) {
+    showToast(`No se pudo cargar el catálogo de voces: ${err.message}`, 'error');
+  }
+}
+
+function refreshVoiceSelect() {
+  const select = document.getElementById('voice-select');
+  if (!select) return;
+  const language = state.config.voice.language;
+  const voices = voiceState.voices.filter(voice => voice.language === language);
+  select.innerHTML = '';
+  voices.forEach((voice) => {
+    const option = document.createElement('option');
+    option.value = voice.id;
+    option.textContent = `${voice.name} (${voice.engine})`;
+    select.appendChild(option);
+  });
+  if (!voices.some(voice => voice.id === state.config.voice.voiceId) && voices[0]) {
+    state.config.voice.voiceId = voices[0].id;
+  }
+  if (voices.some(voice => voice.id === state.config.voice.voiceId)) {
+    select.value = state.config.voice.voiceId;
+  }
+  const sampleBtn = document.getElementById('voice-sample-btn');
+  if (sampleBtn) sampleBtn.disabled = voices.length === 0;
+}
+
+function syncVoiceControls() {
+  const voice = state.config.voice;
+  const language = document.getElementById('voice-language');
+  if (language && voice.language) language.value = voice.language;
+  const speed = document.getElementById('voice-speed');
+  if (speed) speed.value = voice.speed;
+  const pause = document.getElementById('voice-pause');
+  if (pause) pause.value = voice.pause;
+  const select = document.getElementById('voice-select');
+  if (select && voice.voiceId && voiceState.voices.some(v => v.id === voice.voiceId)) {
+    select.value = voice.voiceId;
+  }
+  updateVoiceButtons();
+}
+
+function fillVoiceTextFromScript() {
+  const textarea = document.getElementById('voice-text');
+  if (!textarea) return;
+  textarea.value = cleanScriptForVoice(state.script.raw);
+}
+
+function showVoicePanel() {
+  const panel = document.getElementById('voice-panel');
+  if (panel) panel.hidden = false;
+  const btn = document.getElementById('voice-panel-toggle-btn');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+  const textarea = document.getElementById('voice-text');
+  if (textarea && !textarea.value.trim()) fillVoiceTextFromScript();
+  if (textarea) textarea.focus();
+}
+
+function handleVoiceClean() {
+  fillVoiceTextFromScript();
+  showToast('Guion limpio cargado para la voz', 'success');
+}
+
+function setVoiceStatus(message, type = '') {
+  const status = document.getElementById('voice-status');
+  if (!status) return;
+  status.textContent = message;
+  status.className = `export-status${type ? ' ' + type : ''}`;
+}
+
+function setVoiceProgress(progress) {
+  const container = document.getElementById('voice-progress');
+  const fill = document.getElementById('voice-progress-fill');
+  const text = document.getElementById('voice-progress-text');
+  if (!container) return;
+  container.hidden = progress <= 0;
+  if (fill) fill.style.width = `${progress}%`;
+  if (text) text.textContent = `${Math.round(progress)}%`;
+}
+
+function updateVoiceButtons() {
+  const generate = document.getElementById('voice-generate-btn');
+  const cancel = document.getElementById('voice-cancel-btn');
+  const sample = document.getElementById('voice-sample-btn');
+  if (generate) generate.disabled = voiceState.generating;
+  if (sample) sample.disabled = voiceState.generating || voiceState.voices.length === 0;
+  if (cancel) cancel.disabled = !voiceState.generating;
+}
+
+async function applyGeneratedNarration(result) {
+  let duration = result.duration || 0;
+  if (!duration) {
+    try {
+      duration = await window.api.getAudioDuration(result.path);
+    } catch (err) {
+      showToast(`No se pudo leer la duración del audio generado: ${err.message}`, 'error');
+    }
+  }
+  state.audio.narration = { name: result.name, path: result.path, size: 0, type: 'audio', duration };
+  state.audioDuration = duration;
+  renderAudio();
+  updateTimeline();
+}
+
+async function handleGenerateVoice() {
+  if (voiceState.generating) return;
+  const textarea = document.getElementById('voice-text');
+  const text = textarea ? textarea.value.trim() : '';
+  if (!text) {
+    showToast('Escribe el texto de la voz o usa el guion limpio', 'warning');
+    return;
+  }
+
+  voiceState.generating = true;
+  updateVoiceButtons();
+  setVoiceStatus('Generando voz…');
+  setVoiceProgress(5);
+  const removeListener = window.api.onVoiceProgress((progress) => setVoiceProgress(progress.progress));
+
+  try {
+    const result = await window.api.generateVoice({
+      text,
+      language: state.config.voice.language,
+      voiceId: state.config.voice.voiceId,
+      speed: state.config.voice.speed,
+      pause: state.config.voice.pause
+    });
+    await applyGeneratedNarration(result);
+    setVoiceProgress(100);
+    setVoiceStatus(`Voz generada (${formatTime(result.duration)})`, 'success');
+    showToast('Voz generada y cargada como narración', 'success');
+  } catch (err) {
+    const message = String(err.message || err);
+    if (message.includes('E_VOICE_ENGINE_MISSING')) {
+      setVoiceStatus('Motor de voz no instalado. Instala Kokoro (ONNX) o Piper (ver LICENSES.md).', 'error');
+      showToast('Motor de voz no instalado (ver LICENSES.md)', 'error');
+    } else if (message.includes('E_VOICE_CANCELLED')) {
+      setVoiceStatus('Generación cancelada', 'warning');
+    } else {
+      setVoiceStatus(`Error al generar la voz: ${message}`, 'error');
+      showToast('Error al generar la voz', 'error');
+    }
+  } finally {
+    voiceState.generating = false;
+    updateVoiceButtons();
+    if (typeof removeListener === 'function') removeListener();
+  }
+}
+
+async function handleCancelVoice() {
+  try {
+    await window.api.cancelVoice();
+  } catch (err) {
+    showToast(`No se pudo cancelar: ${err.message}`, 'error');
+  }
+}
+
+async function handleVoiceSample() {
+  try {
+    const result = await window.api.generateVoiceSample({
+      language: state.config.voice.language,
+      voiceId: state.config.voice.voiceId,
+      speed: state.config.voice.speed
+    });
+    if (voiceState.sampleAudio) voiceState.sampleAudio.pause();
+    voiceState.sampleAudio = new Audio(`file://${result.path}`);
+    await voiceState.sampleAudio.play();
+    showToast('Reproduciendo muestra de voz', 'info');
+  } catch (err) {
+    const message = String(err.message || err);
+    if (message.includes('E_VOICE_ENGINE_MISSING')) {
+      showToast('Motor de voz no instalado (ver LICENSES.md)', 'error');
+    } else {
+      showToast(`No se pudo reproducir la muestra: ${message}`, 'error');
+    }
   }
 }
 
@@ -1522,6 +1759,8 @@ function loadProject(project, missing = []) {
   renderOutputChips();
   updateExportButton();
   syncSubtitleControls();
+  syncVoiceControls();
+  refreshVoiceLanguages();
   refreshFontList(state.config.subtitles.fontFamily);
   refreshKeywordList();
   refreshPreviewScenes();
@@ -2515,6 +2754,68 @@ const CONTROLS = [
     handler: (e) => {
       state.hwAccel.enabled = e.target.checked;
     }
+  },
+  {
+    id: 'voice-panel-toggle-btn',
+    tipo: 'button',
+    handler: showVoicePanel
+  },
+  {
+    id: 'voice-language',
+    tipo: 'select',
+    handler: (e) => {
+      state.config.voice.language = e.target.value === 'en' ? 'en' : 'es';
+      refreshVoiceSelect();
+      updateVoiceButtons();
+    }
+  },
+  {
+    id: 'voice-select',
+    tipo: 'select',
+    handler: (e) => {
+      state.config.voice.voiceId = e.target.value;
+    }
+  },
+  {
+    id: 'voice-speed',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.voice.speed = isNaN(value) ? 1 : Math.min(2, Math.max(0.5, value));
+    }
+  },
+  {
+    id: 'voice-pause',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.config.voice.pause = isNaN(value) ? 0.3 : Math.min(3, Math.max(0, value));
+    }
+  },
+  {
+    id: 'voice-sample-btn',
+    tipo: 'button',
+    handler: handleVoiceSample
+  },
+  {
+    id: 'voice-clean-btn',
+    tipo: 'button',
+    handler: handleVoiceClean
+  },
+  {
+    id: 'voice-text',
+    tipo: 'textarea',
+    handler: () => {}
+  },
+  {
+    id: 'voice-generate-btn',
+    tipo: 'button',
+    handler: handleGenerateVoice
+  },
+  {
+    id: 'voice-cancel-btn',
+    tipo: 'button',
+    handler: handleCancelVoice
   }
 ];
 
@@ -2677,7 +2978,7 @@ window.__TEST_CONTROLS__ = CONTROLS.map(control => ({
   hasHandler: typeof control.handler === 'function'
 }));
 window.__TEST_STATE__ = state;
-window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm };
+window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2695,6 +2996,8 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshKeywordList();
   refreshPresets();
   refreshPreviewScenes();
+  refreshVoiceLanguages();
+  syncVoiceControls();
   detectCodecs();
 
   console.log('Video Maker v0.6.1 - Renderer loaded');

@@ -111,6 +111,13 @@ const subtitlesSchema = z.object({
   animation: z.enum(SUBTITLE_ANIMATIONS).default('none')
 }).default({});
 
+const voiceSchema = z.object({
+  language: z.enum(['es', 'en']).default('es'),
+  voiceId: z.string().default(''),
+  speed: z.number().min(0.5).max(2).default(1),
+  pause: z.number().min(0).max(3).default(0.3)
+}).default({});
+
 const configSchema = z.object({
   outputs: z.array(z.enum(OUTPUT_IDS_TUPLE)).min(1).default([...DEFAULT_OUTPUTS]),
   fitMode: z.enum(['cover', 'blur', 'frame']).default('cover'),
@@ -118,6 +125,7 @@ const configSchema = z.object({
   backgroundMode: z.enum(BACKGROUND_MODES).default(DEFAULT_BACKGROUND_MODE),
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default(DEFAULT_BACKGROUND_COLOR),
   musicVolume: z.number().min(0).max(1).default(0.3),
+  voice: voiceSchema,
   extras: extrasSchema,
   subtitles: subtitlesSchema
 }).default({});
@@ -254,6 +262,7 @@ module.exports = {
   sceneSchema,
   audioSchema,
   subtitlesSchema,
+  voiceSchema,
   renderPayloadSchema,
   parseRenderPayload,
   imageFocus,

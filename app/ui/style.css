@@ -977,6 +977,41 @@ body {
   word-break: break-word;
 }
 
+.voice-panel {
+  margin-top: var(--space-md, 16px);
+  padding: var(--space-md, 16px);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm, 8px);
+}
+
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm, 8px);
+}
+
+.voice-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  padding: 8px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+  background: var(--color-surface, #1a1a1a);
+  color: var(--color-text-primary, #eee);
+}
+
+.voice-actions {
+  display: flex;
+  gap: var(--space-sm, 8px);
+  flex-wrap: wrap;
+}
+
 .keyword-meta {
   flex: 0 0 auto;
   font-size: var(--font-size-xs, 12px);

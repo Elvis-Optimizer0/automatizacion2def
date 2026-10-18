@@ -8,10 +8,12 @@ const { parseProjectFile, collectProjectPaths } = require('./core/project-schema
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
+const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice } = require('./core/voice.js');
 
 const E_PROJECT_INVALID = 'E_PROJECT_INVALID';
 
 let mainWindow;
+let activeVoiceController = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -345,6 +347,69 @@ ipcMain.handle('presets:rename', async (_, oldName, newName) => {
 ipcMain.handle('presets:delete', async (_, name) => {
   const presets = deletePreset(app.getPath('userData'), name);
   return { presets };
+});
+
+function getUserVoicesDir() {
+  return path.join(app.getPath('userData'), 'voices');
+}
+
+ipcMain.handle('voice:list', async () => {
+  return {
+    languages: SUPPORTED_LANGUAGES,
+    voices: listVoiceCatalog(),
+    samples: {
+      es: getSamplePhrase('es'),
+      en: getSamplePhrase('en')
+    }
+  };
+});
+
+async function runVoiceGeneration(text, options) {
+  if (activeVoiceController) {
+    activeVoiceController.abort();
+  }
+  const controller = new AbortController();
+  activeVoiceController = controller;
+
+  const voicesDir = getUserVoicesDir();
+  fs.mkdirSync(voicesDir, { recursive: true });
+  const stamp = `voz-${Date.now()}.wav`;
+  const outputPath = process.env.VM_TEST_VOICE_OUT || (options && options.outputPath) || path.join(voicesDir, stamp);
+
+  const onProgress = (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('voice:progress', progress);
+    }
+  };
+
+  try {
+    const result = await synthesizeVoice({ ...options, text, outputPath }, { onProgress, signal: controller.signal });
+    return { path: result.outputPath, name: path.basename(result.outputPath), duration: result.duration };
+  } finally {
+    if (activeVoiceController === controller) activeVoiceController = null;
+  }
+}
+
+ipcMain.handle('voice:generate', async (_, options) => {
+  const opts = options || {};
+  return runVoiceGeneration(opts.text, opts);
+});
+
+ipcMain.handle('voice:sample', async (_, options) => {
+  const opts = options || {};
+  const language = opts.language === 'en' ? 'en' : 'es';
+  const voices = listVoiceCatalog(language);
+  const voiceId = opts.voiceId || (voices[0] ? voices[0].id : '');
+  return runVoiceGeneration(getSamplePhrase(language), { language, voiceId, speed: opts.speed || 1, pause: 0.2 });
+});
+
+ipcMain.handle('voice:cancel', async () => {
+  if (activeVoiceController) {
+    activeVoiceController.abort();
+    activeVoiceController = null;
+    return { cancelled: true };
+  }
+  return { cancelled: false };
 });
 
 ipcMain.handle('project:save', async (_, data, providedPath) => {  let filePath = providedPath || process.env.VM_TEST_PROJECT_OUT;
