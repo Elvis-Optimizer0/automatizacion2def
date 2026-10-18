@@ -3399,5 +3399,5 @@ document.addEventListener('DOMContentLoaded', () => {
   detectCodecs();
   handleProbeGpu();
 
-  console.log('Video Maker v0.6.1 - Renderer loaded');
+  console.log('Video Maker v0.7.0 - Renderer loaded');
 });
