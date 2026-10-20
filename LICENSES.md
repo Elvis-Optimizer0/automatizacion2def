@@ -1,7 +1,7 @@
 # Licencias y dependencias
 
 Este documento describe las licencias de las dependencias y de los motores locales
-(voz y alineación) que Video Maker puede invocar. Verificado en 2026-10-17.
+(voz y alineación) que Video Maker puede invocar. Verificado en 2026-10-18.
 
 ## Aplicación
 
@@ -42,12 +42,6 @@ Los binarios de FFmpeg/FFprobe se desempaquetan con `asarUnpack` y se invocan co
 > (vender, regalar, publicar) un instalador con espeak-ng incrustado, revisar la
 > implicación GPL-3.0. Alternativa sin GPL: usar solo voces en inglés (misaki) o
 > sustituir espeak-ng por un G2P español con licencia permisiva.
-
-## Voz de respaldo: Piper
-
-- Código Piper (rhasspy/piper): **MIT**.
-- Pesos por voz: licencia individual (CC0, CC-BY, etc.). Verificar la licencia de
-  cada voz concreta antes de distribuirla.
 
 ## Alineación (Whisper): whisper.cpp
 

@@ -6,7 +6,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "lint": "eslint . --ext .js",
+    "ui:dev": "vite app/ui",
+    "ui:build": "vite build --config vite.config.mjs",
+    "prebuild": "npm run ui:build",
+    "lint": "eslint . --ext .js,.jsx",
     "test": "playwright test",
     "e2e": "playwright test",
     "fetch-engines": "node scripts/fetch-engines.js",
@@ -17,15 +20,19 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.44.0",
     "electron": "^44.0.0",
     "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
-    "@playwright/test": "^1.44.0",
     "playwright": "^1.44.0"
   },
   "dependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
     "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.4",
     "zod": "^3.22.4"
   },
   "build": {
@@ -42,8 +49,20 @@
       "target": "nsis"
     },
     "extraResources": [
-      { "from": "vendor/kokoro", "to": "kokoro", "filter": ["**/*"] },
-      { "from": "vendor/whisper", "to": "whisper", "filter": ["**/*"] }
+      {
+        "from": "vendor/kokoro",
+        "to": "kokoro",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "vendor/whisper",
+        "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "asarUnpack": [
       "**/ffprobe*",

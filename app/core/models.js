@@ -65,6 +65,15 @@ function verifyModelFileAsync(filePath, expected = {}) {
     }
 
     const stat = fs.statSync(filePath);
+    if (!stat.isFile()) {
+      result.exists = true;
+      result.size = stat.size;
+      result.sizeMatches = false;
+      result.verified = false;
+      resolve(result);
+      return;
+    }
+
     result.exists = true;
     result.size = stat.size;
     result.sizeMatches = expected.sizeBytes ? stat.size === expected.sizeBytes : true;

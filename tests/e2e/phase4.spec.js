@@ -61,7 +61,7 @@ function sha256(filePath) {
 }
 
 async function waitForTestExports(page) {
-  await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__TEST_EXPORT__, { timeout: 15000 });
+  await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__APP_MOUNTED__, { timeout: 15000 });
 }
 
 async function exportAndWait(page) {
@@ -113,7 +113,7 @@ test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
 
     electronApp = await electron.launch({
       args: ['.'],
-      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_TEST_OUTPUT: outputPath }
+      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_USE_DIST: '1', VM_TEST: '1', VM_TEST_OUTPUT: outputPath }
     });
 
     page = await electronApp.firstWindow();

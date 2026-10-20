@@ -22,7 +22,8 @@ module.exports = {
     {
       name: 'e2e',
       testMatch: '**/e2e/**/*.spec.js',
-      use: { ...require('@playwright/test').devices['Desktop Chrome'] }
+      use: { ...require('@playwright/test').devices['Desktop Chrome'] },
+      env: { VM_USE_DIST: '1' }
     }
   ]
 };

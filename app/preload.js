@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+const isTest = process.argv.includes('--vm-test') || process.env.VM_TEST === '1' || process.env.ELECTRON_TEST === '1';
+console.log('[Preload] isTest:', isTest, 'VM_TEST:', process.env.VM_TEST, 'ELECTRON_TEST:', process.env.ELECTRON_TEST, 'argv:', process.argv);
+
 contextBridge.exposeInMainWorld('api', {
+  isTest,
   openImages: () => ipcRenderer.invoke('dialog:openImages'),
   openAudio: () => ipcRenderer.invoke('dialog:openAudio'),
   openMusic: () => ipcRenderer.invoke('dialog:openMusic'),

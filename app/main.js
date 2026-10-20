@@ -8,7 +8,7 @@ const { parseProjectFile, collectProjectPaths } = require('./core/project-schema
 const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir, E_FONT_IMPORT_FAILED } = require('./core/fonts.js');
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
-const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
+const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode, getUserVoicesDir } = require('./core/voice.js');
 const { KNOWN_MODELS, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
@@ -25,6 +25,9 @@ let activeModelController = null;
 let activeAlignController = null;
 
 function createWindow() {
+  console.log('[Main] process.env.VM_TEST:', process.env.VM_TEST);
+  console.log('[Main] process.env.VM_USE_DIST:', process.env.VM_USE_DIST);
+  console.log('[Main] All env:', Object.keys(process.env).filter(k => k.includes('VM')).reduce((o,k)=>(o[k]=process.env[k],o),{}));
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
@@ -35,12 +38,17 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      additionalArguments: process.env.VM_TEST === '1' ? ['--vm-test'] : []
     },
     show: false
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
+  const isDev = !app.isPackaged && !process.env.VM_USE_DIST;
+  const indexPath = isDev
+    ? path.join(__dirname, 'ui', 'index.html')
+    : path.join(__dirname, 'ui', 'dist', 'index.html');
+  mainWindow.loadFile(indexPath);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -357,10 +365,6 @@ ipcMain.handle('presets:delete', async (_, name) => {
   const presets = deletePreset(app.getPath('userData'), name);
   return { presets };
 });
-
-function getUserVoicesDir() {
-  return path.join(app.getPath('userData'), 'voices');
-}
 
 ipcMain.handle('voice:list', async () => {
   const modelsDir = getModelsDir(app.getPath('userData'));

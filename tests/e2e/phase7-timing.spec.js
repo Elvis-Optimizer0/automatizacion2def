@@ -63,12 +63,12 @@ test.describe.serial('Video Maker - Phase 7 subtitle timing', () => {
 
     electronApp = await electron.launch({
       args: ['.'],
-      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_TEST_OUTPUT: outputPath }
+      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_USE_DIST: '1', VM_TEST: '1', VM_TEST_OUTPUT: outputPath }
     });
     page = await electronApp.firstWindow();
     page.on('pageerror', error => pageErrors.push(String(error)));
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__TEST_EXPORT__, { timeout: 15000 });
+    await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__APP_MOUNTED__, { timeout: 15000 });
 
     await page.evaluate((payload) => {
       const state = window.__TEST_STATE__;
@@ -99,6 +99,12 @@ test.describe.serial('Video Maker - Phase 7 subtitle timing', () => {
       '[Escena 2] 0:03 - 0:06 Segunda escena con texto'
     ].join('\n'));
     await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      window.__TEST_STATE__.script.raw = document.getElementById('script-textarea').value;
+      const { scenes } = window.__TEST_RENDER__.parseScript(window.__TEST_STATE__.script.raw);
+      window.__TEST_STATE__.script.scenes = scenes;
+      window.__TEST_RENDER__.updateTimeline();
+    });
   });
 
   test.afterAll(async () => {

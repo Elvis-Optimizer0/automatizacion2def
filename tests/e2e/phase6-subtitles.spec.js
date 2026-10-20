@@ -87,6 +87,7 @@ test.describe.serial('Video Maker - Phase 6 subtitles', () => {
         ...process.env,
         NODE_ENV: 'test',
         ELECTRON_TEST: '1',
+        VM_USE_DIST: '1',
         VM_TEST_OUTPUT: baseOutput,
         VM_TEST_FONT_IN: fontCopy
       }

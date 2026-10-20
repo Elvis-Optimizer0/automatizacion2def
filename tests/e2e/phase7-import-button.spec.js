@@ -24,6 +24,7 @@ test.describe.serial('Video Maker - Phase 7 import button wiring', () => {
         ...process.env,
         NODE_ENV: 'test',
         ELECTRON_TEST: '1',
+        VM_USE_DIST: '1',
         VM_TEST_USERDATA: userDataDir,
         VM_TEST_MODEL_IN: modelFile
       }
@@ -31,7 +32,7 @@ test.describe.serial('Video Maker - Phase 7 import button wiring', () => {
     page = await electronApp.firstWindow();
     page.on('pageerror', error => pageErrors.push(String(error)));
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__, { timeout: 15000 });
+    await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__APP_MOUNTED__, { timeout: 15000 });
   });
 
   test.afterAll(async () => {

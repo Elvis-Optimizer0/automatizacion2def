@@ -36,7 +36,7 @@ test.describe('Video Maker - Phase 6 quick preview', () => {
 
     electronApp = await electron.launch({
       args: ['.'],
-      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1' }
+      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_USE_DIST: '1', VM_TEST: '1' }
     });
     page = await electronApp.firstWindow();
     await page.waitForLoadState('domcontentloaded');

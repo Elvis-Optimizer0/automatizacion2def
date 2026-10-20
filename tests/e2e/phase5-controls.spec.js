@@ -50,7 +50,7 @@ test.describe.serial('Video Maker - Phase 5 Controls', () => {
 
     electronApp = await electron.launch({
       args: ['.'],
-      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1' }
+      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_USE_DIST: '1', VM_TEST: '1' }
     });
     page = await electronApp.firstWindow();
     page.on('pageerror', error => pageErrors.push(String(error)));

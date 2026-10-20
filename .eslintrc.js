@@ -1,5 +1,5 @@
 module.exports = {
-  ignorePatterns: ['vendor/', '.engine-cache/', 'dist/', 'out/', 'test-results/', 'playwright-report/'],
+  ignorePatterns: ['vendor/', '.engine-cache/', 'dist/', 'out/', 'test-results/', 'playwright-report/', 'app/ui/', 'vite.config.*', 'fix_*.js', 'renderer_original.js', 'test_quote.js', 'update-css-base64.js', 'extract_*.py'],
   env: {
     browser: true,
     es2022: true,
@@ -24,7 +24,7 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['app/main.js', 'app/preload.js'],
+      files: ['app/main.js', 'app/preload.js', 'scripts/*.js', 'app/core/*.js'],
       env: {
         node: true
       },

@@ -109,6 +109,7 @@ test.describe.serial('Video Maker - Phase 5 Integration verification', () => {
         ...process.env,
         NODE_ENV: 'test',
         ELECTRON_TEST: '1',
+        VM_USE_DIST: '1',
         VM_TEST_OUTPUT: outputPath,
         VM_TEST_PROJECT_OUT: savedProjectPath,
         VM_TEST_PROJECT_IN: savedProjectPath

@@ -8,7 +8,7 @@ test.describe('Video Maker - Launch', () => {
   test.beforeAll(async () => {
     electronApp = await electron.launch({
       args: ['.'],
-      env: { ...process.env, NODE_ENV: 'test' }
+      env: { ...process.env, NODE_ENV: 'test', VM_USE_DIST: '1', ELECTRON_TEST: '1' }
     });
 
     page = await electronApp.firstWindow();

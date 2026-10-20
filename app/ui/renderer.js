@@ -3229,6 +3229,31 @@ const CONTROLS = [
     }
   },
   {
+    id: 'voice-models-open-btn',
+    tipo: 'button',
+    handler: async () => {
+      try {
+        const { shell } = require('electron');
+        const { getUserVoicesDir } = require('../../core/voice.js');
+        const dir = getUserVoicesDir(require('electron').app.getPath('userData'));
+        if (!require('fs').existsSync(dir)) {
+          require('fs').mkdirSync(dir, { recursive: true });
+        }
+        await shell.openPath(dir);
+      } catch (err) {
+        showToast(`No se pudo abrir la carpeta: ${err.message}`, 'error');
+      }
+    }
+  },
+  {
+    id: 'voice-models-refresh-btn',
+    tipo: 'button',
+    handler: async () => {
+      await refreshVoiceLanguages();
+      showToast('Voces personales actualizadas', 'success');
+    }
+  },
+  {
     id: 'voice-sample-btn',
     tipo: 'button',
     handler: handleVoiceSample

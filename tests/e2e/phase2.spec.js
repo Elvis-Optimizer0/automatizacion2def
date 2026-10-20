@@ -53,7 +53,7 @@ function extractSceneNumber(filename) {
 }
 
 async function waitForTestExports(page) {
-  await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__, { timeout: 15000 });
+  await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__APP_MOUNTED__, { timeout: 15000 });
 }
 
 test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
@@ -71,7 +71,7 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
 
     electronApp = await electron.launch({
       args: ['.'],
-      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1' }
+      env: { ...process.env, NODE_ENV: 'test', ELECTRON_TEST: '1', VM_USE_DIST: '1', VM_TEST: '1' }
     });
 
     page = await electronApp.firstWindow();
@@ -244,7 +244,7 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
       expect.arrayContaining([
         'openImages', 'openAudio', 'openMusic', 'openScript',
         'getAudioDuration', 'getPathForFile',
-        'saveVideo', 'openFolder', 'renderVideo', 'renderPreview', 'verifyBinaries', 'detectCodecs', 'onRenderProgress',
+        'saveVideo', 'openFolder', 'openVoiceModelsFolder', 'renderVideo', 'renderPreview', 'verifyBinaries', 'detectCodecs', 'onRenderProgress',
         'saveProject', 'openProject', 'listFonts', 'importFont', 'detectKeywords',
         'listPresets', 'addPreset', 'renamePreset', 'deletePreset',
         'listVoices', 'generateVoice', 'generateVoiceSample', 'cancelVoice', 'onVoiceProgress',
@@ -252,7 +252,7 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
         'alignScenes', 'getCapabilities'
       ])
     );
-    expect(apiKeys.length).toBe(35);
+    expect(apiKeys.length).toBe(36);
 
     const preloadPath = path.join(__dirname, '..', '..', 'app', 'preload.js');
     const preloadCode = fs.readFileSync(preloadPath, 'utf-8');
@@ -262,6 +262,6 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
     const mainCode = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'main.js'), 'utf-8');
     const handleMatches = mainCode.match(/ipcMain\.handle\(/g);
     const handleCount = handleMatches ? handleMatches.length : 0;
-    expect(handleCount).toBe(31);
+    expect(handleCount).toBe(32);
   });
 });
