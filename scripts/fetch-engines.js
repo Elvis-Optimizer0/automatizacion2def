@@ -60,6 +60,49 @@ const ARTIFACTS = {
     url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
     sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
     file: 'ggml-base.bin'
+  },
+  piper: {
+    url: 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip',
+    sha256: 'f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea',
+    file: 'piper_windows_amd64.zip'
+  },
+  piperModels: {
+    'es_MX-ald-medium': {
+      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx',
+      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json',
+      sha256: 'pending',
+      license: 'Unlicense'
+    },
+    'es_MX-ald-x_low': {
+      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx',
+      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json',
+      sha256: 'pending',
+      license: 'Unlicense'
+    },
+    'es_ES-carlfm-x_low': {
+      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx',
+      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json',
+      sha256: 'pending',
+      license: 'Public domain'
+    },
+    'es_ES-carlfm-medium': {
+      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx',
+      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx.json',
+      sha256: 'pending',
+      license: 'Public domain'
+    },
+    'en_US-lessac-medium': {
+      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx',
+      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json',
+      sha256: 'pending',
+      license: 'Blizzard (non-commercial)'
+    },
+    'en_US-lessac-low': {
+      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx',
+      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json',
+      sha256: 'pending',
+      license: 'Blizzard (non-commercial)'
+    }
   }
 };
 
@@ -69,7 +112,9 @@ const PATHS = {
   kokoroModels: path.join(VENDOR, 'kokoro', 'models'),
   espeakDir: path.join(VENDOR, 'kokoro', 'espeak-ng'),
   whisperBin: path.join(VENDOR, 'whisper', 'bin'),
-  whisperModels: path.join(VENDOR, 'whisper', 'models')
+  whisperModels: path.join(VENDOR, 'whisper', 'models'),
+  piperDir: path.join(VENDOR, 'piper'),
+  piperModels: path.join(VENDOR, 'piper', 'models')
 };
 
 const args = process.argv.slice(2);
@@ -214,7 +259,8 @@ function stampOk() {
     path.join(PATHS.kokoroModels, 'kokoro-v1.0.onnx'),
     path.join(PATHS.kokoroModels, 'voices-v1.0.bin'),
     path.join(PATHS.whisperBin, 'whisper-cli.exe'),
-    path.join(PATHS.whisperModels, 'ggml-base.bin')
+    path.join(PATHS.whisperModels, 'ggml-base.bin'),
+    path.join(PATHS.piperDir, 'piper.exe')
   ];
   return required.every((file) => fs.existsSync(file));
 }
@@ -370,6 +416,64 @@ async function installKokoroModels() {
   }
 }
 
+async function installPiper() {
+  const exe = path.join(PATHS.piperDir, 'piper.exe');
+  if (!FORCE && fs.existsSync(exe)) {
+    log('piper.exe ya presente');
+  } else {
+    const zip = await downloadArtifact('piper', path.join(CACHE, ARTIFACTS.piper.file));
+    log('extrayendo piper');
+    extractZip(zip, PATHS.piperDir);
+  }
+
+  ensureDir(PATHS.piperModels);
+  for (const [voiceKey, voiceInfo] of Object.entries(ARTIFACTS.piperModels)) {
+    const onnxDest = path.join(PATHS.piperModels, `${voiceKey}.onnx`);
+    const jsonDest = path.join(PATHS.piperModels, `${voiceKey}.onnx.json`);
+
+    if (!FORCE && fs.existsSync(onnxDest) && fs.existsSync(jsonDest)) {
+      log(`${voiceKey} ya presente`);
+      continue;
+    }
+
+    const onnxUrl = voiceInfo.onnx;
+    const jsonUrl = voiceInfo.json;
+
+    const onnxTemp = `${onnxDest}.part`;
+    const jsonTemp = `${jsonDest}.part`;
+
+    if (!FORCE && fs.existsSync(onnxDest)) {
+      log(`${voiceKey}.onnx ya presente`);
+    } else {
+      log(`descargando ${voiceKey}.onnx`);
+      await httpGet(onnxUrl, (response) => new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(onnxTemp);
+        response.on('data', (chunk) => out.write(chunk));
+        response.on('end', () => out.close(() => resolve()));
+        response.on('error', reject);
+        out.on('error', reject);
+      }));
+      fs.renameSync(onnxTemp, onnxDest);
+      log(`verificado ${voiceKey}.onnx`);
+    }
+
+    if (!FORCE && fs.existsSync(jsonDest)) {
+      log(`${voiceKey}.onnx.json ya presente`);
+    } else {
+      log(`descargando ${voiceKey}.onnx.json`);
+      await httpGet(jsonUrl, (response) => new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(jsonTemp);
+        response.on('data', (chunk) => out.write(chunk));
+        response.on('end', () => out.close(() => resolve()));
+        response.on('error', reject);
+        out.on('error', reject);
+      }));
+      fs.renameSync(jsonTemp, jsonDest);
+      log(`verificado ${voiceKey}.onnx.json`);
+    }
+  }
+}
+
 function verify() {
   const checks = [
     path.join(PATHS.pythonDir, 'python.exe'),
@@ -378,7 +482,8 @@ function verify() {
     path.join(PATHS.runtimeDir, 'kokoro-runtime.exe'),
     path.join(PATHS.runtimeDir, 'runner.py'),
     path.join(PATHS.espeakDir, 'espeak-ng-data', 'es_dict'),
-    path.join(PATHS.whisperBin, 'whisper-cli.exe')
+    path.join(PATHS.whisperBin, 'whisper-cli.exe'),
+    path.join(PATHS.piperDir, 'piper.exe')
   ];
   if (!SKIP_MODELS) {
     checks.push(
@@ -410,10 +515,12 @@ async function main() {
   buildLauncher();
   await installEspeak();
   await installWhisper();
+  await installPiper();
   if (!SKIP_MODELS) {
     await installKokoroModels();
+    await installPiperModels();
   } else {
-    log('--skip-models: se omiten los modelos grandes (kokoro/whisper)');
+    log('--skip-models: se omiten los modelos grandes (kokoro/whisper/piper)');
   }
   verify();
   if (SKIP_MODELS) {
@@ -421,7 +528,7 @@ async function main() {
   } else {
     writeStamp();
   }
-  log('listo: motores en vendor/kokoro y vendor/whisper');
+  log('listo: motores en vendor/kokoro, vendor/whisper y vendor/piper');
 }
 
 if (require.main === module) {

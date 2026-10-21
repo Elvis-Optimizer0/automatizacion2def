@@ -82,6 +82,25 @@ function isUsableBinary(value) {
   return !!(value && path.isAbsolute(value) && fs.existsSync(value));
 }
 
+function resolvePiperRuntime(options = {}) {
+  const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
+  const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
+  const modelsDir = path.join(__dirname, '..', 'vendor', 'piper', 'models');
+
+  if (!fs.existsSync(piperExe)) {
+    return { executable: null, modelsDir: null, searched: [] };
+  }
+  if (!fs.existsSync(piperDataDir)) {
+    return { executable: null, modelsDir: null, searched: [] };
+  }
+
+  return {
+    executable: piperExe,
+    modelsDir: path.join(__dirname, '..', 'vendor', 'piper', 'models'),
+    searched: []
+  };
+}
+
 function resolveEngine(voiceId, env = process.env, options = {}) {
   const voice = getVoice(voiceId);
   const engine = voice ? voice.engine : 'kokoro';
@@ -100,14 +119,24 @@ function resolveEngine(voiceId, env = process.env, options = {}) {
     if (isUsableBinary(env.VM_KOKORO_BIN)) {
       return { engine: 'kokoro', executable: env.VM_KOKORO_BIN, model: env.VM_KOKORO_MODEL || '', source: 'env' };
     }
+    return null;
+  }
+
+  if (engine === 'piper') {
+    const bundled = resolvePiperRuntime();
+    if (bundled.executable) {
+      return {
+        engine: 'piper',
+        executable: bundled.executable,
+        modelsDir: bundled.modelsDir,
+        model: env.VM_PIPER_MODEL || '',
+        source: 'bundled'
+      };
+    }
     if (isUsableBinary(env.VM_PIPER_BIN)) {
       return { engine: 'piper', executable: env.VM_PIPER_BIN, model: env.VM_PIPER_MODEL || '', source: 'env' };
     }
     return null;
-  }
-
-  if (isUsableBinary(env.VM_PIPER_BIN)) {
-    return { engine: 'piper', executable: env.VM_PIPER_BIN, model: env.VM_PIPER_MODEL || '', source: 'env' };
   }
 
   return null;
@@ -116,23 +145,26 @@ function resolveEngine(voiceId, env = process.env, options = {}) {
 function checkVoiceEngine(voiceId, env = process.env, modelsDir, options = {}) {
   const voice = getVoice(voiceId);
   const engine = voice ? voice.engine : 'kokoro';
-  const runtimeEnv = engine === 'piper' ? 'VM_PIPER_BIN' : 'VM_KOKORO_BIN';
 
   const bundled = engine === 'kokoro'
     ? resolveKokoroRuntime(options)
-    : { dir: null, executable: null, modelsDir: null, searched: [] };
+    : resolvePiperRuntime();
 
   const runtime = bundled.executable
-    || (isUsableBinary(env[runtimeEnv]) ? env[runtimeEnv] : null);
+    || (isUsableBinary(env.VM_KOKORO_BIN) ? env.VM_KOKORO_BIN : null)
+    || (isUsableBinary(env.VM_PIPER_BIN) ? env.VM_PIPER_BIN : null);
 
-  const modelsBaseDir = (bundled.executable && bundled.modelsDir) || modelsDir || null;
+  const modelsBaseDir = bundled.executable
+    ? bundled.modelsDir
+    : modelsDir || null;
+
   const modelInfo = engine === 'piper'
-    ? { modelFound: true, modelDir: null, missingFiles: [] }
+    ? { modelFound: true, modelDir: path.join(__dirname, '..', 'vendor', 'piper', 'models'), missingFiles: [] }
     : checkModelFiles(modelsBaseDir, engine);
 
   return {
     engine,
-    runtimeEnv,
+    runtimeEnv: 'VM_PIPER_BIN',
     runtime,
     bundled: !!bundled.executable,
     bundledDir: bundled.dir,
@@ -165,8 +197,12 @@ function buildVoiceEngineError(readiness) {
 
 function buildEngineArgs(engine, options) {
   if (engine.engine === 'piper') {
-    const args = ['-m', engine.model || '', '-f', options.outputPath];
+    const args = [
+      '-m', engine.model || '',
+      '-f', options.outputPath
+    ];
     if (options.speed) args.push('--length_scale', String(1 / options.speed));
+    if (options.pause) args.push('--sentence_silence', String(options.pause));
     return args;
   }
   const voice = getVoice(options.voiceId);
@@ -215,7 +251,7 @@ function synthesizeVoice(options, hooks = {}) {
         return;
       }
       command = engine.executable;
-      args = buildEngineArgs(engine, { ...opts, outputPath, language, speed });
+      args = buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause });
     }
 
     const childEnv = testMode
@@ -263,7 +299,10 @@ function synthesizeVoice(options, hooks = {}) {
       }
     }
 
+    const isPiper = engine && engine.engine === 'piper';
+
     child.stdout.on('data', (data) => {
+      if (isPiper) return;
       stdout += data.toString();
       let index;
       while ((index = stdout.indexOf('\n')) >= 0) {
@@ -282,7 +321,11 @@ function synthesizeVoice(options, hooks = {}) {
 
     const wantsStdin = testMode || (engine && engine.engine === 'kokoro');
     if (wantsStdin) {
-      child.stdin.write(JSON.stringify({ outputPath, duration, text, language, speed, pause, voiceId: opts.voiceId }));
+      if (isPiper) {
+        child.stdin.write(text);
+      } else {
+        child.stdin.write(JSON.stringify({ outputPath, duration, text, language, speed, pause, voiceId: opts.voiceId }));
+      }
       child.stdin.end();
     }
 

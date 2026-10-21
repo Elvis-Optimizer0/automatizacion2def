@@ -8,6 +8,16 @@ test.describe('fetch-engines configuration', () => {
     expect(keys.length).toBeGreaterThanOrEqual(7);
     for (const key of keys) {
       const artifact = ARTIFACTS[key];
+      if (key === 'piperModels') {
+        // piperModels is an object of voice configurations, not a single artifact
+        expect(typeof artifact).toBe('object');
+        for (const [voiceKey, voiceInfo] of Object.entries(artifact)) {
+          expect(voiceInfo.onnx).toMatch(/^https:\/\//);
+          expect(voiceInfo.json).toMatch(/^https:\/\//);
+          expect(voiceInfo.license).toBeTruthy();
+        }
+        continue;
+      }
       expect(artifact.url, `${key} url`).toMatch(/^https:\/\//);
       expect(artifact.sha256, `${key} sha256`).toMatch(/^[0-9a-f]{64}$/);
       expect(artifact.file, `${key} file`).toBeTruthy();
@@ -15,8 +25,9 @@ test.describe('fetch-engines configuration', () => {
   });
 
   test('no two artifacts share the same sha256 or cache file name', () => {
-    const hashes = Object.values(ARTIFACTS).map((item) => item.sha256);
-    const files = Object.values(ARTIFACTS).map((item) => item.file);
+    const artifacts = Object.values(ARTIFACTS).filter(item => typeof item === 'object' && item.sha256);
+    const hashes = artifacts.map((item) => item.sha256);
+    const files = artifacts.map((item) => item.file);
     expect(new Set(hashes).size).toBe(hashes.length);
     expect(new Set(files).size).toBe(files.length);
   });

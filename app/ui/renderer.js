@@ -187,7 +187,7 @@ const state = {
     backgroundMode: 'color',
     backgroundColor: '#000000',
     musicVolume: 0.3,
-    voice: { language: 'es', voiceId: '', speed: 1, pause: 0.3 },
+    voice: { language: 'es', engine: 'kokoro', voiceId: '', speed: 1, pause: 0.3 },
     extras: {
       badge: { enabled: false, text: '', position: 'topRight', animation: 'fade' },
       lowerThird: { enabled: false, text: '', opacity: 0.6 },
@@ -732,7 +732,8 @@ function refreshVoiceSelect() {
   const select = document.getElementById('voice-select');
   if (!select) return;
   const language = state.config.voice.language;
-  const voices = voiceState.voices.filter(voice => voice.language === language);
+  const engine = document.getElementById('voice-engine')?.value || 'kokoro';
+  const voices = voiceState.voices.filter(voice => voice.language === language && voice.engine === engine);
   select.innerHTML = '';
   voices.forEach((voice) => {
     const option = document.createElement('option');
@@ -763,6 +764,8 @@ function syncVoiceControls() {
   const voice = state.config.voice;
   const language = document.getElementById('voice-language');
   if (language && voice.language) language.value = voice.language;
+  const engine = document.getElementById('voice-engine');
+  if (engine && voice.engine) engine.value = voice.engine;
   const speed = document.getElementById('voice-speed');
   if (speed) speed.value = voice.speed;
   const pause = document.getElementById('voice-pause');
@@ -772,6 +775,7 @@ function syncVoiceControls() {
     select.value = voice.voiceId;
   }
   updateVoiceButtons();
+  refreshVoiceSelect();
 }
 
 function fillVoiceTextFromScript() {
@@ -848,15 +852,25 @@ async function handleGenerateVoice() {
 
   if (!window.__TEST_STATE__) {
     const modelsInfo = await window.api.listModels();
-    const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
-    if (!kokoro || !kokoro.installed) {
-      showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
-      return;
-    }
-    const whisper = modelsInfo.models.find(m => m.id === 'whisper');
-    if (!whisper || !whisper.installed) {
-      showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
-      return;
+    const selectedEngine = document.getElementById('voice-engine')?.value || 'kokoro';
+    
+    if (selectedEngine === 'kokoro') {
+      const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
+      if (!kokoro || !kokoro.installed) {
+        showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
+        return;
+      }
+      const whisper = modelsInfo.models.find(m => m.id === 'whisper');
+      if (!whisper || !whisper.installed) {
+        showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
+        return;
+      }
+    } else if (selectedEngine === 'piper') {
+      const piper = modelsInfo.models.find(m => m.id === 'piper');
+      if (!piper || !piper.installed) {
+        showToast('Falta el modelo Piper. Descárgalo o impórtalo primero.', 'error');
+        return;
+      }
     }
   }
 
@@ -3229,6 +3243,16 @@ const CONTROLS = [
     tipo: 'select',
     handler: (e) => {
       state.config.voice.language = e.target.value === 'en' ? 'en' : 'es';
+      refreshVoiceSelect();
+      updateVoiceButtons();
+    }
+  },
+  {
+    id: 'voice-engine',
+    tipo: 'select',
+    handler: (e) => {
+      state.config.voice.engine = e.target.value;
+      state.config.voice.voiceId = '';
       refreshVoiceSelect();
       updateVoiceButtons();
     }
