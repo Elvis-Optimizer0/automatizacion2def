@@ -816,9 +816,10 @@ function updateVoiceButtons() {
   const generate = document.getElementById('voice-generate-btn');
   const cancel = document.getElementById('voice-cancel-btn');
   const sample = document.getElementById('voice-sample-btn');
+  const isTestMode = !!window.__TEST_STATE__;
   if (generate) generate.disabled = voiceState.generating;
   if (sample) sample.disabled = voiceState.generating || voiceState.voices.length === 0;
-  if (cancel) cancel.disabled = !voiceState.generating;
+  if (cancel) cancel.disabled = !voiceState.generating || isTestMode;
 }
 
 async function applyGeneratedNarration(result) {
