@@ -463,6 +463,9 @@ ipcMain.handle('align:scenes', async (_, payload) => {
 });
 
 function getVendorModelsDir() {
+  // In development, vendor is at project root; in production, it's in resources
+  const devVendor = path.join(__dirname, '..', 'vendor');
+  if (fs.existsSync(devVendor)) return devVendor;
   return path.join(process.resourcesPath, 'vendor');
 }
 

@@ -123,6 +123,31 @@ function getModelsDir(userDataDir) {
   return path.join(userDataDir, 'models');
 }
 
+function cleanupPlaceholderFiles(modelsDir, catalog = MODEL_CATALOG) {
+  try {
+    const models = normalizeCatalog(catalog);
+    for (const model of models) {
+      const modelDir = path.join(modelsDir, model.id);
+      for (const file of model.files) {
+        const perModelPath = path.join(modelDir, file.fileName);
+        const flatPath = path.join(modelsDir, file.fileName);
+        
+        for (const filePath of [perModelPath, flatPath]) {
+          if (!fs.existsSync(filePath)) continue;
+          try {
+            const stat = fs.statSync(filePath);
+            if (stat.isFile() && file.sizeBytes && file.sizeBytes > 10 * 1024 * 1024 && stat.size === 4096) {
+              const backupPath = filePath + '.placeholder.' + Date.now() + '.bak';
+              fs.renameSync(filePath, backupPath);
+              console.log(`[models] Moved placeholder to backup: ${backupPath}`);
+            }
+          } catch (_err) { void _err; }
+        }
+      }
+    }
+  } catch (_err) { void _err; }
+}
+
 function normalizeCatalog(catalog = MODEL_CATALOG) {
   return (Array.isArray(catalog) ? catalog : []).map(model => ({
     ...model,
@@ -215,6 +240,7 @@ function verifyModelFile(filePath, expected = {}) {
 }
 
 function listModels(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = null) {
+  cleanupPlaceholderFiles(modelsDir, catalog);
   const models = normalizeCatalog(catalog).map((model) => {
     const dir = getModelDir(modelsDir, model);
     const files = model.files.map((file) => {
@@ -232,6 +258,7 @@ function listModels(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = null) 
         verified: syncVerification.verified,
         size: syncVerification.size,
         expectedSize: syncVerification.expectedSize,
+        sizeMatches: syncVerification.sizeMatches,
         missing: !syncVerification.exists,
         status: !syncVerification.exists ? 'missing' : (syncVerification.verified ? 'ok' : 'unverified'),
         verifying: false,
@@ -543,6 +570,7 @@ module.exports = {
   getModelDir,
   getModelFilePath,
   getExpectedModelPath,
+  resolveModelFilePath,
   computeSha256,
   verifyModelFile,
   listModels,
@@ -554,6 +582,7 @@ module.exports = {
   normalizeModelId,
   verifyModelFileAsync,
   getVerificationCacheDir,
+  cleanupPlaceholderFiles,
   importModel,
   downloadToFile,
   downloadModel

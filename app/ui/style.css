@@ -2,12 +2,12 @@
   --color-bg-base: #12161C;
   --color-bg-surface: #1A2029;
   --color-bg-elevated: #232B36;
-  --color-border: #2D3748;
-  --color-border-hover: #3D4A5F;
-
-  --color-accent: #5B7CFA;
-  --color-accent-hover: #7A94FB;
-  --color-accent-active: #4A68E0;
+  --color-border: rgba(220, 40, 40, 0.35);
+  --color-border-hover: rgba(220, 40, 40, 0.75);
+  
+  --color-accent: #dc2828;
+  --color-accent-hover: #ff4d4d;
+  --color-accent-active: #b31f1f;
   --color-accent-muted: rgba(91, 124, 250, 0.12);
 
   --color-secondary: #3FA796;
@@ -21,8 +21,8 @@
   --color-error-hover: #D87A7A;
 
   --color-text-primary: #E8EBF0;
-  --color-text-secondary: #A0A8B8;
-  --color-text-muted: #6B7588;
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --color-text-muted: rgba(255, 255, 255, 0.4);
   --color-text-on-accent: #FFFFFF;
 
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1056,7 +1056,7 @@ body {
 .model-status.ok { color: #4caf50; }
 .model-status.warn { color: #ffb300; }
 .model-status.missing { color: #ef5350; }
-.model-status.verifying { color: #5B7CFA; }
+.model-status.verifying { color: #ff6b6b; }
 
 .voice-actions {
   display: flex;
