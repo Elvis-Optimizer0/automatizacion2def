@@ -138,6 +138,40 @@ function getModelFilePath(modelsDir, model, file) {
   return path.join(getModelDir(modelsDir, model), file.fileName);
 }
 
+function resolveModelFilePath(modelsDir, model, file, vendorModelsDir = null) {
+  const perModelPath = getModelFilePath(modelsDir, model, file);
+  const flatPath = path.join(modelsDir, file.fileName);
+  const expectedSize = file.sizeBytes || null;
+
+  const vendorPaths = [];
+  if (vendorModelsDir) {
+    vendorPaths.push(path.join(vendorModelsDir, model.id, 'models', file.fileName));
+    vendorPaths.push(path.join(vendorModelsDir, file.fileName));
+  }
+
+  const isDirectoryLike = (stat, expected) => {
+    if (stat.isDirectory()) return true;
+    if (expected && expected > 10 * 1024 * 1024 && stat.size === 4096) return true;
+    return false;
+  };
+
+  const checkPath = (p) => {
+    if (!fs.existsSync(p)) return null;
+    try {
+      const stat = fs.statSync(p);
+      if (!stat.isFile()) return null;
+      if (isDirectoryLike(stat, expectedSize)) return null;
+      if (expectedSize && stat.size !== expectedSize) return null;
+      return p;
+    } catch (_err) {
+      return null;
+    }
+  };
+
+  const existingPath = fs.existsSync(perModelPath) ? perModelPath : (fs.existsSync(flatPath) ? flatPath : null);
+  return checkPath(perModelPath) || checkPath(flatPath) || vendorPaths.map(checkPath).find(p => p) || existingPath || perModelPath;
+}
+
 function getExpectedModelPath(modelsDir, modelId, fileName, catalog = MODEL_CATALOG) {
   const model = normalizeCatalog(catalog).find(item => item.id === modelId);
   if (!model) return null;
@@ -180,12 +214,17 @@ function verifyModelFile(filePath, expected = {}) {
   return result;
 }
 
-function listModels(modelsDir, catalog = MODEL_CATALOG) {
+function listModels(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = null) {
   const models = normalizeCatalog(catalog).map((model) => {
     const dir = getModelDir(modelsDir, model);
     const files = model.files.map((file) => {
-      const filePath = getModelFilePath(modelsDir, model, file);
+      const filePath = resolveModelFilePath(modelsDir, model, file, vendorModelsDir);
       const syncVerification = verifyModelFile(filePath, file);
+      
+      const userDataPerModelPath = getModelFilePath(modelsDir, model, file);
+      const userDataFlatPath = path.join(modelsDir, file.fileName);
+      const userDataExists = fs.existsSync(userDataPerModelPath) || fs.existsSync(userDataFlatPath);
+      
       return {
         fileName: file.fileName,
         path: filePath,
@@ -198,13 +237,14 @@ function listModels(modelsDir, catalog = MODEL_CATALOG) {
         verifying: false,
         message: !syncVerification.exists
           ? `falta ${file.fileName}`
-          : (syncVerification.verified ? `${file.fileName} listo` : `${file.fileName} sin verificar`)
+          : (syncVerification.verified ? `${file.fileName} listo` : `${file.fileName} sin verificar`),
+        userDataExists
       };
     });
 
-    const installed = files.every(file => file.exists);
+    const installed = files.every(file => file.userDataExists);
     const verified = installed && files.every(file => file.verified);
-    const missingFiles = files.filter(file => !file.exists).map(file => file.fileName);
+    const missingFiles = files.filter(file => !file.userDataExists).map(file => file.fileName);
 
     return {
       id: model.id,
@@ -228,9 +268,9 @@ function listModels(modelsDir, catalog = MODEL_CATALOG) {
   return models;
 }
 
-function listModelsAsync(modelsDir, catalog = MODEL_CATALOG) {
+function listModelsAsync(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = null) {
   return new Promise((resolve) => {
-    const models = listModels(modelsDir, catalog);
+    const models = listModels(modelsDir, catalog, vendorModelsDir);
     const verifyPromises = [];
 
     models.forEach((model) => {
@@ -264,7 +304,7 @@ function listModelsAsync(modelsDir, catalog = MODEL_CATALOG) {
 
     Promise.all(verifyPromises).then(() => {
       models.forEach((model) => {
-        const installed = model.files.every(file => file.exists);
+        const installed = model.files.every(file => file.userDataExists);
         const verified = installed && model.files.every(file => file.verified);
         model.installed = installed;
         model.verified = verified;
