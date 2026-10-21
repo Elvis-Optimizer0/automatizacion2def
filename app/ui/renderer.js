@@ -845,6 +845,20 @@ async function handleGenerateVoice() {
     return;
   }
 
+  if (!window.__TEST_STATE__) {
+    const modelsInfo = await window.api.listModels();
+    const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
+    if (!kokoro || !kokoro.installed) {
+      showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
+      return;
+    }
+    const whisper = modelsInfo.models.find(m => m.id === 'whisper');
+    if (!whisper || !whisper.installed) {
+      showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
+      return;
+    }
+  }
+
   voiceState.generating = true;
   updateVoiceButtons();
   setVoiceStatus('Generando voz…');
