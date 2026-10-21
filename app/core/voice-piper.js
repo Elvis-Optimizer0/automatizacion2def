@@ -2,14 +2,14 @@
 
 const { spawn } = require('child_process');
 const fs = require('fs');
-const path = require('os');
+const path = require('path');
 
 const E_VOICE_PIPER_MISSING = 'E_VOICE_PIPER_MISSING';
 const E_VOICE_PIPER_MODEL_MISSING = 'E_VOICE_PIPER_MODEL_MISSING';
 const E_VOICE_PIPER_FAILED = 'E_VOICE_PIPER_FAILED';
 const E_VOICE_PIPER_CANCELLED = 'E_VOICE_PIPER_CANCELLED';
 
-function resolvePiperPaths(modelsDir) {
+function resolvePiperPaths(modelsDirParam) {
   const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
   const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
   const modelsDir = path.join(__dirname, '..', 'vendor', 'piper', 'models');
@@ -124,9 +124,8 @@ function synthesizeVoicePiper(options, hooks = {}) {
       sentence_silence: options.pause || 0.2
     }, modelPath, configPath, __dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
 
-    let textBuffer = Buffer.from(text, 'utf8');
+    const textBuffer = Buffer.from(text, 'utf8');
 
-    let child;
     let cancelled = false;
     let settled = false;
     let errorOutput = '';
@@ -146,13 +145,13 @@ function synthesizeVoicePiper(options, hooks = {}) {
     };
 
     if (signal) {
-      if (signal.aborted) { reject(new Error(`${E_VOICE_PIPER_CANCELLED}: synthesis cancelled`)); return; }
+      if (signal.aborted) { reject(new Error(E_VOICE_PIPER_CANCELLED + ': synthesis cancelled')); return; }
       if (typeof signal.addEventListener === 'function') signal.addEventListener('abort', onAbort);
     }
 
     const childEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' };
 
-    child = spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/sh', ['/c', `${path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe')} --model "${path.join(__dirname, '..', 'vendor', 'piper', 'models', `${voiceKey}.onnx`)}" --config "${path.join(__dirname, '..', 'vendor', 'piper', 'models', `${voiceKey}.onnx.json`)}" --output_file "${tempOutputPath}" --espeak_data "${path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data')}" --length_scale ${1.0 / (options.speed || 1.0)} --sentence_silence ${options.pause || 0.2} --noise_scale 0.667 --noise_w 0.8 --speaker 0'], {
+    const child = spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/sh', ['/c', path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe') + ' --model "' + path.join(__dirname, '..', 'vendor', 'piper', 'models', voiceKey + '.onnx') + '" --config "' + path.join(__dirname, '..', 'vendor', 'piper', 'models', voiceKey + '.onnx.json') + '" --output_file "' + tempOutputPath + '" --espeak_data "' + path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data') + '" --length_scale ' + (1.0 / (options.speed || 1.0)) + ' --sentence_silence ' + (options.pause || 0.2) + ' --noise_scale 0.667 --noise_w 0.8 --speaker 0'], {
       windowsHide: true,
       env: childEnv,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -161,33 +160,32 @@ function synthesizeVoicePiper(options, hooks = {}) {
     child.stdin.write(Buffer.from(text, 'utf8'));
     child.stdin.end();
 
-    let errorOutput = '';
     child.stderr.on('data', (chunk) => {
       errorOutput += chunk.toString();
     });
 
     child.on('error', (err) => {
       if (cancelled) return;
-      finish(reject, new Error(`${E_VOICE_PIPER_FAILED}: ${err.message}`));
+      finish(reject, new Error(E_VOICE_PIPER_FAILED + ': ' + err.message));
     });
 
     child.on('close', (code) => {
       if (cancelled) {
-        finish(reject, new Error(`${E_VOICE_PIPER_CANCELLED}: synthesis cancelled`));
+        finish(reject, new Error(E_VOICE_PIPER_CANCELLED + ': synthesis cancelled'));
         return;
       }
       if (code !== 0) {
-        finish(reject, new Error(`${E_VOICE_PIPER_FAILED}: piper exited with code ${code}: ${errorOutput}`));
+        finish(reject, new Error(E_VOICE_PIPER_FAILED + ': piper exited with code ' + code + ': ' + errorOutput));
         return;
       }
       if (!fs.existsSync(tempOutputPath)) {
-        finish(reject, new Error(`${E_VOICE_PIPER_FAILED}: output file not created`));
+        finish(reject, new Error(E_VOICE_PIPER_FAILED + ': output file not created'));
         return;
       }
       fs.renameSync(tempOutputPath, outputPath);
       const stats = fs.statSync(outputPath);
       if (stats.size === 0) {
-        finish(reject, new Error(`${E_VOICE_PIPER_FAILED}: output file is empty`));
+        finish(reject, new Error(E_VOICE_PIPER_FAILED + ': output file is empty'));
         return;
       }
       finish(resolve, { path: outputPath, duration: 0 });
@@ -202,7 +200,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
 }
 
 function checkVoiceEnginePiper(modelsDir) {
-  const { piperExe, piperDataDir, modelsDir } = resolvePiperPaths(modelsDir);
+  const { piperExe, piperDataDir, modelsDir: piperModelsDir } = resolvePiperPaths(modelsDir);
 
   const details = [];
   let ready = true;

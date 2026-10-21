@@ -82,10 +82,9 @@ function isUsableBinary(value) {
   return !!(value && path.isAbsolute(value) && fs.existsSync(value));
 }
 
-function resolvePiperRuntime(options = {}) {
+function resolvePiperRuntime() {
   const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
   const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
-  const modelsDir = path.join(__dirname, '..', 'vendor', 'piper', 'models');
 
   if (!fs.existsSync(piperExe)) {
     return { executable: null, modelsDir: null, searched: [] };

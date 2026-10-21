@@ -518,7 +518,6 @@ async function main() {
   await installPiper();
   if (!SKIP_MODELS) {
     await installKokoroModels();
-    await installPiperModels();
   } else {
     log('--skip-models: se omiten los modelos grandes (kokoro/whisper/piper)');
   }
