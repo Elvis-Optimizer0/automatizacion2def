@@ -137,9 +137,8 @@ function cleanupPlaceholderFiles(modelsDir, catalog = MODEL_CATALOG) {
           try {
             const stat = fs.statSync(filePath);
             if (stat.isFile() && file.sizeBytes && file.sizeBytes > 10 * 1024 * 1024 && stat.size === 4096) {
-              const backupPath = filePath + '.placeholder.' + Date.now() + '.bak';
-              fs.renameSync(filePath, backupPath);
-              console.log(`[models] Moved placeholder to backup: ${backupPath}`);
+              fs.unlinkSync(filePath);
+              console.log(`[models] Deleted 4096-byte placeholder: ${filePath}`);
             }
           } catch (_err) { void _err; }
         }

@@ -40,7 +40,7 @@ test.describe('Model placeholder cleanup and resolution', () => {
     
     expect(fs.existsSync(onnxPlaceholder)).toBe(false);
     const backups = fs.readdirSync(kokoroDir).filter(f => f.includes('.placeholder.'));
-    expect(backups.length).toBe(1);
+    expect(backups.length).toBe(0);
     
     expect(fs.existsSync(voicesPath)).toBe(true);
   });
@@ -144,5 +144,40 @@ test.describe('Model placeholder cleanup and resolution', () => {
     // Model not installed (no userData files)
     expect(kokoro.installed).toBe(false);
     expect(whisper.installed).toBe(false);
+  });
+
+  test('test mode uses temp userData, no writes to real APPDATA', () => {
+    const realAppData = path.join(os.homedir(), 'AppData', 'Roaming', 'video-maker', 'models');
+    const realAppDataBefore = fs.existsSync(realAppData) ? fs.readdirSync(realAppData) : [];
+    
+    // Set test mode env vars
+    process.env.NODE_ENV = 'test';
+    process.env.ELECTRON_TEST = '1';
+    
+    const tempUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-test-isolation-'));
+    const tempModelsDir = getModelsDir(tempUserData);
+    
+    // Create a placeholder in temp
+    const kokoroDir = path.join(tempModelsDir, 'kokoro');
+    fs.mkdirSync(kokoroDir, { recursive: true });
+    const placeholder = path.join(kokoroDir, 'kokoro-v1.0.onnx');
+    fs.writeFileSync(placeholder, Buffer.alloc(4096, 0x00));
+    
+    // Run cleanup - should only affect temp dir
+    cleanupPlaceholderFiles(tempModelsDir, MODEL_CATALOG);
+    
+    // Placeholder should be deleted from temp
+    expect(fs.existsSync(placeholder)).toBe(false);
+    
+    // Real APPDATA should be untouched
+    if (fs.existsSync(realAppData)) {
+      const realAppDataAfter = fs.readdirSync(realAppData);
+      expect(realAppDataAfter).toEqual(realAppDataBefore);
+    }
+    
+    // Cleanup
+    delete process.env.NODE_ENV;
+    delete process.env.ELECTRON_TEST;
+    fs.rmSync(tempUserData, { recursive: true, force: true });
   });
 });

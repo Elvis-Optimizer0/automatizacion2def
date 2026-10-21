@@ -1031,16 +1031,29 @@ function renderModelsList(models) {
       fileState.className = `model-status ${fileClass}`;
       fileState.textContent = fileText;
 
+      // Show source (userData vs empaquetado)
+      const source = document.createElement('span');
+      source.className = 'model-file-source';
+      if (file.exists) {
+        const isUserData = file.userDataExists === true;
+        source.textContent = isUserData ? ' (userData)' : ' (empaquetado)';
+        source.style.color = isUserData ? 'var(--text-muted)' : 'var(--accent)';
+        source.style.fontSize = '0.75rem';
+        source.style.marginLeft = '0.5rem';
+      }
+
       if (file.message && file.message !== fileText) {
         const msg = document.createElement('span');
         msg.className = 'model-file-message';
         msg.textContent = file.message;
         line.appendChild(label);
         line.appendChild(fileState);
+        line.appendChild(source);
         line.appendChild(msg);
       } else {
         line.appendChild(label);
         line.appendChild(fileState);
+        line.appendChild(source);
       }
       row.appendChild(line);
     });
