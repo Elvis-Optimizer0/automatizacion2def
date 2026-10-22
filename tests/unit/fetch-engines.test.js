@@ -5,19 +5,9 @@ const { ARTIFACTS, PIP_PACKAGES, CONFIG_VERSION, PYTHON_VERSION, configHash } = 
 test.describe('fetch-engines configuration', () => {
   test('every artifact has an https url and a pinned 64-hex sha256', () => {
     const keys = Object.keys(ARTIFACTS);
-    expect(keys.length).toBeGreaterThanOrEqual(7);
+    expect(keys.length).toBeGreaterThanOrEqual(6);
     for (const key of keys) {
       const artifact = ARTIFACTS[key];
-      if (key === 'piperModels') {
-        // piperModels is an object of voice configurations, not a single artifact
-        expect(typeof artifact).toBe('object');
-        for (const [voiceKey, voiceInfo] of Object.entries(artifact)) {
-          expect(voiceInfo.onnx).toMatch(/^https:\/\//);
-          expect(voiceInfo.json).toMatch(/^https:\/\//);
-          expect(voiceInfo.license).toBeTruthy();
-        }
-        continue;
-      }
       expect(artifact.url, `${key} url`).toMatch(/^https:\/\//);
       expect(artifact.sha256, `${key} sha256`).toMatch(/^[0-9a-f]{64}$/);
       expect(artifact.file, `${key} file`).toBeTruthy();

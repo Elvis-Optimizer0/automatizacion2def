@@ -31,6 +31,7 @@ test.describe.serial('Video Maker - Phase 7 local voice pipeline', () => {
   let image2;
   let voicePath;
   let outputPath;
+  let userDataDir;
   const pageErrors = [];
 
   test.beforeAll(async () => {
@@ -42,6 +43,32 @@ test.describe.serial('Video Maker - Phase 7 local voice pipeline', () => {
 
     runFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=c=black:s=1280x720', '-frames:v', '1', image1]);
     runFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=c=black:s=1280x720', '-frames:v', '1', image2]);
+
+    // Copy required models to userDataDir (set by global-setup)
+    userDataDir = process.env.VM_TEST_USERDATA;
+    if (userDataDir) {
+      const modelsDir = path.join(userDataDir, 'models');
+      const kokoroModelsDir = path.join(modelsDir, 'kokoro');
+      const piperModelsDir = path.join(modelsDir, 'piper');
+      const whisperModelsDir = path.join(modelsDir, 'whisper');
+      fs.mkdirSync(kokoroModelsDir, { recursive: true });
+      fs.mkdirSync(piperModelsDir, { recursive: true });
+      fs.mkdirSync(whisperModelsDir, { recursive: true });
+      
+      // Copy Kokoro models
+      const vendorKokoro = path.join(__dirname, '..', '..', 'vendor', 'kokoro', 'models');
+      fs.copyFileSync(path.join(vendorKokoro, 'kokoro-v1.0.onnx'), path.join(kokoroModelsDir, 'kokoro-v1.0.onnx'));
+      fs.copyFileSync(path.join(vendorKokoro, 'voices-v1.0.bin'), path.join(kokoroModelsDir, 'voices-v1.0.bin'));
+      
+      // Copy Whisper model
+      const vendorWhisper = path.join(__dirname, '..', '..', 'vendor', 'whisper', 'models');
+      fs.copyFileSync(path.join(vendorWhisper, 'ggml-base.bin'), path.join(whisperModelsDir, 'ggml-base.bin'));
+      
+      // Copy Piper models
+      const vendorPiper = path.join(__dirname, '..', '..', 'vendor', 'piper', 'models');
+      fs.copyFileSync(path.join(vendorPiper, 'es_MX-ald-medium.onnx'), path.join(piperModelsDir, 'es_MX-ald-medium.onnx'));
+      fs.copyFileSync(path.join(vendorPiper, 'es_MX-ald-medium.onnx.json'), path.join(piperModelsDir, 'es_MX-ald-medium.onnx.json'));
+    }
 
     electronApp = await electron.launch({
       args: ['.'],

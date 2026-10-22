@@ -27,7 +27,7 @@ function resolvePiperRuntime() {
   };
 }
 
-function resolvePiperPaths(modelsDirParam) {
+function resolvePiperPaths(_modelsDirParam) {
   const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
   const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
   const modelsDir = path.join(__dirname, '..', 'vendor', 'piper', 'models');
@@ -111,7 +111,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
       return;
     }
 
-    const piperPaths = resolvePiperPaths(modelsDir);
+    resolvePiperPaths(modelsDir);
 
     const voiceMap = {
       'es_MX-ald-medium': { model: 'es_MX-ald-medium', language: 'es_MX' },
@@ -139,7 +139,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
 
     const tempOutputPath = outputPath.replace('.wav', '_piper_temp.wav');
 
-    const args = buildPiperArgs({
+    buildPiperArgs({
       outputPath: tempOutputPath,
       speaker: 0,
       noise_scale: 0.667,
@@ -221,7 +221,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
 }
 
 function checkVoiceEnginePiper(modelsDir) {
-  const { piperExe, piperDataDir, modelsDir: piperModelsDir } = resolvePiperPaths(modelsDir);
+  resolvePiperPaths(modelsDir);
 
   const details = [];
   let ready = true;

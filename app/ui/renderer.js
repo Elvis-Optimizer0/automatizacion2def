@@ -820,10 +820,9 @@ function updateVoiceButtons() {
   const generate = document.getElementById('voice-generate-btn');
   const cancel = document.getElementById('voice-cancel-btn');
   const sample = document.getElementById('voice-sample-btn');
-  const isTestMode = !!window.__TEST_STATE__;
   if (generate) generate.disabled = voiceState.generating;
   if (sample) sample.disabled = voiceState.generating || voiceState.voices.length === 0;
-  if (cancel) cancel.disabled = !voiceState.generating || isTestMode;
+  if (cancel) cancel.disabled = !voiceState.generating;
 }
 
 async function applyGeneratedNarration(result) {
@@ -850,27 +849,25 @@ async function handleGenerateVoice() {
     return;
   }
 
-  if (!window.__TEST_STATE__) {
-    const modelsInfo = await window.api.listModels();
-    const selectedEngine = document.getElementById('voice-engine')?.value || 'kokoro';
-    
-    if (selectedEngine === 'kokoro') {
-      const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
-      if (!kokoro || !kokoro.installed) {
-        showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
-        return;
-      }
-      const whisper = modelsInfo.models.find(m => m.id === 'whisper');
-      if (!whisper || !whisper.installed) {
-        showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
-        return;
-      }
-    } else if (selectedEngine === 'piper') {
-      const piper = modelsInfo.models.find(m => m.id === 'piper');
-      if (!piper || !piper.installed) {
-        showToast('Falta el modelo Piper. Descárgalo o impórtalo primero.', 'error');
-        return;
-      }
+  const modelsInfo = await window.api.listModels();
+  const selectedEngine = document.getElementById('voice-engine')?.value || 'kokoro';
+  
+  if (selectedEngine === 'kokoro') {
+    const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
+    if (!kokoro || !kokoro.installed) {
+      showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
+      return;
+    }
+    const whisper = modelsInfo.models.find(m => m.id === 'whisper');
+    if (!whisper || !whisper.installed) {
+      showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
+      return;
+    }
+  } else if (selectedEngine === 'piper') {
+    const piper = modelsInfo.models.find(m => m.id === 'piper');
+    if (!piper || !piper.installed) {
+      showToast('Falta el modelo Piper. Descárgalo o impórtalo primero.', 'error');
+      return;
     }
   }
 

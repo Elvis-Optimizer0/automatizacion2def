@@ -65,44 +65,6 @@ const ARTIFACTS = {
     url: 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip',
     sha256: 'f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea',
     file: 'piper_windows_amd64.zip'
-  },
-  piperModels: {
-    'es_MX-ald-medium': {
-      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx',
-      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json',
-      sha256: 'pending',
-      license: 'Unlicense'
-    },
-    'es_MX-ald-x_low': {
-      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx',
-      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json',
-      sha256: 'pending',
-      license: 'Unlicense'
-    },
-    'es_ES-carlfm-x_low': {
-      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx',
-      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json',
-      sha256: 'pending',
-      license: 'Public domain'
-    },
-    'es_ES-carlfm-medium': {
-      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx',
-      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx.json',
-      sha256: 'pending',
-      license: 'Public domain'
-    },
-    'en_US-lessac-medium': {
-      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx',
-      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json',
-      sha256: 'pending',
-      license: 'Blizzard (non-commercial)'
-    },
-    'en_US-lessac-low': {
-      onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx',
-      json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json',
-      sha256: 'pending',
-      license: 'Blizzard (non-commercial)'
-    }
   }
 };
 

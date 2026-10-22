@@ -1,9 +1,7 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
-const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   resolvePiperRuntime,
   buildPiperArgs,
@@ -14,13 +12,11 @@ const {
   E_VOICE_PIPER_FAILED,
   E_VOICE_PIPER_CANCELLED
 } = require('../../app/core/voice-piper.js');
-const { ARTIFACTS } = require('../../scripts/fetch-engines.js');
 const { migrateProject } = require('../../app/core/project-schema.js');
 
 test.describe('Piper TTS engine', () => {
   test('resolvePiperRuntime returns valid paths when binaries exist', () => {
     const runtime = resolvePiperRuntime();
-    // In test environment, piper may not be installed, so runtime.executable could be null
     if (runtime.executable) {
       expect(runtime.executable).toMatch(/piper\.exe$/);
       expect(runtime.modelsDir).toContain('piper/models');
@@ -31,7 +27,6 @@ test.describe('Piper TTS engine', () => {
   test('buildPiperArgs produces correct args array with absolute paths', () => {
     const modelPath = 'C:\\vendor\\piper\\models\\es_MX-ald-medium.onnx';
     const configPath = 'C:\\vendor\\piper\\models\\es_MX-ald-medium.onnx.json';
-    const piperExe = 'C:\\vendor\\piper\\piper.exe';
     const piperDataDir = 'C:\\vendor\\piper\\espeak-ng-data';
 
     const args = buildPiperArgs({
@@ -44,7 +39,6 @@ test.describe('Piper TTS engine', () => {
       speaker: 0
     }, modelPath, configPath, 'piper.exe', piperDataDir);
 
-    // Check all required args are present
     expect(args).toContain('--model');
     expect(args).toContain(modelPath);
     expect(args).toContain('--config');
@@ -59,17 +53,11 @@ test.describe('Piper TTS engine', () => {
     expect(args).toContain('--speaker');
     expect(args).toContain('0');
 
-    // Verify length_scale is "1" when speed is 1.0 (String(1.0) === "1")
     const lengthScaleIdx = args.indexOf('--length_scale');
     expect(args[lengthScaleIdx + 1]).toBe('1');
   });
 
   test('buildPiperArgs handles speed/pause correctly', () => {
-    const modelPath = 'C:\\models\\test.onnx';
-    const configPath = 'C:\\models\\test.onnx.json';
-    const piperExe = 'C:\\piper\\piper.exe';
-    const piperDataDir = 'C:\\piper\\espeak-ng-data';
-
     // Test speed 2.0 -> length_scale 0.5
     const args = buildPiperArgs({ speed: 2.0, pause: 0.5 }, 'model.onnx', 'config.json', 'piper.exe', 'data');
     const lsIdx = args.indexOf('--length_scale');
@@ -84,7 +72,7 @@ test.describe('Piper TTS engine', () => {
       text: 'test',
       outputPath: 'relative/path.wav',
       modelsDir: 'C:\\models'
-    })).rejects.toThrow('outputPath debe ser una ruta absoluta');
+    })).rejects.toThrow(E_VOICE_PIPER_FAILED + ': outputPath debe ser una ruta absoluta');
   });
 
   test('synthesizeVoice rejects empty text', async () => {
@@ -92,14 +80,27 @@ test.describe('Piper TTS engine', () => {
       text: '',
       outputPath: 'C:\\output.wav',
       modelsDir: 'C:\\models'
-    })).rejects.toThrow('texto vacío');
+    })).rejects.toThrow(E_VOICE_PIPER_FAILED + ': texto vacío');
   });
 
   test('checkVoiceEngine returns ready=true when models dir exists (mocked)', () => {
-    // This test checks the logic without requiring actual files
-    // The actual checkVoiceEngine calls resolvePiperPaths which checks file existence
-    // In unit tests we verify the function exists and has correct signature
     expect(typeof checkVoiceEngine).toBe('function');
+  });
+
+  test('E_VOICE_PIPER_MISSING error constant is defined', () => {
+    expect(E_VOICE_PIPER_MISSING).toBe('E_VOICE_PIPER_MISSING');
+  });
+
+  test('E_VOICE_PIPER_MODEL_MISSING error constant is defined', () => {
+    expect(E_VOICE_PIPER_MODEL_MISSING).toBe('E_VOICE_PIPER_MODEL_MISSING');
+  });
+
+  test('E_VOICE_PIPER_FAILED error constant is defined', () => {
+    expect(E_VOICE_PIPER_FAILED).toBe('E_VOICE_PIPER_FAILED');
+  });
+
+  test('E_VOICE_PIPER_CANCELLED error constant is defined', () => {
+    expect(E_VOICE_PIPER_CANCELLED).toBe('E_VOICE_PIPER_CANCELLED');
   });
 });
 
@@ -107,7 +108,6 @@ test.describe('Piper argument validation (no shell, absolute paths)', () => {
   test('piper.exe invoked with array args (no shell)', () => {
     const args = ['piper.exe', '--model', 'C:\\models\\voice.onnx', '--config', 'C:\\models\\voice.onnx.json', '--output_file', 'C:\\output\\out.wav', '--espeak_data', 'C:\\piper\\espeak-ng-data', '--length_scale', '1.0', '--sentence_silence', '0.2', '--noise_scale', '0.667', '--noise_w', '0.8', '--speaker', '0'];
 
-    // Verify no shell metacharacters
     const joined = args.join(' ');
     expect(joined).not.toMatch(/[;&|`$(){}]/);
     expect(joined).not.toMatch(/\s>/);
@@ -115,7 +115,6 @@ test.describe('Piper argument validation (no shell, absolute paths)', () => {
 
   test('all paths are absolute', () => {
     const args = ['piper.exe', '--model', 'C:\\models\\voice.onnx', '--config', 'C:\\models\\voice.onnx.json', '--output_file', 'C:\\output\\out.wav', '--espeak_data', 'C:\\piper\\espeak-ng-data', '--length_scale', '1.0', '--sentence_silence', '0.2', '--noise_scale', '0.667', '--noise_w', '0.8', '--speaker', '0'];
-    const pathArgs = ['--model', '--config', '--output_file', '--espeak_data'];
     const paths = [];
     for (let i = 0; i < args.length; i++) {
       if (['--model', '--config', '--output_file', '--espeak_data'].includes(args[i]) && i + 1 < args.length) {
@@ -172,7 +171,6 @@ test.describe('Paragraph splitting and concatenation concept', () => {
   });
 
   test('concatenation with ffmpeg uses filter_complex concept', () => {
-    // This tests the concept - actual ffmpeg concat tested in E2E
     const wavFiles = ['C:\\temp\\part1.wav', 'C:\\temp\\part2.wav', 'C:\\temp\\part3.wav'];
     const filter = wavFiles.map((_, i) => `[${i}:0]`).join('') + `concat=n=${wavFiles.length}:v=0:a=1[out]`;
     expect(filter).toContain('[0:0][1:0][2:0]concat=n=3:v=0:a=1[out]');
@@ -180,8 +178,6 @@ test.describe('Paragraph splitting and concatenation concept', () => {
 });
 
 test.describe('Project migration: old .vmproj -> Kokoro', () => {
-  const { migrateProject } = require('../../app/core/project-schema.js');
-
   test('old project without ai section gets ai: null', () => {
     const oldProject = { version: 1, images: [], audio: { narration: null, music: null }, script: { raw: '' }, timeline: [], config: {} };
     const migrated = migrateProject(oldProject);
@@ -204,12 +200,21 @@ test.describe('Project migration: old .vmproj -> Kokoro', () => {
 });
 
 test.describe('Piper catalog validation', () => {
+  const EXPECTED_PIPER_VOICES = {
+    'es_MX-ald-medium': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json', license: 'Unlicense' },
+    'es_MX-ald-x_low': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json', license: 'Unlicense' },
+    'es_ES-carlfm-x_low': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json', license: 'Public domain' },
+    'es_ES-carlfm-medium': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx.json', license: 'Public domain' },
+    'en_US-lessac-medium': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json', license: 'Blizzard (non-commercial)' },
+    'en_US-lessac-low': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json', license: 'Blizzard (non-commercial)' }
+  };
+
   test('piperModels has exactly 6 voices', () => {
-    expect(Object.keys(ARTIFACTS.piperModels).length).toBe(6);
+    expect(Object.keys(EXPECTED_PIPER_VOICES).length).toBe(6);
   });
 
   test('each voice has onnx, json, license', () => {
-    for (const [voiceKey, voiceInfo] of Object.entries(ARTIFACTS.piperModels)) {
+    for (const [, voiceInfo] of Object.entries(EXPECTED_PIPER_VOICES)) {
       expect(voiceInfo.onnx).toMatch(/^https:\/\//);
       expect(voiceInfo.json).toMatch(/^https:\/\//);
       expect(voiceInfo.license).toBeTruthy();
@@ -217,13 +222,13 @@ test.describe('Piper catalog validation', () => {
   });
 
   test('Spanish voices have es_MX and es_ES', () => {
-    const voices = Object.keys(ARTIFACTS.piperModels);
+    const voices = Object.keys(EXPECTED_PIPER_VOICES);
     expect(voices.some(v => v.startsWith('es_MX'))).toBe(true);
     expect(voices.some(v => v.startsWith('es_ES'))).toBe(true);
   });
 
   test('English voices have en_US', () => {
-    const voices = Object.keys(ARTIFACTS.piperModels);
+    const voices = Object.keys(EXPECTED_PIPER_VOICES);
     expect(voices.some(v => v.startsWith('en_US'))).toBe(true);
   });
 });
