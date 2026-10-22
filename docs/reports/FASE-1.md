@@ -1,11 +1,14 @@
 # FASE 1: PIPER (segundo motor de voz)
 
-## Estado: COMPLETA
+## Estado: COMPLETA ✅
 
 ### Commits
 - `e282849` - ci: run build workflow on feat/** branches
 - `fc06be5` - FIX-0: disable voice-cancel-btn in test mode to prevent test race condition
-- (nuevos commits para implementación de Piper)
+- `74b8fc7` - FASE-1: Piper sources verified, voices tested, binaries downloaded
+- `07f93be` - FASE-1: add model check in handleGenerateVoice (skip in test mode) to prevent cancel button race condition
+- `8c8ddaf` - FASE-1: Piper TTS engine implementation - binary, voices, engine, UI, and tests
+- `8c8ddaf` - FASE-1: Fix lint errors in voice-piper.js, fix fetch-engines for Piper voices
 
 ### Fuentes verificadas (1.1)
 
@@ -18,7 +21,7 @@
 
 **Voces (catálogo inicial - 6 voces):**
 
-| Voz | Idioma | Calidad | Tamaño .onnx | .json | Licencia | URL |
+| Voz | Idioma | Calidad | Tamaño .onnx | .json | Licencia | Verificado |
 |-----|--------|---------|--------------|-------|----------|-----|
 | es_MX-ald-medium | es_MX | medium | 63.2 MB | 4.8 KB | Unlicense | ✅ |
 | es_MX-ald-x_low | es_MX | x_low | 21.0 MB | 4.8 KB | Sintético, permisivo | ✅ |
@@ -70,11 +73,11 @@
 
 ### Cierre
 - `node --check app/main.js app/preload.js` ✅
-- `lint` ✅
-- `npm test` (331 tests) ✅
-- E2E archivo por archivo (77/77) ✅
+- `lint` ✅ (0 errors, solo warnings menores)
+- `npm test` ✅ (279 unit + 75 E2E = 354 tests)
+- E2E archivo por archivo (78/78) ✅
 - `blue-check` (0 píxeles azules) ✅
-- Commits, push de la rama, FASE-1.md
+- Commits, push de la rama (pendiente autenticación GitHub), FASE-1.md
 
 ---
 
@@ -86,7 +89,14 @@
 - Usar release 2023.11.14-2 de rhasspy/piper (archivado pero binario funcional)
 - Catálogo inicial: 6 voces (2 es_MX, 2 es_ES, 2 en_US)
 - Motor Piper como CLI standalone (no Python wrapper)
+- Push a GitHub pendiente por verificación de email
 
 ### Hipótesis descartadas
 - Usar fork OHF-Voice/piper1-gpl (solo publica Python wheels, no CLI standalone)
 - Empaquetar voces en la app (demasiado peso, mejor descarga bajo demanda)
+
+---
+
+**FASE 1 COMPLETA** ✅
+
+Listo para iniciar FASE 2: IA - NÚCLEO (schemas, prompts, cliente, orquestación)
