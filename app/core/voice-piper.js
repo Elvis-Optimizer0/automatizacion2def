@@ -9,6 +9,24 @@ const E_VOICE_PIPER_MODEL_MISSING = 'E_VOICE_PIPER_MODEL_MISSING';
 const E_VOICE_PIPER_FAILED = 'E_VOICE_PIPER_FAILED';
 const E_VOICE_PIPER_CANCELLED = 'E_VOICE_PIPER_CANCELLED';
 
+function resolvePiperRuntime() {
+  const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
+  const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
+
+  if (!fs.existsSync(piperExe)) {
+    return { executable: null, modelsDir: null, searched: [] };
+  }
+  if (!fs.existsSync(piperDataDir)) {
+    return { executable: null, modelsDir: null, searched: [] };
+  }
+
+  return {
+    executable: piperExe,
+    modelsDir: path.join(__dirname, '..', 'vendor', 'piper', 'models'),
+    searched: []
+  };
+}
+
 function resolvePiperPaths(modelsDirParam) {
   const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
   const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
@@ -46,16 +64,24 @@ function buildPiperArgs(options, modelPath, configPath, piperExe, piperDataDir) 
     args.push('--noise_scale', String(options.noise_scale));
   }
 
-  if (options.length_scale !== undefined) {
-    args.push('--length_scale', String(options.length_scale));
-  }
+  // Auto-convert speed to length_scale if length_scale not provided
+  const lengthScale = options.length_scale !== undefined
+    ? options.length_scale
+    : (options.speed !== undefined ? 1.0 / options.speed : 1.0);
+  args.push('--length_scale', String(lengthScale));
 
   if (options.noise_w !== undefined) {
     args.push('--noise_w', String(options.noise_w));
   }
 
-  if (options.sentence_silence !== undefined) {
-    args.push('--sentence_silence', String(options.sentence_silence));
+  if (options.noise_scale !== undefined) {
+    args.push('--noise_scale', String(options.noise_scale));
+  }
+
+  // Accept both sentence_silence and pause as aliases
+  const sentenceSilence = options.sentence_silence !== undefined ? options.sentence_silence : options.pause;
+  if (sentenceSilence !== undefined) {
+    args.push('--sentence_silence', String(sentenceSilence));
   }
 
   if (options.speaker !== undefined) {
@@ -72,9 +98,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
       outputPath,
       modelsDir,
       language,
-      voiceId,
-      speed,
-      pause
+      voiceId
     } = options;
 
     if (!outputPath || !path.isAbsolute(outputPath)) {
@@ -124,13 +148,10 @@ function synthesizeVoicePiper(options, hooks = {}) {
       sentence_silence: options.pause || 0.2
     }, modelPath, configPath, __dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
 
-    const textBuffer = Buffer.from(text, 'utf8');
-
     let cancelled = false;
     let settled = false;
     let errorOutput = '';
 
-    const onProgress = typeof hooks.onProgress === 'function' ? hooks.onProgress : () => {};
     const signal = hooks.signal;
 
     const finish = (fn, value) => {
@@ -219,6 +240,8 @@ module.exports = {
   E_VOICE_PIPER_MODEL_MISSING,
   E_VOICE_PIPER_FAILED,
   E_VOICE_PIPER_CANCELLED,
+  resolvePiperRuntime,
+  buildPiperArgs,
   synthesizeVoice: synthesizeVoicePiper,
   checkVoiceEngine: checkVoiceEnginePiper
 };

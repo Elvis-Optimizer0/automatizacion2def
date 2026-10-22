@@ -246,6 +246,19 @@ function migrateProject(raw) {
   if (!migrated.config || typeof migrated.config !== 'object') migrated.config = {};
   if (!migrated.renderOptions || typeof migrated.renderOptions !== 'object') migrated.renderOptions = {};
   if (!migrated.timelineOptions || typeof migrated.timelineOptions !== 'object') migrated.timelineOptions = {};
+
+  // Migration for voice engine (FASE 1): default to kokoro for old projects
+  if (!migrated.config.voice || typeof migrated.config.voice !== 'object') {
+    migrated.config.voice = { language: 'es', engine: 'kokoro', voiceId: '', speed: 1, pause: 0.3 };
+  } else if (!migrated.config.voice.engine) {
+    migrated.config.voice.engine = 'kokoro';
+  }
+
+  // Migration for AI settings (FASE 2): default to null
+  if (migrated.ai === undefined) {
+    migrated.ai = null;
+  }
+
   return migrated;
 }
 
