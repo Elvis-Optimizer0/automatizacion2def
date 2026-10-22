@@ -415,7 +415,6 @@ async function installKokoroModels() {
     fs.copyFileSync(downloaded, dest);
   }
 }
-
 async function installPiper() {
   const exe = path.join(PATHS.piperDir, 'piper.exe');
   if (!FORCE && fs.existsSync(exe)) {
@@ -424,53 +423,6 @@ async function installPiper() {
     const zip = await downloadArtifact('piper', path.join(CACHE, ARTIFACTS.piper.file));
     log('extrayendo piper');
     extractZip(zip, PATHS.piperDir);
-  }
-
-  ensureDir(PATHS.piperModels);
-  for (const [voiceKey, voiceInfo] of Object.entries(ARTIFACTS.piperModels)) {
-    const onnxDest = path.join(PATHS.piperModels, `${voiceKey}.onnx`);
-    const jsonDest = path.join(PATHS.piperModels, `${voiceKey}.onnx.json`);
-
-    if (!FORCE && fs.existsSync(onnxDest) && fs.existsSync(jsonDest)) {
-      log(`${voiceKey} ya presente`);
-      continue;
-    }
-
-    const onnxUrl = voiceInfo.onnx;
-    const jsonUrl = voiceInfo.json;
-
-    const onnxTemp = `${onnxDest}.part`;
-    const jsonTemp = `${jsonDest}.part`;
-
-    if (!FORCE && fs.existsSync(onnxDest)) {
-      log(`${voiceKey}.onnx ya presente`);
-    } else {
-      log(`descargando ${voiceKey}.onnx`);
-      await httpGet(onnxUrl, (response) => new Promise((resolve, reject) => {
-        const out = fs.createWriteStream(onnxTemp);
-        response.on('data', (chunk) => out.write(chunk));
-        response.on('end', () => out.close(() => resolve()));
-        response.on('error', reject);
-        out.on('error', reject);
-      }));
-      fs.renameSync(onnxTemp, onnxDest);
-      log(`verificado ${voiceKey}.onnx`);
-    }
-
-    if (!FORCE && fs.existsSync(jsonDest)) {
-      log(`${voiceKey}.onnx.json ya presente`);
-    } else {
-      log(`descargando ${voiceKey}.onnx.json`);
-      await httpGet(jsonUrl, (response) => new Promise((resolve, reject) => {
-        const out = fs.createWriteStream(jsonTemp);
-        response.on('data', (chunk) => out.write(chunk));
-        response.on('end', () => out.close(() => resolve()));
-        response.on('error', reject);
-        out.on('error', reject);
-      }));
-      fs.renameSync(jsonTemp, jsonDest);
-      log(`verificado ${voiceKey}.onnx.json`);
-    }
   }
 }
 
