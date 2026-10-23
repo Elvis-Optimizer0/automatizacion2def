@@ -432,6 +432,16 @@ function importModel(sourcePath, modelsDir, catalog = MODEL_CATALOG) {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.copyFileSync(sourcePath, dest);
 
+  // Validate JSON files if the imported file is a .json config
+  if (baseName.endsWith('.json')) {
+    try {
+      JSON.parse(fs.readFileSync(dest, 'utf8'));
+    } catch (err) {
+      fs.unlinkSync(dest);
+      throw new Error(`${E_MODEL_IMPORT_FAILED}: archivo JSON inválido: ${err.message}`);
+    }
+  }
+
   const verification = verifyModelFile(dest, match.file);
   if (!verification.exists) {
     throw new Error(`${E_MODEL_IMPORT_FAILED}: no se pudo copiar ${baseName} a ${dest}`);
@@ -525,8 +535,21 @@ async function downloadModel(model, modelsDir, options = {}) {
   if (simulated) {
     const bytes = options.simulateBytes || 4096;
     const buffer = Buffer.alloc(bytes, 0x41);
+    
+    // Check for cancellation before writing
+    if (options.signal?.aborted) {
+      throw new Error(`${E_MODEL_CANCELLED}: download cancelled`);
+    }
+    
     onProgress({ progress: 50, received: Math.floor(bytes / 2), total: bytes });
     fs.writeFileSync(dest, buffer);
+    
+    // Check for cancellation after writing
+    if (options.signal?.aborted) {
+      try { fs.unlinkSync(dest); } catch (_err) { /* ignore */ }
+      throw new Error(`${E_MODEL_CANCELLED}: download cancelled`);
+    }
+    
     onProgress({ progress: 100, received: bytes, total: bytes });
     const verification = verifyModelFile(dest, { sizeBytes: bytes, sha256: options.simulateSha256 || null });
     return {
