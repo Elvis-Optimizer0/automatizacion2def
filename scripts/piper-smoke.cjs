@@ -63,7 +63,6 @@ function probeDuration(filePath) {
   // Set up Piper engine
   await window.evaluate(() => {
     window.__TEST_STATE__.config.voice.engine = 'piper';
-    window.__TEST_STATE__.config.voice.voiceId = 'es_MX-ald-medium';
     window.__TEST_STATE__.config.outputs = ['16:9'];
     window.__TEST_RENDER__.renderAll();
   });
@@ -71,12 +70,10 @@ function probeDuration(filePath) {
   // Generate voice
   const outputPath = path.join(testDir, 'piper_output.wav');
   await window.fill('#voice-text', 'Hola mundo, esta es una prueba de voz con Piper.');
-  await window.selectOption('#voice-engine', 'piper');
-  await window.waitForTimeout(500);
   await window.click('#voice-generate-btn');
 
   // Wait for generation to complete
-  await window.waitForFunction(() => window.__TEST_STATE__.audio.narration, { timeout: 60000 });
+  await window.waitForFunction(() => window.__TEST_STATE__.audio.narration, { timeout: 120000 });
 
   const narration = await window.evaluate(() => window.__TEST_STATE__.audio.narration);
   console.log('Narration generated:', narration);

@@ -50,14 +50,14 @@ const MODEL_SPECS = {
       },
       {
         fileName: 'es_MX-ald-x_low.onnx',
-        sizeBytes: 22345678,
-        sha256: 'pending',
+        sizeBytes: 20986952,
+        sha256: 'd8aae54aee9eafb37fb85d6da676facafca31c2d84d11acdca1a5b6dd82b1df6',
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx'
       },
       {
         fileName: 'es_MX-ald-x_low.onnx.json',
-        sizeBytes: 3456,
-        sha256: 'pending',
+        sizeBytes: 4877,
+        sha256: '5b372adf1f8c8d8f0610b9057fc2df001ad3f5f42cd9d6f853a78bef3f8b0644',
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json'
       },
       {
@@ -73,18 +73,6 @@ const MODEL_SPECS = {
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json'
       },
       {
-        fileName: 'es_ES-carlfm-medium.onnx',
-        sizeBytes: 42345678,
-        sha256: 'pending',
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx'
-      },
-      {
-        fileName: 'es_ES-carlfm-medium.onnx.json',
-        sizeBytes: 4567,
-        sha256: 'pending',
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx.json'
-      },
-      {
         fileName: 'en_US-lessac-medium.onnx',
         sizeBytes: 63201294,
         sha256: '5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f',
@@ -98,14 +86,14 @@ const MODEL_SPECS = {
       },
       {
         fileName: 'en_US-lessac-low.onnx',
-        sizeBytes: 23456789,
-        sha256: 'pending',
+        sizeBytes: 63201294,
+        sha256: 'f7d01dde371555732c4c314111ac79672b1a5ce2fc19266ab42178fd8df7f375',
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx'
       },
       {
         fileName: 'en_US-lessac-low.onnx.json',
-        sizeBytes: 4012,
-        sha256: 'pending',
+        sizeBytes: 4882,
+        sha256: '45754dfdebb3b8661c3fc564713772deec6e064feeb5b4e9594857dc7305193a',
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json'
       }
     ]
