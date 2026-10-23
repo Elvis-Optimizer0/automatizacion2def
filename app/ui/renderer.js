@@ -799,9 +799,8 @@ function renderPiperVoicesList() {
   // For now, use the hardcoded Piper voices from model-specs
   const piperVoices = [
     { id: 'es_MX-ald-medium', name: 'es_MX - Ald (medium)', language: 'es_MX', license: 'Unlicense', commercialUse: true },
-    { id: 'es_MX-ald-x_low', name: 'es_MX - Ald (x_low)', language: 'es_MX', license: 'Unlicense', commercialUse: true },
+    { id: 'es_MX-ald-x_low', name: 'es_MX - Ald (x_low)', language: 'es_MX', license: 'No declarada en MODEL_CARD', commercialUse: false },
     { id: 'es_ES-carlfm-x_low', name: 'es_ES - Carlfm (x_low)', language: 'es_ES', license: 'Public domain', commercialUse: true },
-    { id: 'es_ES-carlfm-medium', name: 'es_ES - Carlfm (medium)', language: 'es_ES', license: 'Public domain', commercialUse: true },
     { id: 'en_US-lessac-medium', name: 'en_US - Lessac (medium)', language: 'en_US', license: 'Blizzard (non-commercial)', commercialUse: false },
     { id: 'en_US-lessac-low', name: 'en_US - Lessac (low)', language: 'en_US', license: 'Blizzard (non-commercial)', commercialUse: false }
   ];

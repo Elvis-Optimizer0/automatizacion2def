@@ -1,102 +1,82 @@
 # FASE 1: PIPER (segundo motor de voz)
 
-## Estado: COMPLETA ✅
+## Estado: CERRADA CON DEUDA
 
-### Commits
-- `e282849` - ci: run build workflow on feat/** branches
-- `fc06be5` - FIX-0: disable voice-cancel-btn in test mode to prevent test race condition
-- `74b8fc7` - FASE-1: Piper sources verified, voices tested, binaries downloaded
-- `07f93be` - FASE-1: add model check in handleGenerateVoice (skip in test mode) to prevent cancel button race condition
-- `8c8ddaf` - FASE-1: Piper TTS engine implementation - binary, voices, engine, UI, and tests
-- `8c8ddaf` - FASE-1: Fix lint errors in voice-piper.js, fix fetch-engines for Piper voices
+## Corrección de CI RED #2
 
-### Fuentes verificadas (1.1)
+### Causa probada
 
-**Binario Windows x64:**
-- `piper_windows_amd64.zip` (2023.11.14-2): 22.5 MB
-- SHA-256: `f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea`
-- URL: https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip
-- Licencia: MIT
-- `piper.exe --help` funciona correctamente, flags: `--model`, `--config`, `--output_file`, `--length_scale`, `--noise_scale`, `--noise_w`, `--sentence_silence`, `--espeak_data`, `--json-input`, `--speaker`
+El archivo `piper_windows_amd64.zip` de `rhasspy/piper` release `2023.11.14-2` contiene el runtime dentro de una carpeta superior `piper/`. Sus primeras entradas son:
 
-**Voces (catálogo inicial - 6 voces):**
+```text
+piper/pkgconfig/
+piper/espeak-ng.dll
+piper/libtashkeel_model.ort
+piper/onnxruntime_providers_shared.dll
+piper/onnxruntime.dll
+piper/piper_phonemize.dll
+piper/piper.exe
+piper/espeak-ng-data/voices/
+piper/espeak-ng-data/af_dict
+```
 
-| Voz | Idioma | Calidad | Tamaño .onnx | .json | Licencia | Verificado |
-|-----|--------|---------|--------------|-------|----------|-----|
-| es_MX-ald-medium | es_MX | medium | 63.2 MB | 4.8 KB | Unlicense | ✅ |
-| es_MX-ald-x_low | es_MX | x_low | 21.0 MB | 4.8 KB | Sintético, permisivo | ✅ |
-| es_ES-carlfm-x_low | es_ES | x_low | 28.1 MB | 4.1 KB | Public domain | ✅ |
-| es_ES-carlfm-medium | es_ES | medium | ~63 MB | pendiente | Público | ✅ |
-| en_US-lessac-medium | en_US | medium | 63.2 MB | 4.8 KB | Blizzard (no comercial) | ✅ |
-| en_US-lessac-low | en_US | low | ~20 MB | pendiente | Blizzard | ✅ |
+`PATHS.piperDir` es `vendor/piper`. La extracción anterior escribía el archivo en `vendor/piper/piper/piper.exe`, mientras la comprobación final exigía `vendor/piper/piper.exe`.
 
-**Binarios probados:**
-- `piper.exe --help` ✅
-- es_MX-ald-medium: "Hola mundo, esta es una prueba de voz en español." → 3.08s audio, RTF 0.075 ✅
-- es_ES-carlfm-x_low: "Hola, esta es una prueba con la voz carlfm." → 2.59s audio, RTF 0.049 ✅
-- en_US-lessac-medium: "Hello world, this is a test of the English voice." → 3.03s audio, RTF 0.076 ✅
+Un clone limpio nuevo, sin `vendor/` ni `.engine-cache/`, reprodujo el fallo después de verificar todos los SHA-256:
 
-### Catálogo y descarga (1.2)
-- Extendido `app/core/models.js` con motor "piper"
-- Binario Piper extraído a `vendor/piper/` en build con `scripts/fetch-engines.js`
-- SHA-256 del zip: `f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea`
-- Voces como modelos descargables bajo demanda (NO empaquetar voces)
-- Cada voz = .onnx + .onnx.json con tamaño y SHA-256 verificados
-- Reutiliza descargar/importar/cancelar/verificar y estados de origen (userData / empaquetado)
+```text
+[fetch-engines] verificado piper (22477236 bytes, sha256 f3c58906402b…)
+[fetch-engines] ERROR: faltan archivos tras la instalación:
+  ...\vendor\piper\piper.exe
+```
 
-### Motor (1.3)
-- `app/core/voice-piper.js` creado con misma interfaz que `voice.js`
-- `spawn` con argsArray, texto por stdin UTF-8, salida WAV temporal
-- Timeout, cancelación (kill), errores claros
-- Velocidad UI → `length_scale` (inverso), Pausa → `--sentence_silence`
-- División de guiones largos en párrafos, generación WAV por párrafo, concatena con ffmpeg
-- Normaliza con ffmpeg al mismo formato que Kokoro (misma frecuencia/canales)
-- Usa limpiador de guion existente (`cleanScriptForVoice`)
+El árbol extraído confirmó `vendor/piper/piper/piper.exe` y `vendor/piper/piper/espeak-ng-data/`.
 
-### UI (1.4)
-- `app/ui/piper-ui.js` + cambios aditivos en `index.html`
-- Selector de motor (Kokoro / Piper) en panel de voz
-- Voces del motor elegido filtradas por idioma
-- Botón muestra, "no descargada: Descargar", velocidad y pausa
-- Persistir motor y voz en `.vmproj` con Zod + migrateProject (proyectos viejos = Kokoro)
+### Corrección
 
-### Licencias (1.5)
-- `docs/licenses.md` actualizado
-- Binario: MIT
-- espeak-ng: GPL-3.0
-- Voces: Unlicense, Public domain, Blizzard (no comercial), Unlicense
+- `scripts/fetch-engines.js` extrae Piper a un directorio temporal.
+- El layout se obtiene de las entradas del ZIP y se localiza `piper.exe` sin asumir un nombre de carpeta.
+- La carpeta que contiene `piper.exe` se coloca en `vendor/piper/`, de modo que `piper.exe`, las DLL y `espeak-ng-data/es_dict` quedan juntos.
+- Una instalación con `piper.exe` pero sin el runtime completo se vuelve a extraer.
+- La comprobación final se fortaleció: sigue exigiendo `piper.exe` y además valida las DLL requeridas y `espeak-ng-data/es_dict`.
+- `app/core/voice-piper.js` resuelve el runtime en `vendor/piper` durante desarrollo y en `resources/piper` en el paquete; `--espeak_data` apunta a `vendor/piper/espeak-ng-data`.
+- `tests/unit/fetch-engines.test.js` cubre, sin red, ZIP con carpeta superior `piper/`, ZIP plano y ausencia de `piper.exe`.
 
-### Tests (1.6)
-- Unit: argumentos (sin shell, rutas absolutas), length_scale, división/concatenación, migración, catálogo
-- E2E con motor simulado: elegir Piper, generar, ffprobe duración > 0
-- **Prueba real**: `scripts/piper-smoke.cjs` descarga voz es_MX, genera frase, confirma con ffprobe duración > 0 ✅
+## Voz Piper para E2E
 
-### Cierre
-- `node --check app/main.js app/preload.js` ✅
-- `lint` ✅ (0 errors, solo warnings menores)
-- `npm test` ✅ (279 unit + 75 E2E = 354 tests)
-- E2E archivo por archivo (78/78) ✅
-- `blue-check` (0 píxeles azules) ✅
-- Commits, push de la rama (pendiente autenticación GitHub), FASE-1.md
+Solo el runtime binario de Piper se instala en `vendor/`. La voz E2E se descarga antes de los tests a `.engine-cache/piper-e2e-voice` y se verifica contra tamaño y SHA-256 del catálogo:
 
----
+- `es_MX-ald-medium.onnx`: 63,201,294 bytes; SHA-256 `019b3803293c93e34a206dd2e53a3889209a514e786fd7144f7b70196c579b63`
+- `es_MX-ald-medium.onnx.json`: 4,878 bytes; SHA-256 `5a71498158e04afc8099bfd019c7e87c68eb9d042505a2b1a87e5c1ac2b1a61d`
 
-### NO VERIFICADO
-- Generación real de voz en producción (solo tests manuales con binario real)
-- Licencias completas de todas las voces del catálogo (solo 6 verificadas)
+`tests/e2e/global-setup.cjs` expone esa ubicación mediante `VM_TEST_PIPER_VOICE_DIR`. `tests/e2e/phase7-pipeline.spec.js` copia la voz verificada al `userData` temporal. No se modificaron sus aserciones. El workflow cachea `vendor/` y `.engine-cache/` mediante `actions/cache`.
 
-### BLOQUEADOS / Decisiones
-- Usar release 2023.11.14-2 de rhasspy/piper (archivado pero binario funcional)
-- Catálogo inicial: 6 voces (2 es_MX, 2 es_ES, 2 en_US)
-- Motor Piper como CLI standalone (no Python wrapper)
-- Push a GitHub pendiente por verificación de email
+## Verificación
 
-### Hipótesis descartadas
-- Usar fork OHF-Voice/piper1-gpl (solo publica Python wheels, no CLI standalone)
-- Empaquetar voces en la app (demasiado peso, mejor descarga bajo demanda)
+- Unit: 297 passed, 0 failed.
+- E2E por archivo: 75 passed en total, 0 failed.
+- `npm run lint`: `exit=0`, sin warnings.
+- `scripts/piper-smoke.cjs` ejecuta el binario real con `voiceId=es_MX-ald-medium` y registra engine, comando, código de salida, muestras y volumen.
+- Smoke real observado: `exit code=0`, 88,378 muestras a 22,050 Hz, `mean_volume=-15 dB`, `max_volume=0 dB`, por encima del umbral de -50 dB.
+- El paquete incluye `resources/piper` y `scripts/verify-package.js` exige el runtime completo.
 
----
+## Catálogo y licencias
 
-**FASE 1 COMPLETA** ✅
+El catálogo contiene cinco voces; las pruebas derivan el conteo desde `app/core/model-specs.js`.
 
-Listo para iniciar FASE 2: IA - NÚCLEO (schemas, prompts, cliente, orquestación)
+| Voz | Línea exacta de licencia en `MODEL_CARD` | Uso comercial |
+|-----|---------------------------------------------|---------------|
+| es_MX-ald-medium | `* License: http://unlicense.org` | Sí |
+| es_MX-ald-x_low | Sin línea `License` | No verificado; no aprobado |
+| es_ES-carlfm-x_low | `* License: Public domain` | Sí |
+| en_US-lessac-medium | `* License: https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html` | No |
+| en_US-lessac-low | `* License: https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html` | No |
+
+La licencia Blizzard limita el uso a `Research Purposes` y excluye uso comercial. `es_MX-ald-x_low` no declara licencia en su tarjeta, por lo que no se infiere permiso comercial. `docs/licenses.md` y `commercialUse` reflejan esta evidencia.
+
+## Deuda
+
+- T2: E2E dedicado de Piper con stub `VM_PIPER_EXE` y servidor local de voz.
+- T3: conteo de píxeles para blue-check.
+
+FASE 1: CERRADA CON DEUDA (T2, T3)

@@ -79,6 +79,16 @@ const PATHS = {
   piperModels: path.join(VENDOR, 'piper', 'models')
 };
 
+const PIPER_RUNTIME_FILES = [
+  'piper.exe',
+  'espeak-ng.dll',
+  'libtashkeel_model.ort',
+  'onnxruntime.dll',
+  'onnxruntime_providers_shared.dll',
+  'piper_phonemize.dll',
+  path.join('espeak-ng-data', 'es_dict')
+];
+
 const args = process.argv.slice(2);
 const FORCE = args.includes('--force');
 const SKIP_MODELS = args.includes('--skip-models');
@@ -92,8 +102,8 @@ function fail(message) {
   process.exit(1);
 }
 
-function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
+function ensureDir(dir, fileSystem = fs) {
+  fileSystem.mkdirSync(dir, { recursive: true });
 }
 
 function configHash() {
@@ -198,15 +208,71 @@ function extractZip(zipPath, targetDir) {
   run('tar', ['-xf', zipPath, '-C', targetDir]);
 }
 
-function moveContents(fromDir, toDir) {
-  ensureDir(toDir);
-  for (const entry of fs.readdirSync(fromDir)) {
+function listZipEntries(zipPath) {
+  const result = spawnSync('tar', ['-tf', zipPath], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
+  if (result.error) throw new Error(`no se pudo listar ${zipPath}: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`no se pudo listar ${zipPath}: tar terminó con código ${result.status}`);
+  return String(result.stdout || '').split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function missingPiperRuntimeFiles(runtimeDir, fileSystem = fs) {
+  return PIPER_RUNTIME_FILES.filter((file) => !fileSystem.existsSync(path.join(runtimeDir, file)));
+}
+
+function isPiperRuntimeComplete(runtimeDir, fileSystem = fs) {
+  return missingPiperRuntimeFiles(runtimeDir, fileSystem).length === 0;
+}
+
+function findPiperRuntimeDir(sourceDir, zipEntries, fileSystem = fs) {
+  const candidates = zipEntries
+    .map((entry) => String(entry).replace(/\\/g, '/'))
+    .filter((entry) => path.posix.basename(entry) === 'piper.exe')
+    .map((entry) => path.posix.normalize(entry))
+    .filter((entry) => !path.posix.isAbsolute(entry) && !entry.split('/').includes('..'))
+    .sort((left, right) => left.split('/').length - right.split('/').length || left.localeCompare(right));
+
+  for (const entry of candidates) {
+    const absolute = path.join(sourceDir, ...entry.split('/'));
+    if (!fileSystem.existsSync(absolute)) continue;
+    const stat = fileSystem.statSync(absolute);
+    if (stat.isFile()) return path.dirname(absolute);
+  }
+
+  throw new Error('piper.exe no encontrado en el archivo Piper');
+}
+
+function moveContents(fromDir, toDir, fileSystem = fs) {
+  ensureDir(toDir, fileSystem);
+  for (const entry of fileSystem.readdirSync(fromDir)) {
     const source = path.join(fromDir, entry);
     const target = path.join(toDir, entry);
-    fs.rmSync(target, { recursive: true, force: true });
-    fs.cpSync(source, target, { recursive: true, dereference: true });
-    fs.rmSync(source, { recursive: true, force: true });
+    fileSystem.rmSync(target, { recursive: true, force: true });
+    fileSystem.cpSync(source, target, { recursive: true, dereference: true });
+    fileSystem.rmSync(source, { recursive: true, force: true });
   }
+}
+
+function placePiperRuntime(sourceDir, targetDir, options = {}) {
+  const fileSystem = options.fileSystem || fs;
+  const zipEntries = options.zipEntries || [];
+  const runtimeDir = findPiperRuntimeDir(sourceDir, zipEntries, fileSystem);
+  const missing = missingPiperRuntimeFiles(runtimeDir, fileSystem);
+  if (missing.length) {
+    throw new Error(`archivo Piper incompleto; faltan: ${missing.join(', ')}`);
+  }
+
+  fileSystem.rmSync(targetDir, { recursive: true, force: true });
+  moveContents(runtimeDir, targetDir, fileSystem);
+  ensureDir(path.join(targetDir, 'models'), fileSystem);
+
+  const installedMissing = missingPiperRuntimeFiles(targetDir, fileSystem);
+  if (installedMissing.length) {
+    throw new Error(`instalación Piper incompleta; faltan: ${installedMissing.join(', ')}`);
+  }
+  return targetDir;
 }
 
 function stampOk() {
@@ -222,7 +288,7 @@ function stampOk() {
     path.join(PATHS.kokoroModels, 'voices-v1.0.bin'),
     path.join(PATHS.whisperBin, 'whisper-cli.exe'),
     path.join(PATHS.whisperModels, 'ggml-base.bin'),
-    path.join(PATHS.piperDir, 'piper.exe')
+    ...PIPER_RUNTIME_FILES.map((file) => path.join(PATHS.piperDir, file))
   ];
   return required.every((file) => fs.existsSync(file));
 }
@@ -379,12 +445,21 @@ async function installKokoroModels() {
 }
 async function installPiper() {
   const exe = path.join(PATHS.piperDir, 'piper.exe');
-  if (!FORCE && fs.existsSync(exe)) {
+  const complete = isPiperRuntimeComplete(PATHS.piperDir);
+  if (!FORCE && complete) {
     log('piper.exe ya presente');
   } else {
+    if (fs.existsSync(exe)) log('instalación Piper incompleta; se vuelve a extraer');
     const zip = await downloadArtifact('piper', path.join(CACHE, ARTIFACTS.piper.file));
-    log('extrayendo piper');
-    extractZip(zip, PATHS.piperDir);
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-piper-'));
+    try {
+      log('extrayendo piper');
+      extractZip(zip, temp);
+      const entries = listZipEntries(zip);
+      placePiperRuntime(temp, PATHS.piperDir, { fileSystem: fs, zipEntries: entries });
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
   }
 }
 
@@ -397,7 +472,7 @@ function verify() {
     path.join(PATHS.runtimeDir, 'runner.py'),
     path.join(PATHS.espeakDir, 'espeak-ng-data', 'es_dict'),
     path.join(PATHS.whisperBin, 'whisper-cli.exe'),
-    path.join(PATHS.piperDir, 'piper.exe')
+    ...PIPER_RUNTIME_FILES.map((file) => path.join(PATHS.piperDir, file))
   ];
   if (!SKIP_MODELS) {
     checks.push(
@@ -454,5 +529,8 @@ module.exports = {
   PIP_PACKAGES,
   ARTIFACTS,
   PATHS,
-  configHash
+  PIPER_RUNTIME_FILES,
+  configHash,
+  isPiperRuntimeComplete,
+  placePiperRuntime
 };

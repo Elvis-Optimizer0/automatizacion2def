@@ -13,15 +13,17 @@ const {
   E_VOICE_PIPER_CANCELLED
 } = require('../../app/core/voice-piper.js');
 const { migrateProject } = require('../../app/core/project-schema.js');
+const { MODEL_SPECS } = require('../../app/core/model-specs.js');
 
 test.describe('Piper TTS engine', () => {
   test('resolvePiperRuntime returns valid paths when binaries exist', () => {
     const runtime = resolvePiperRuntime();
     if (runtime.executable) {
       expect(runtime.executable).toMatch(/piper\.exe$/);
-      expect(runtime.modelsDir).toContain('piper/models');
+      expect(path.normalize(runtime.modelsDir)).toContain(path.join('piper', 'models'));
     }
-    expect(runtime.searched).toEqual([]);
+    expect(runtime.searched.length).toBeGreaterThan(0);
+    expect(runtime.searched.some((dir) => path.basename(dir) === 'piper')).toBe(true);
   });
 
   test('buildPiperArgs produces correct args array with absolute paths', () => {
@@ -200,35 +202,44 @@ test.describe('Project migration: old .vmproj -> Kokoro', () => {
 });
 
 test.describe('Piper catalog validation', () => {
-  const EXPECTED_PIPER_VOICES = {
-    'es_MX-ald-medium': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json', license: 'Unlicense' },
-    'es_MX-ald-x_low': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json', license: 'Unlicense' },
-    'es_ES-carlfm-x_low': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json', license: 'Public domain' },
-    'es_ES-carlfm-medium': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx.json', license: 'Public domain' },
-    'en_US-lessac-medium': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json', license: 'Blizzard (non-commercial)' },
-    'en_US-lessac-low': { onnx: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx', json: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json', license: 'Blizzard (non-commercial)' }
-  };
+  function piperVoiceIds() {
+    return [...new Set(MODEL_SPECS.piper.files.map((file) => file.fileName.replace(/\.onnx(?:\.json)?$/, '')))];
+  }
 
-  test('piperModels has exactly 6 voices', () => {
-    expect(Object.keys(EXPECTED_PIPER_VOICES).length).toBe(6);
+  test('piperModels derives its voice count from the catalog', () => {
+    const voices = piperVoiceIds();
+    expect(voices.length).toBeGreaterThan(0);
+    expect(MODEL_SPECS.piper.files.length).toBe(voices.length * 2);
   });
 
-  test('each voice has onnx, json, license', () => {
-    for (const [, voiceInfo] of Object.entries(EXPECTED_PIPER_VOICES)) {
-      expect(voiceInfo.onnx).toMatch(/^https:\/\//);
-      expect(voiceInfo.json).toMatch(/^https:\/\//);
-      expect(voiceInfo.license).toBeTruthy();
+  test('each catalog voice has onnx, json and license metadata', () => {
+    for (const voiceId of piperVoiceIds()) {
+      const onnx = MODEL_SPECS.piper.files.find((file) => file.fileName === `${voiceId}.onnx`);
+      const json = MODEL_SPECS.piper.files.find((file) => file.fileName === `${voiceId}.onnx.json`);
+      expect(onnx.url).toMatch(/^https:\/\//);
+      expect(json.url).toMatch(/^https:\/\//);
+      expect(onnx.license).toBeTruthy();
+      expect(json.license).toBe(onnx.license);
     }
   });
 
+  test('commercial use flags match the MODEL_CARD license evidence', () => {
+    const byVoice = new Map(MODEL_SPECS.piper.files.map((file) => [file.fileName, file]));
+    expect(byVoice.get('es_MX-ald-medium.onnx').commercialUse).toBe(true);
+    expect(byVoice.get('es_MX-ald-x_low.onnx').commercialUse).toBe(false);
+    expect(byVoice.get('es_ES-carlfm-x_low.onnx').commercialUse).toBe(true);
+    expect(byVoice.get('en_US-lessac-medium.onnx').commercialUse).toBe(false);
+    expect(byVoice.get('en_US-lessac-low.onnx').commercialUse).toBe(false);
+  });
+
   test('Spanish voices have es_MX and es_ES', () => {
-    const voices = Object.keys(EXPECTED_PIPER_VOICES);
+    const voices = piperVoiceIds();
     expect(voices.some(v => v.startsWith('es_MX'))).toBe(true);
     expect(voices.some(v => v.startsWith('es_ES'))).toBe(true);
   });
 
   test('English voices have en_US', () => {
-    const voices = Object.keys(EXPECTED_PIPER_VOICES);
+    const voices = piperVoiceIds();
     expect(voices.some(v => v.startsWith('en_US'))).toBe(true);
   });
 });

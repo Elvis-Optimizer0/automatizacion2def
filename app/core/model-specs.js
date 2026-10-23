@@ -56,16 +56,16 @@ const MODEL_SPECS = {
         fileName: 'es_MX-ald-x_low.onnx',
         sizeBytes: 20986952,
         sha256: 'd8aae54aee9eafb37fb85d6da676facafca31c2d84d11acdca1a5b6dd82b1df6',
-        license: 'Unlicense',
-        commercialUse: true,
+        license: 'No declarada en MODEL_CARD',
+        commercialUse: false,
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx'
       },
       {
         fileName: 'es_MX-ald-x_low.onnx.json',
         sizeBytes: 4877,
         sha256: '5b372adf1f8c8d8f0610b9057fc2df001ad3f5f42cd9d6f853a78bef3f8b0644',
-        license: 'Unlicense',
-        commercialUse: true,
+        license: 'No declarada en MODEL_CARD',
+        commercialUse: false,
         url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json'
       },
       {

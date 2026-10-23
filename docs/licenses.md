@@ -1,44 +1,48 @@
 # Licencias de Voces Piper
 
-Este documento describe la licencia de cada voz disponible en el catálogo de Piper TTS.
+Este documento describe la licencia declarada en el `MODEL_CARD` de cada voz disponible en el catálogo de Piper TTS.
 
 ## Voces en Español (México)
 
-| Voz | Licencia | Origen | Uso Comercial |
-|-----|----------|--------|---------------|
-| es_MX-ald-medium | Unlicense | https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/ | ✅ Sí |
-| es_MX-ald-x_low | Unlicense | https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/ | ✅ Sí |
+| Voz | Línea de licencia en `MODEL_CARD` | Uso comercial |
+|-----|------------------------------------|---------------|
+| es_MX-ald-medium | `* License: http://unlicense.org` | Sí |
+| es_MX-ald-x_low | Sin línea `License` | No verificado; no aprobado para uso comercial |
 
 ## Voces en Español (España)
 
-| Voz | Licencia | Origen | Uso Comercial |
-|-----|----------|--------|---------------|
-| es_ES-carlfm-x_low | Public domain | https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/ | ✅ Sí |
-| es_ES-carlfm-medium | Public domain | https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/ | ✅ Sí |
+| Voz | Línea de licencia en `MODEL_CARD` | Uso comercial |
+|-----|------------------------------------|---------------|
+| es_ES-carlfm-x_low | `* License: Public domain` | Sí |
 
 ## Voces en Inglés (EE. UU.)
 
-| Voz | Licencia | Origen | Uso Comercial |
-|-----|----------|--------|---------------|
-| en_US-lessac-medium | **Blizzard (non-commercial)** | https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/ | ❌ **NO** |
-| en_US-lessac-low | **Blizzard (non-commercial)** | https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/ | ❌ **NO** |
-
----
+| Voz | Línea de licencia en `MODEL_CARD` | Uso comercial |
+|-----|------------------------------------|---------------|
+| en_US-lessac-medium | `* License: https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html` | No |
+| en_US-lessac-low | `* License: https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html` | No |
 
 ## Notas importantes
 
-### Voz Blizzard (en_US-lessac-*)
-Las voces `en_US-lessac-medium` y `en_US-lessac-low` tienen licencia **Blizzard (non-commercial)**. Esto significa que **NO pueden usarse con fines comerciales** sin obtener una licencia separada de Blizzard Entertainment.
+### es_MX-ald-x_low
 
-> ⚠️ **ADVERTENCIA**: El uso comercial de estas voces está prohibido por su licencia. Si planeas usar Video Maker para proyectos comerciales, evita seleccionar estas voces o consulta con Blizzard Entertainment para obtener la licencia correspondiente.
+El `MODEL_CARD` no contiene una línea `License`. El catálogo conserva `commercialUse: false`; no se infiere permiso comercial a partir de la voz `es_MX-ald-medium` ni del dataset sintético descrito por la tarjeta.
 
-### Voces Unlicense / Public Domain
-Las voces en español (es_MX y es_ES) tienen licencias permisivas (Unlicense / Public domain) que permiten uso comercial sin restricciones.
+### en_US-lessac-*
 
----
+Las tarjetas `en_US-lessac-medium` y `en_US-lessac-low` remiten a la licencia de investigación Blizzard 2013. Esa licencia limita el uso a `Research Purposes` y excluye expresamente el desarrollo, marketing, comercialización, venta o licenciamiento comercial de productos o servicios de síntesis de voz. Por eso el catálogo marca ambas voces con `commercialUse: false`.
+
+### es_MX-ald-medium y es_ES-carlfm-x_low
+
+`es_MX-ald-medium` declara Unlicense y `es_ES-carlfm-x_low` declara Public domain. Ambas voces están marcadas con `commercialUse: true`.
 
 ## Referencias
 
+- `es_MX-ald-medium`: https://huggingface.co/rhasspy/piper-voices/blob/main/es/es_MX/ald/medium/MODEL_CARD
+- `es_MX-ald-x_low`: https://huggingface.co/rhasspy/piper-voices/blob/main/es/es_MX/ald/x_low/MODEL_CARD
+- `es_ES-carlfm-x_low`: https://huggingface.co/rhasspy/piper-voices/blob/main/es/es_ES/carlfm/x_low/MODEL_CARD
+- `en_US-lessac-medium`: https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD
+- `en_US-lessac-low`: https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/low/MODEL_CARD
 - Catálogo de voces: `app/core/model-specs.js` (modelo `piper`)
 - Gestión de descargas: `app/core/models.js` (canal `piper:voiceDownload`)
 - UI de selección: `app/ui/renderer.js` (panel `piper-voices-panel`)

@@ -1,6 +1,17 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
-const { ARTIFACTS, PIP_PACKAGES, CONFIG_VERSION, PYTHON_VERSION, configHash } = require('../../scripts/fetch-engines.js');
+const {
+  ARTIFACTS,
+  PIP_PACKAGES,
+  CONFIG_VERSION,
+  PYTHON_VERSION,
+  PIPER_RUNTIME_FILES,
+  configHash,
+  placePiperRuntime
+} = require('../../scripts/fetch-engines.js');
 
 test.describe('fetch-engines configuration', () => {
   test('every artifact has an https url and a pinned 64-hex sha256', () => {
@@ -36,5 +47,77 @@ test.describe('fetch-engines configuration', () => {
     expect(CONFIG_VERSION).toBeTruthy();
     expect(configHash()).toMatch(/^[0-9a-f]{64}$/);
     expect(configHash()).toBe(configHash());
+  });
+});
+
+test.describe('Piper archive layout', () => {
+  function makeTempDir() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'vm-piper-layout-'));
+  }
+
+  function writeRuntime(runtimeDir) {
+    for (const file of PIPER_RUNTIME_FILES) {
+      const destination = path.join(runtimeDir, file);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, `fixture:${file}`);
+    }
+  }
+
+  function zipEntries(prefix) {
+    return PIPER_RUNTIME_FILES.map((file) => {
+      const normalized = file.split(path.sep).join('/');
+      return prefix ? `${prefix}/${normalized}` : normalized;
+    });
+  }
+
+  test('places a top-level piper folder at the runtime root', () => {
+    const root = makeTempDir();
+    try {
+      const source = path.join(root, 'extracted');
+      const target = path.join(root, 'vendor', 'piper');
+      writeRuntime(path.join(source, 'piper'));
+
+      placePiperRuntime(source, target, { fileSystem: fs, zipEntries: zipEntries('piper') });
+
+      expect(fs.existsSync(path.join(target, 'piper.exe'))).toBe(true);
+      expect(fs.existsSync(path.join(target, 'espeak-ng-data', 'es_dict'))).toBe(true);
+      expect(fs.existsSync(path.join(target, 'piper'))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('places a flat archive at the runtime root', () => {
+    const root = makeTempDir();
+    try {
+      const source = path.join(root, 'extracted');
+      const target = path.join(root, 'vendor', 'piper');
+      writeRuntime(source);
+
+      placePiperRuntime(source, target, { fileSystem: fs, zipEntries: zipEntries('') });
+
+      expect(fs.existsSync(path.join(target, 'piper.exe'))).toBe(true);
+      expect(fs.existsSync(path.join(target, 'espeak-ng-data', 'es_dict'))).toBe(true);
+      expect(fs.existsSync(path.join(target, 'piper'))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('fails when piper.exe is missing', () => {
+    const root = makeTempDir();
+    try {
+      const source = path.join(root, 'extracted');
+      const target = path.join(root, 'vendor', 'piper');
+      fs.mkdirSync(source, { recursive: true });
+      fs.writeFileSync(path.join(source, 'README.txt'), 'fixture');
+
+      expect(() => placePiperRuntime(source, target, {
+        fileSystem: fs,
+        zipEntries: ['README.txt']
+      })).toThrow(/piper\.exe no encontrado/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

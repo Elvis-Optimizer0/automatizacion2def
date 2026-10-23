@@ -43,27 +43,11 @@ function kokoroCatalog() {
 }
 
 function piperCatalog() {
-  return [
-    {
-      id: 'piper',
-      name: 'Piper TTS voces',
-      engine: 'piper',
-      files: [
-        { fileName: 'es_MX-ald-medium.onnx', sizeBytes: 63201294, sha256: '019b3803293c93e34a206dd2e53a3889209a514e786fd7144f7b70196c579b63', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx', license: 'Unlicense' },
-        { fileName: 'es_MX-ald-medium.onnx.json', sizeBytes: 4878, sha256: '5a71498158e04afc8099bfd019c7e87c68eb9d042505a2b1a87e5c1ac2b1a61d', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json', license: 'Unlicense' },
-        { fileName: 'es_MX-ald-x_low.onnx', sizeBytes: 22345678, sha256: 'pending', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx', license: 'Unlicense' },
-        { fileName: 'es_MX-ald-x_low.onnx.json', sizeBytes: 3456, sha256: 'pending', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json', license: 'Unlicense' },
-        { fileName: 'es_ES-carlfm-x_low.onnx', sizeBytes: 28130791, sha256: 'd69677323a907cd4963f42b29c20a98b5d6bfa7f3e64df339915e4650c00d125', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx', license: 'Public domain' },
-        { fileName: 'es_ES-carlfm-x_low.onnx.json', sizeBytes: 4159, sha256: 'd9bdfa9ff01eb2bc9e62e7d2593939d1e4c4d8eb7cf75f972731539d12399966', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json', license: 'Public domain' },
-        { fileName: 'es_ES-carlfm-medium.onnx', sizeBytes: 42345678, sha256: 'pending', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx', license: 'Public domain' },
-        { fileName: 'es_ES-carlfm-medium.onnx.json', sizeBytes: 4567, sha256: 'pending', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/medium/es_ES-carlfm-medium.onnx.json', license: 'Public domain' },
-        { fileName: 'en_US-lessac-medium.onnx', sizeBytes: 63201294, sha256: '5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx', license: 'Blizzard (non-commercial)' },
-        { fileName: 'en_US-lessac-medium.onnx.json', sizeBytes: 4885, sha256: 'efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json', license: 'Blizzard (non-commercial)' },
-        { fileName: 'en_US-lessac-low.onnx', sizeBytes: 23456789, sha256: 'pending', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx', license: 'Blizzard (non-commercial)' },
-        { fileName: 'en_US-lessac-low.onnx.json', sizeBytes: 4012, sha256: 'pending', url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json', license: 'Blizzard (non-commercial)' }
-      ]
-    }
-  ];
+  return MODEL_CATALOG;
+}
+
+function piperVoiceIds(piper) {
+  return [...new Set(piper.files.map((file) => file.fileName.replace(/\.onnx(?:\.json)?$/, '')))];
 }
 
 test.describe('model verification', () => {
@@ -392,12 +376,13 @@ test.describe('Piper voice download and import', () => {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'vm-piper-voices-'));
   }
 
-  test('piper catalog has 6 voices with complete metadata', () => {
+  test('piper catalog derives its voice count and has complete metadata', () => {
     const catalog = piperCatalog();
     const piper = catalog.find(m => m.id === 'piper');
     expect(piper).toBeTruthy();
-    expect(piper.files.length).toBe(12); // 6 voices x 2 files each
-    const voices = ['es_MX-ald-medium', 'es_MX-ald-x_low', 'es_ES-carlfm-x_low', 'es_ES-carlfm-medium', 'en_US-lessac-medium', 'en_US-lessac-low'];
+    const voices = piperVoiceIds(piper);
+    expect(voices.length).toBeGreaterThan(0);
+    expect(piper.files.length).toBe(voices.length * 2);
     voices.forEach(voiceId => {
       const onnxFile = piper.files.find(f => f.fileName === `${voiceId}.onnx`);
       const jsonFile = piper.files.find(f => f.fileName === `${voiceId}.onnx.json`);
@@ -633,9 +618,9 @@ test.describe('Piper voice download and import', () => {
     }
   });
 
-  test('all 6 voices require sha256 for both files, size and license', () => {
+  test('all catalog voices require sha256 for both files, size and license', () => {
     const piper = piperCatalog().find(m => m.id === 'piper');
-    const voices = ['es_MX-ald-medium', 'es_MX-ald-x_low', 'es_ES-carlfm-x_low', 'es_ES-carlfm-medium', 'en_US-lessac-medium', 'en_US-lessac-low'];
+    const voices = piperVoiceIds(piper);
     voices.forEach(voiceId => {
       const onnxFile = piper.files.find(f => f.fileName === `${voiceId}.onnx`);
       const jsonFile = piper.files.find(f => f.fileName === `${voiceId}.onnx.json`);

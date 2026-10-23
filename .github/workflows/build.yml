@@ -27,7 +27,7 @@ jobs:
           path: |
             vendor
             .engine-cache
-          key: vm-engines-${{ hashFiles('scripts/fetch-engines.js') }}
+          key: vm-engines-${{ hashFiles('scripts/fetch-engines.js', 'scripts/fetch-piper-e2e-voice.js', 'app/core/model-specs.js') }}
 
       - name: Install dependencies
         run: npm ci
@@ -35,8 +35,14 @@ jobs:
       - name: Run linter
         run: npm run lint
 
-      - name: Fetch engines (Kokoro runtime + whisper.cpp + Piper models)
+      - name: Fetch engines (Kokoro runtime + whisper.cpp + Piper binary)
         run: npm run fetch-engines
+
+      - name: Fetch verified Piper E2E voice
+        run: npm run fetch-piper-e2e-voice
+
+      - name: Smoke test real Piper synthesis
+        run: node scripts/piper-smoke.cjs
 
       - name: Run E2E tests
         run: npm run e2e

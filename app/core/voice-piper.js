@@ -3,43 +3,47 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { resolvePiperRuntime: resolveBundledPiperRuntime } = require('./runtime-paths.js');
 
 const E_VOICE_PIPER_MISSING = 'E_VOICE_PIPER_MISSING';
 const E_VOICE_PIPER_MODEL_MISSING = 'E_VOICE_PIPER_MODEL_MISSING';
 const E_VOICE_PIPER_FAILED = 'E_VOICE_PIPER_FAILED';
 const E_VOICE_PIPER_CANCELLED = 'E_VOICE_PIPER_CANCELLED';
 
-function resolvePiperRuntime() {
-  const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
-  const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
-
-  if (!fs.existsSync(piperExe)) {
-    return { executable: null, modelsDir: null, searched: [] };
-  }
-  if (!fs.existsSync(piperDataDir)) {
-    return { executable: null, modelsDir: null, searched: [] };
+function resolvePiperRuntime(options = {}) {
+  const runtime = resolveBundledPiperRuntime(options);
+  if (!runtime.executable) {
+    return {
+      executable: null,
+      piperDataDir: null,
+      modelsDir: null,
+      dir: null,
+      searched: runtime.searched
+    };
   }
 
   return {
-    executable: piperExe,
-    modelsDir: path.join(__dirname, '..', 'vendor', 'piper', 'models'),
-    searched: []
+    executable: runtime.executable,
+    piperDataDir: runtime.piperDataDir,
+    modelsDir: runtime.modelsDir,
+    dir: runtime.dir,
+    searched: runtime.searched
   };
 }
 
-function resolvePiperPaths(_modelsDirParam) {
-  const piperExe = path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe');
-  const piperDataDir = path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
-  const modelsDir = path.join(__dirname, '..', 'vendor', 'piper', 'models');
-
-  if (!fs.existsSync(piperExe)) {
-    throw new Error(`${E_VOICE_PIPER_MISSING}: piper.exe no encontrado en ${piperExe}. Ejecute fetch-engines.`);
+function resolvePiperPaths(modelsDirParam) {
+  const runtime = resolvePiperRuntime();
+  if (!runtime.executable) {
+    throw new Error(`${E_VOICE_PIPER_MISSING}: piper.exe no encontrado. Ejecute fetch-engines.`);
   }
-  if (!fs.existsSync(piperDataDir)) {
-    throw new Error(`${E_VOICE_PIPER_MISSING}: espeak-ng-data no encontrado en ${piperDataDir}. Ejecute fetch-engines.`);
+  if (!fs.existsSync(runtime.piperDataDir)) {
+    throw new Error(`${E_VOICE_PIPER_MISSING}: espeak-ng-data no encontrado en ${runtime.piperDataDir}. Ejecute fetch-engines.`);
   }
 
-  return { piperExe, piperDataDir, modelsDir };
+  const modelsDir = modelsDirParam
+    ? path.join(modelsDirParam, 'piper')
+    : runtime.modelsDir;
+  return { piperExe: runtime.executable, piperDataDir: runtime.piperDataDir, modelsDir };
 }
 
 function buildPiperArgs(options, modelPath, configPath, piperExe, piperDataDir) {
@@ -111,24 +115,22 @@ function synthesizeVoicePiper(options, hooks = {}) {
       return;
     }
 
-    resolvePiperPaths(modelsDir);
+    const resolved = resolvePiperPaths(modelsDir);
 
     const voiceMap = {
       'es_MX-ald-medium': { model: 'es_MX-ald-medium', language: 'es_MX' },
       'es_MX-ald-x_low': { model: 'es_MX-ald-x_low', language: 'es_MX' },
       'es_ES-carlfm-x_low': { model: 'es_ES-carlfm-x_low', language: 'es_ES' },
-      'es_ES-carlfm-medium': { model: 'es_ES-carlfm-medium', language: 'es_ES' },
       'en_US-lessac-medium': { model: 'en_US-lessac-medium', language: 'en_US' },
-      'en_US-lessac-low': { model: 'en_US-lessac-low', language: 'en_US' },
-      'en_US-lessac-high': { model: 'en_US-lessac-high', language: 'en_US' }
+      'en_US-lessac-low': { model: 'en_US-lessac-low', language: 'en_US' }
     };
 
     const voiceKey = voiceId || voiceMap[language] || 'es_MX-ald-medium';
     const modelFile = `${voiceKey}.onnx`;
     const configFile = `${voiceKey}.onnx.json`;
 
-    const modelPath = path.join(__dirname, '..', 'vendor', 'piper', 'models', modelFile);
-    const configPath = path.join(__dirname, '..', 'vendor', 'piper', 'models', configFile);
+    const modelPath = path.join(resolved.modelsDir, modelFile);
+    const configPath = path.join(resolved.modelsDir, configFile);
 
     if (!fs.existsSync(modelPath)) {
       throw new Error(`${E_VOICE_PIPER_MODEL_MISSING}: modelo no encontrado: ${modelPath}`);
@@ -139,14 +141,14 @@ function synthesizeVoicePiper(options, hooks = {}) {
 
     const tempOutputPath = outputPath.replace('.wav', '_piper_temp.wav');
 
-    buildPiperArgs({
+    const piperArgs = buildPiperArgs({
       outputPath: tempOutputPath,
       speaker: 0,
       noise_scale: 0.667,
       length_scale: 1.0 / (options.speed || 1.0),
       noise_w: 0.8,
       sentence_silence: options.pause || 0.2
-    }, modelPath, configPath, __dirname, '..', 'vendor', 'piper', 'espeak-ng-data');
+    }, modelPath, configPath, resolved.piperExe, resolved.piperDataDir);
 
     let cancelled = false;
     let settled = false;
@@ -172,7 +174,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
 
     const childEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' };
 
-    const child = spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/sh', ['/c', path.join(__dirname, '..', 'vendor', 'piper', 'piper.exe') + ' --model "' + path.join(__dirname, '..', 'vendor', 'piper', 'models', voiceKey + '.onnx') + '" --config "' + path.join(__dirname, '..', 'vendor', 'piper', 'models', voiceKey + '.onnx.json') + '" --output_file "' + tempOutputPath + '" --espeak_data "' + path.join(__dirname, '..', 'vendor', 'piper', 'espeak-ng-data') + '" --length_scale ' + (1.0 / (options.speed || 1.0)) + ' --sentence_silence ' + (options.pause || 0.2) + ' --noise_scale 0.667 --noise_w 0.8 --speaker 0'], {
+    const child = spawn(resolved.piperExe, piperArgs.slice(1), {
       windowsHide: true,
       env: childEnv,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -221,12 +223,12 @@ function synthesizeVoicePiper(options, hooks = {}) {
 }
 
 function checkVoiceEnginePiper(modelsDir) {
-  resolvePiperPaths(modelsDir);
+  const resolved = resolvePiperPaths(modelsDir);
 
   const details = [];
   let ready = true;
 
-  const modelsDirPath = path.join(__dirname, '..', 'vendor', 'piper', 'models');
+  const modelsDirPath = resolved.modelsDir;
   if (!fs.existsSync(modelsDirPath)) {
     ready = false;
     details.push(`directorio de modelos no existe: ${modelsDirPath}`);

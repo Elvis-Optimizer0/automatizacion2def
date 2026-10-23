@@ -10,6 +10,7 @@
     "test": "playwright test",
     "e2e": "playwright test",
     "fetch-engines": "node scripts/fetch-engines.js",
+    "fetch-piper-e2e-voice": "node scripts/fetch-piper-e2e-voice.js",
     "dist": "electron-builder --publish=never",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -52,6 +53,13 @@
       {
         "from": "vendor/whisper",
         "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "vendor/piper",
+        "to": "piper",
         "filter": [
           "**/*"
         ]

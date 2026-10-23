@@ -5,6 +5,7 @@ const APP_ROOT = path.join(__dirname, '..', '..');
 
 const KOKORO_MODEL_FILES = ['kokoro-v1.0.onnx', 'voices-v1.0.bin'];
 const WHISPER_MODEL_FILES = ['ggml-base.bin'];
+const PIPER_MODEL_FILES = ['es_MX-ald-medium.onnx'];
 
 function bundledSearchDirs(name, options = {}) {
   const dirs = [];
@@ -86,11 +87,35 @@ function resolveWhisperRuntime(options = {}) {
   return { dir, executable, modelPath, searched };
 }
 
+function resolvePiperRuntime(options = {}) {
+  const searched = bundledSearchDirs('piper', options);
+  const dir = resolveBundledDir('piper', options);
+  if (!dir) {
+    return { dir: null, executable: null, piperDataDir: null, modelsDir: null, searched };
+  }
+  const exe = runtimeExeName('piper');
+  const executable = firstExisting([
+    path.join(dir, exe),
+    path.join(dir, 'piper', exe)
+  ]);
+  const piperDataDir = path.join(dir, 'espeak-ng-data');
+  const modelsDir = resolveModelsDir(dir, PIPER_MODEL_FILES);
+  return {
+    dir,
+    executable: executable && fs.existsSync(piperDataDir) ? executable : null,
+    piperDataDir,
+    modelsDir,
+    searched
+  };
+}
+
 module.exports = {
   KOKORO_MODEL_FILES,
   WHISPER_MODEL_FILES,
+  PIPER_MODEL_FILES,
   bundledSearchDirs,
   resolveBundledDir,
   resolveKokoroRuntime,
-  resolveWhisperRuntime
+  resolveWhisperRuntime,
+  resolvePiperRuntime
 };
