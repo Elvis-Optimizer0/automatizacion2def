@@ -1080,3 +1080,125 @@ body {
   border-radius: var(--radius-md);
   background-color: #000;
 }
+
+.piper-voices-panel {
+  margin-top: var(--space-md, 16px);
+  padding: var(--space-md, 16px);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 8px;
+  background: var(--color-surface, #1a1a1a);
+}
+
+.piper-voices-panel h4 {
+  margin: 0 0 var(--space-sm, 8px);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.piper-voices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.piper-voice-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 8px;
+  background: var(--color-surface-alt, rgba(255, 255, 255, 0.04));
+}
+
+.piper-voice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.piper-voice-id {
+  font-family: monospace;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.piper-voice-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: var(--font-size-xs, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.piper-voice-state.no_descargada {
+  background: rgba(239, 83, 80, 0.2);
+  color: #ef5350;
+}
+
+.piper-voice-state.descargando {
+  background: rgba(255, 179, 0, 0.2);
+  color: #ffb300;
+}
+
+.piper-voice-state.lista {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.piper-voice-state.error {
+  background: rgba(239, 83, 80, 0.3);
+  color: #ef5350;
+}
+
+.piper-voice-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.piper-voice-actions .btn {
+  font-size: var(--font-size-xs, 11px);
+  padding: 4px 10px;
+}
+
+.piper-voice-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.piper-voice-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border, #333);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.piper-voice-progress-fill {
+  height: 100%;
+  background: var(--color-accent);
+  width: 0%;
+  transition: width 0.2s;
+}
+
+.piper-voice-progress-text {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--color-text-secondary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.piper-voice-error {
+  font-size: var(--font-size-xs, 11px);
+  color: #ef5350;
+  margin-top: 4px;
+}

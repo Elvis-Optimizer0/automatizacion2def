@@ -249,10 +249,11 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
         'listPresets', 'addPreset', 'renamePreset', 'deletePreset',
         'listVoices', 'generateVoice', 'generateVoiceSample', 'cancelVoice', 'onVoiceProgress',
         'listModels', 'downloadModels', 'importModel', 'cancelModels', 'onModelsProgress',
-        'alignScenes', 'getCapabilities'
+        'alignScenes', 'getCapabilities',
+        'downloadPiperVoice', 'importPiperVoice', 'generatePiperVoiceSample', 'cancelPiperDownload', 'onPiperVoiceProgress'
       ])
     );
-    expect(apiKeys.length).toBe(35);
+    expect(apiKeys.length).toBe(40);
 
     const preloadPath = path.join(__dirname, '..', '..', 'app', 'preload.js');
     const preloadCode = fs.readFileSync(preloadPath, 'utf-8');
@@ -262,6 +263,6 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
     const mainCode = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'main.js'), 'utf-8');
     const handleMatches = mainCode.match(/ipcMain\.handle\(/g);
     const handleCount = handleMatches ? handleMatches.length : 0;
-    expect(handleCount).toBe(31);
+    expect(handleCount).toBe(35);
   });
 });

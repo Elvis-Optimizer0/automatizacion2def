@@ -17,17 +17,32 @@ function probeDuration(filePath) {
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-piper-smoke-'));
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-piper-userdata-'));
   
-  const modelDir = path.join(__dirname, '..', 'vendor', 'piper', 'models');
-  const modelsDir = path.join(userDataDir, 'models', 'piper');
-  fs.mkdirSync(modelsDir, { recursive: true });
+  const vendorDir = path.join(__dirname, '..', 'vendor');
   
-  // Copy piper models
-  fs.copyFileSync(path.join(modelDir, 'es_MX-ald-medium.onnx'), path.join(modelsDir, 'es_MX-ald-medium.onnx'));
-  fs.copyFileSync(path.join(modelDir, 'es_MX-ald-medium.onnx.json'), path.join(modelsDir, 'es_MX-ald-medium.onnx.json'));
-  fs.copyFileSync(path.join(modelDir, 'es_ES-carlfm-x_low.onnx'), path.join(modelsDir, 'es_ES-carlfm-x_low.onnx'));
-  fs.copyFileSync(path.join(modelDir, 'es_ES-carlfm-x_low.onnx.json'), path.join(modelsDir, 'es_ES-carlfm-x_low.onnx.json'));
-  fs.copyFileSync(path.join(modelDir, 'en_US-lessac-medium.onnx'), path.join(modelsDir, 'en_US-lessac-medium.onnx'));
-  fs.copyFileSync(path.join(modelDir, 'en_US-lessac-medium.onnx.json'), path.join(modelsDir, 'en_US-lessac-medium.onnx.json'));
+  // Copy all required models to userDataDir
+  const modelsDir = path.join(userDataDir, 'models');
+  const kokoroModelsDir = path.join(modelsDir, 'kokoro');
+  const piperModelsDir = path.join(modelsDir, 'piper');
+  const whisperModelsDir = path.join(modelsDir, 'whisper');
+  fs.mkdirSync(kokoroModelsDir, { recursive: true });
+  fs.mkdirSync(piperModelsDir, { recursive: true });
+  fs.mkdirSync(whisperModelsDir, { recursive: true });
+  
+  // Copy Kokoro models
+  fs.copyFileSync(path.join(vendorDir, 'kokoro', 'models', 'kokoro-v1.0.onnx'), path.join(kokoroModelsDir, 'kokoro-v1.0.onnx'));
+  fs.copyFileSync(path.join(vendorDir, 'kokoro', 'models', 'voices-v1.0.bin'), path.join(kokoroModelsDir, 'voices-v1.0.bin'));
+  
+  // Copy Whisper model
+  fs.copyFileSync(path.join(vendorDir, 'whisper', 'models', 'ggml-base.bin'), path.join(whisperModelsDir, 'ggml-base.bin'));
+  
+  // Copy Piper models
+  const piperVendorModels = path.join(vendorDir, 'piper', 'models');
+  fs.copyFileSync(path.join(piperVendorModels, 'es_MX-ald-medium.onnx'), path.join(piperModelsDir, 'es_MX-ald-medium.onnx'));
+  fs.copyFileSync(path.join(piperVendorModels, 'es_MX-ald-medium.onnx.json'), path.join(piperModelsDir, 'es_MX-ald-medium.onnx.json'));
+  fs.copyFileSync(path.join(piperVendorModels, 'es_ES-carlfm-x_low.onnx'), path.join(piperModelsDir, 'es_ES-carlfm-x_low.onnx'));
+  fs.copyFileSync(path.join(piperVendorModels, 'es_ES-carlfm-x_low.onnx.json'), path.join(piperModelsDir, 'es_ES-carlfm-x_low.onnx.json'));
+  fs.copyFileSync(path.join(piperVendorModels, 'en_US-lessac-medium.onnx'), path.join(piperModelsDir, 'en_US-lessac-medium.onnx'));
+  fs.copyFileSync(path.join(piperVendorModels, 'en_US-lessac-medium.onnx.json'), path.join(piperModelsDir, 'en_US-lessac-medium.onnx.json'));
 
   console.log('Models copied to:', modelsDir);
 
