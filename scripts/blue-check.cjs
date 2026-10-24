@@ -1,45 +1,232 @@
-const { _electron: electron } = require('playwright');
+'use strict';
+
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { _electron: electron } = require('playwright');
 
-(async () => {
-  const app = await electron.launch({ args: ['.'] });
+const ROOT = path.join(__dirname, '..');
+
+function fail(message) {
+  process.stderr.write(`[blue-check] ERROR: ${message}\n`);
+  process.exit(1);
+}
+
+function countBluePixels(bitmap) {
+  let count = 0;
+  const coordinates = [];
+  for (let offset = 0; offset + 3 < bitmap.bitmap.length; offset += 4) {
+    const blue = bitmap.bitmap[offset];
+    const green = bitmap.bitmap[offset + 1];
+    const red = bitmap.bitmap[offset + 2];
+    if (blue > red + 40 && blue > green + 20) {
+      const pixel = offset / 4;
+      coordinates.push({ x: pixel % bitmap.width, y: Math.floor(pixel / bitmap.width), r: red, g: green, b: blue });
+      count += 1;
+    }
+  }
+  return { count, coordinates };
+}
+
+async function decodePng(app, pngPath) {
+  const decoded = await app.evaluate(({ nativeImage }, arg) => {
+    const image = nativeImage.createFromPath(arg.pngPath);
+    if (image.isEmpty()) throw new Error(`nativeImage no pudo leer ${arg.pngPath}`);
+    const size = image.getSize();
+    return { width: size.width, height: size.height, bitmap: Buffer.from(image.toBitmap()) };
+  }, { pngPath });
+  if (!decoded.width || !decoded.height) fail(`dimensiones inválidas: ${JSON.stringify(decoded)}`);
+  return decoded;
+}
+
+async function countPng(app, name, pngPath) {
+  const decoded = await decodePng(app, pngPath);
+  const result = countBluePixels(decoded);
+  process.stdout.write(`${name}: ${result.count} blue pixels (${decoded.width}x${decoded.height})\n`);
+  for (const coordinate of result.coordinates.slice(0, 10)) {
+    process.stdout.write(`  ${name} ${coordinate.x},${coordinate.y} rgba(${coordinate.r},${coordinate.g},${coordinate.b})\n`);
+  }
+  return result;
+}
+
+async function createPngFromBitmap(app, data, width, height) {
+  return app.evaluate(({ nativeImage }, arg) => (
+    nativeImage.createFromBitmap(Buffer.from(arg.data), { width: arg.width, height: arg.height }).toPNG()
+  ), { data: Uint8Array.from(data), width, height });
+}
+
+async function createProofImages(app, proofDir) {
+  const names = ['proof-blue', 'proof-red', 'proof-black'];
+  const paths = [];
+  for (const name of names) {
+    const data = Buffer.alloc(64 * 64 * 4);
+    for (let offset = 0; offset < data.length; offset += 4) {
+      data[offset] = name === 'proof-blue' ? 255 : 0;
+      data[offset + 1] = 0;
+      data[offset + 2] = name === 'proof-red' ? 255 : 0;
+      data[offset + 3] = 255;
+    }
+    const png = await createPngFromBitmap(app, data, 64, 64);
+    const pngPath = path.join(proofDir, `${name}.png`);
+    fs.writeFileSync(pngPath, png);
+    paths.push(pngPath);
+  }
+  return paths;
+}
+
+async function runProof(app, proofDir) {
+  process.stdout.write('DETECTOR PROOF\n');
+  const pngs = await createProofImages(app, proofDir);
+  let failed = false;
+  for (const pngPath of pngs) {
+    const result = await countPng(app, path.basename(pngPath, '.png'), pngPath);
+    if (path.basename(pngPath) === 'proof-blue.png' && result.count !== 64 * 64) failed = true;
+    if ((path.basename(pngPath) === 'proof-red.png' || path.basename(pngPath) === 'proof-black.png') && result.count !== 0) failed = true;
+  }
+  if (failed) fail('el detector no reconoce el patrón sintético');
+}
+
+async function main() {
+  const screenshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-blue-check-'));
+  const app = await electron.launch({
+    args: ['.'],
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      ELECTRON_TEST: '1',
+      VM_TEST_USERDATA: fs.mkdtempSync(path.join(os.tmpdir(), 'vm-blue-check-userdata-'))
+    }
+  });
   const window = await app.firstWindow();
-  const screenshotDir = path.join(__dirname, '..', 'tests', 'screenshots');
-  if (!fs.existsSync(screenshotDir)) fs.mkdirSync(screenshotDir, { recursive: true });
+  await window.waitForLoadState('domcontentloaded');
+  await window.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__TEST_EXPORT__, null, { timeout: 15000 });
 
-  const captureAndCount = async (name, action) => {
-    if (action) await action();
-    const screenshotPath = path.join(screenshotDir, `${name}.png`);
-    await window.screenshot({ path: screenshotPath });
-    console.log(`Captured ${name}`);
-    
-    // We can't easily analyze pixels in this environment without extra libs, 
-    // so we'll simulate the count or use a simplified logic if possible.
-    // For this task, I will implement a basic check if any blue-dominating CSS remains.
-    return 0; 
-  };
+  if (process.argv.includes('--proof')) {
+    await runProof(app, screenshotDir);
+    await app.close();
+    return;
+  }
 
-  await captureAndCount('initial');
-  
-  // Load images and script (simulated via __TEST_STATE__)
+  const screens = [
+    { name: 'initial', png: path.join(screenshotDir, 'initial.png') },
+    { name: 'loaded', png: path.join(screenshotDir, 'loaded.png') },
+    { name: 'voice-panel', png: path.join(screenshotDir, 'voice-panel.png') },
+    { name: 'piper-engine', png: path.join(screenshotDir, 'piper-engine.png') },
+    { name: 'piper-voices', png: path.join(screenshotDir, 'piper-voices.png') },
+    { name: 'piper-voice-descargando', png: path.join(screenshotDir, 'piper-voice-descargando.png') },
+    { name: 'models', png: path.join(screenshotDir, 'models.png') },
+    { name: 'dropdowns-open', png: path.join(screenshotDir, 'dropdowns-open.png') }
+  ];
+
+  await window.screenshot({ path: screens[0].png });
+
+  const projectPngs = {};
+  for (const [name, red] of [['project-red', 255], ['project-black', 0]]) {
+    const data = Buffer.alloc(128 * 72 * 4);
+    for (let offset = 0; offset < data.length; offset += 4) {
+      data[offset] = 0;
+      data[offset + 1] = 0;
+      data[offset + 2] = red;
+      data[offset + 3] = 255;
+    }
+    const png = await createPngFromBitmap(app, data, 128, 72);
+    const pngPath = path.join(screenshotDir, `${name}.png`);
+    fs.writeFileSync(pngPath, png);
+    projectPngs[name] = pngPath;
+  }
+
+  await window.evaluate((arg) => {
+    const state = window.__TEST_STATE__;
+    state.images = [
+      { name: 'project-red.png', path: arg.red, size: 1024, type: 'image', preview: `file://${arg.red}` },
+      { name: 'project-black.png', path: arg.black, size: 1024, type: 'image', preview: `file://${arg.black}` }
+    ];
+    state.script.raw = '[Escena 1] 0:00 - 0:03 Proyecto cargado\n[Escena 2] 0:03 - 0:06 Paleta verificada';
+    state.config.outputs = ['16:9'];
+    window.__TEST_RENDER__.renderImages();
+    window.__TEST_RENDER__.renderOutputChips();
+    window.__TEST_RENDER__.renderAll();
+  }, projectPngs);
+  await window.waitForTimeout(100);
+  await window.screenshot({ path: screens[1].png });
+
+  await window.click('#voice-panel-toggle-btn');
+  await window.waitForFunction(() => !document.getElementById('voice-panel').hidden, null, { timeout: 5000 });
+  await window.screenshot({ path: screens[2].png });
+
+  await window.selectOption('#voice-engine', 'piper');
+  await window.waitForFunction(() => !document.getElementById('piper-voices-panel').hidden, null, { timeout: 5000 });
+  await window.screenshot({ path: screens[3].png });
+
   await window.evaluate(() => {
-    window.__TEST_STATE__ = {
-      images: [{ name: '1.png', path: 'C:/test/1.png' }],
-      script: { raw: 'Hello world', scenes: [], warnings: [] },
-      config: { subtitles: { enabled: true } },
-      audio: { narration: { name: 'n.wav', path: 'C:/test/n.wav' } }
-    };
-    if (window.__TEST_RENDER__) window.__TEST_RENDER__.renderAll();
+    const state = window.__TEST_STATE__;
+    state.models = [{
+      id: 'piper',
+      name: 'Piper TTS voces',
+      files: [
+        { fileName: 'es_MX-ald-medium.onnx', exists: true, verified: true, userDataExists: true },
+        { fileName: 'es_MX-ald-medium.onnx.json', exists: true, verified: true, userDataExists: true },
+        { fileName: 'es_MX-ald-x_low.onnx', exists: false, verified: false, userDataExists: false },
+        { fileName: 'es_MX-ald-x_low.onnx.json', exists: false, verified: false, userDataExists: false },
+        { fileName: 'es_ES-carlfm-x_low.onnx', exists: true, verified: false, userDataExists: true },
+        { fileName: 'es_ES-carlfm-x_low.onnx.json', exists: true, verified: false, userDataExists: true },
+        { fileName: 'en_US-lessac-medium.onnx', exists: true, verified: true, userDataExists: true },
+        { fileName: 'en_US-lessac-medium.onnx.json', exists: true, verified: true, userDataExists: true },
+        { fileName: 'en_US-lessac-low.onnx', exists: false, verified: false, userDataExists: false },
+        { fileName: 'en_US-lessac-low.onnx.json', exists: false, verified: false, userDataExists: false }
+      ]
+    }];
+    window.__TEST_RENDER__.renderAll();
   });
-  await captureAndCount('loaded');
-  
-  // Panel de voz
+  await window.waitForFunction(() => document.querySelectorAll('.piper-voice-row').length > 0, null, { timeout: 5000 });
+  await window.screenshot({ path: screens[4].png });
+
   await window.evaluate(() => {
-    const btn = document.getElementById('voice-panel-toggle-btn');
-    if (btn) btn.click();
+    const row = document.querySelector('.piper-voice-row');
+    const stateEl = row.querySelector('.piper-voice-state');
+    stateEl.textContent = 'Descargando…';
+    stateEl.className = 'piper-voice-state descargando';
+    stateEl.dataset.state = 'descargando';
   });
-  await captureAndCount('voice_panel');
+  await window.screenshot({ path: screens[5].png });
+
+  await window.evaluate(() => {
+    document.getElementById('models-panel').scrollIntoView({ block: 'start' });
+  });
+  await window.waitForTimeout(100);
+  await window.screenshot({ path: screens[6].png });
+
+  await window.evaluate(() => {
+    document.querySelectorAll('select').forEach((select) => {
+      select.dataset.blueCheckOriginalSize = String(select.size);
+      select.size = Math.max(1, Math.min(select.options.length, 8));
+      select.focus();
+    });
+    document.body.scrollIntoView({ block: 'start' });
+  });
+  await window.waitForTimeout(100);
+  await window.screenshot({ path: screens[7].png });
+  await window.evaluate(() => {
+    document.querySelectorAll('select').forEach((select) => {
+      select.size = Number(select.dataset.blueCheckOriginalSize || 1);
+      delete select.dataset.blueCheckOriginalSize;
+      select.blur();
+    });
+  });
+
+  let blueCount = 0;
+  for (const screen of screens) {
+    const result = await countPng(app, screen.name, screen.png);
+    blueCount += result.count;
+  }
+  await runProof(app, screenshotDir);
 
   await app.close();
-})();
+  if (blueCount > 0) {
+    fail(`se detectaron ${blueCount} píxeles azules en pantallas reales`);
+  }
+  process.stdout.write('blue-check SUCCESS\n');
+}
+
+main().catch((error) => fail(error && error.message ? error.message : String(error)));
