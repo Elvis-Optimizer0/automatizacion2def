@@ -630,6 +630,14 @@ async function downloadModel(model, modelsDir, options = {}) {
   const result = await downloadToFile(file.url, dest, { onProgress, signal: options.signal });
   const verification = verifyModelFile(dest, file);
   if (!verification.verified) {
+    // Clean up the failed download file
+    try { fs.unlinkSync(dest); } catch (_e) { /* ignore cleanup errors */ }
+    if (!verification.shaMatches) {
+      throw new Error(`${E_DOWNLOAD_HASH}: hash mismatch for ${file.fileName}`);
+    }
+    if (!verification.sizeMatches) {
+      throw new Error(`${E_DOWNLOAD_SIZE}: size mismatch for ${file.fileName}`);
+    }
     throw new Error(`${E_MODEL_DOWNLOAD_FAILED}: verification failed for ${file.fileName}`);
   }
   return {
