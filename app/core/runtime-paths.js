@@ -96,13 +96,18 @@ function resolvePiperRuntime(options = {}) {
   const exe = runtimeExeName('piper');
   const executable = firstExisting([
     path.join(dir, exe),
-    path.join(dir, 'piper', exe)
+    path.join(dir, 'piper', exe),
+    path.join(dir, 'piper', 'piper', exe)
   ]);
-  const piperDataDir = path.join(dir, 'espeak-ng-data');
+  const piperDataDir = firstExisting([
+    path.join(dir, 'espeak-ng-data'),
+    path.join(dir, 'piper', 'espeak-ng-data'),
+    path.join(dir, 'piper', 'piper', 'espeak-ng-data')
+  ]);
   const modelsDir = resolveModelsDir(dir, PIPER_MODEL_FILES);
   return {
     dir,
-    executable: executable && fs.existsSync(piperDataDir) ? executable : null,
+    executable: executable && piperDataDir ? executable : null,
     piperDataDir,
     modelsDir,
     searched

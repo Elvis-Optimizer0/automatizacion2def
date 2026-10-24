@@ -147,7 +147,7 @@ function checkVoiceEngine(voiceId, env = process.env, modelsDir, options = {}) {
 
   const bundled = engine === 'kokoro'
     ? resolveKokoroRuntime(options)
-    : resolvePiperRuntime();
+    : resolvePiperRuntime(options);
 
   const runtime = bundled.executable
     || (isUsableBinary(env.VM_KOKORO_BIN) ? env.VM_KOKORO_BIN : null)
