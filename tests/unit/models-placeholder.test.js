@@ -122,8 +122,11 @@ test.describe('Model placeholder cleanup and resolution', () => {
       files: m.files.map(f => ({ ...f, sha256: null }))
     }));
     
+    // Create both required Kokoro files in vendor
     const vendorOnnx = path.join(kokoroVendorDir, 'kokoro-v1.0.onnx');
     fs.writeFileSync(vendorOnnx, Buffer.alloc(325505369, 0x41));
+    const vendorVoices = path.join(kokoroVendorDir, 'voices-v1.0.bin');
+    fs.writeFileSync(vendorVoices, Buffer.alloc(28214398, 0x42));
     
     const vendorWhisperDir = path.join(vendorDir, 'whisper', 'models');
     fs.mkdirSync(vendorWhisperDir, { recursive: true });
@@ -137,13 +140,17 @@ test.describe('Model placeholder cleanup and resolution', () => {
     
     // Files should be verified (size matches) even though not installed in userData
     expect(kokoro.files.find(f => f.fileName === 'kokoro-v1.0.onnx').verified).toBe(true);
+    expect(kokoro.files.find(f => f.fileName === 'voices-v1.0.bin').verified).toBe(true);
     expect(whisper.files.find(f => f.fileName === 'ggml-base.bin').verified).toBe(true);
     expect(kokoro.files.find(f => f.fileName === 'kokoro-v1.0.onnx').path).toBe(vendorOnnx);
+    expect(kokoro.files.find(f => f.fileName === 'voices-v1.0.bin').path).toBe(vendorVoices);
     expect(whisper.files.find(f => f.fileName === 'ggml-base.bin').path).toBe(vendorWhisper);
     
-    // Model not installed (no userData files)
-    expect(kokoro.installed).toBe(false);
-    expect(whisper.installed).toBe(false);
+    // Model is complete (required files resolve from vendor)
+    expect(kokoro.installed).toBe(true);
+    expect(kokoro.complete).toBe(true);
+    expect(whisper.installed).toBe(true);
+    expect(whisper.complete).toBe(true);
   });
 
   test('test mode uses temp userData, no writes to real APPDATA', () => {

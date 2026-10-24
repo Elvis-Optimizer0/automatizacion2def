@@ -114,13 +114,22 @@ test.describe('unified model paths', () => {
     try {
       const models = listModels(dir);
       expect(models).toHaveLength(MODEL_CATALOG.length);
-      expect(models.every(model => model.missing)).toBe(true);
+      // Kokoro and Whisper should be missing (required files not present)
+      // Piper should be complete (no required files - voices are optional on-demand)
       const kokoro = models.find(model => model.id === 'kokoro');
+      const whisper = models.find(model => model.id === 'whisper');
+      const piper = models.find(model => model.id === 'piper');
+      expect(kokoro.missing).toBe(true);
+      expect(whisper.missing).toBe(true);
+      expect(piper.missing).toBe(false);
+      expect(piper.complete).toBe(true);
       expect(kokoro.files.map(file => file.fileName))
         .toEqual(['kokoro-v1.0.onnx', 'voices-v1.0.bin']);
       expect(kokoro.installed).toBe(false);
       expect(kokoro.missingFiles).toEqual(['kokoro-v1.0.onnx', 'voices-v1.0.bin']);
       expect(kokoro.files[0].message).toBe('falta kokoro-v1.0.onnx');
+      // Piper voice files should show as missing but optional
+      expect(piper.files.every(f => f.required === false)).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -544,7 +553,7 @@ test.describe('Piper voice download and import', () => {
     }
   });
 
-  test('importing only .onnx without .json creates incomplete model', () => {
+  test('importing only .onnx without .json - voice file imported but optional', () => {
     const dir = makeTempDir();
     const sourceDir = makeTempDir();
     try {
@@ -554,11 +563,16 @@ test.describe('Piper voice download and import', () => {
       const result = importModel(onnxSource, dir, piperCatalog());
       expect(result.verification.exists).toBe(true);
       
-      // Model should be incomplete (missing .json)
+      // Model should be complete (Piper voices are optional)
       const models = listModels(dir, piperCatalog());
       const piper = models.find(m => m.id === 'piper');
-      expect(piper.complete).toBe(false);
-      expect(piper.missingFiles).toContain('es_MX-ald-medium.onnx.json');
+      expect(piper.complete).toBe(true);
+      expect(piper.missingFiles).toEqual([]);
+      // But the specific voice file should show as imported
+      const onnxFile = piper.files.find(f => f.fileName === 'es_MX-ald-medium.onnx');
+      expect(onnxFile.exists).toBe(true);
+      const jsonFile = piper.files.find(f => f.fileName === 'es_MX-ald-medium.onnx.json');
+      expect(jsonFile.exists).toBe(false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
       fs.rmSync(sourceDir, { recursive: true, force: true });
@@ -575,11 +589,16 @@ test.describe('Piper voice download and import', () => {
       const result = importModel(jsonSource, dir, piperCatalog());
       expect(result.verification.exists).toBe(true);
       
-      // Model should be incomplete (missing .onnx)
+      // Model should be complete (Piper voices are optional)
       const models = listModels(dir, piperCatalog());
       const piper = models.find(m => m.id === 'piper');
-      expect(piper.complete).toBe(false);
-      expect(piper.missingFiles).toContain('es_MX-ald-medium.onnx');
+      expect(piper.complete).toBe(true);
+      expect(piper.missingFiles).toEqual([]);
+      // But the specific voice file should show as imported
+      const onnxFile = piper.files.find(f => f.fileName === 'es_MX-ald-medium.onnx');
+      expect(onnxFile.exists).toBe(false);
+      const jsonFile = piper.files.find(f => f.fileName === 'es_MX-ald-medium.onnx.json');
+      expect(jsonFile.exists).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
       fs.rmSync(sourceDir, { recursive: true, force: true });

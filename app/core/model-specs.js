@@ -43,7 +43,8 @@ const MODEL_SPECS = {
         license: 'Unlicense',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/es/es_MX/ald/medium/MODEL_CARD',
         commercialUse: true,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx',
+        required: false
       },
       {
         fileName: 'es_MX-ald-medium.onnx.json',
@@ -52,7 +53,8 @@ const MODEL_SPECS = {
         license: 'Unlicense',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/es/es_MX/ald/medium/MODEL_CARD',
         commercialUse: true,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/es_MX-ald-medium.onnx.json',
+        required: false
       },
       {
         fileName: 'es_MX-ald-x_low.onnx',
@@ -61,7 +63,8 @@ const MODEL_SPECS = {
         license: 'No declarada en MODEL_CARD',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/es/es_MX/ald/x_low/MODEL_CARD',
         commercialUse: false,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx',
+        required: false
       },
       {
         fileName: 'es_MX-ald-x_low.onnx.json',
@@ -70,7 +73,8 @@ const MODEL_SPECS = {
         license: 'No declarada en MODEL_CARD',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/es/es_MX/ald/x_low/MODEL_CARD',
         commercialUse: false,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/x_low/es_MX-ald-x_low.onnx.json',
+        required: false
       },
       {
         fileName: 'es_ES-carlfm-x_low.onnx',
@@ -79,7 +83,8 @@ const MODEL_SPECS = {
         license: 'Public domain',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/es/es_ES/carlfm/x_low/MODEL_CARD',
         commercialUse: true,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx',
+        required: false
       },
       {
         fileName: 'es_ES-carlfm-x_low.onnx.json',
@@ -88,7 +93,8 @@ const MODEL_SPECS = {
         license: 'Public domain',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/es/es_ES/carlfm/x_low/MODEL_CARD',
         commercialUse: true,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/carlfm/x_low/es_ES-carlfm-x_low.onnx.json',
+        required: false
       },
       {
         fileName: 'en_US-lessac-medium.onnx',
@@ -97,7 +103,8 @@ const MODEL_SPECS = {
         license: 'Blizzard (non-commercial)',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_US/lessac/medium/MODEL_CARD',
         commercialUse: false,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx',
+        required: false
       },
       {
         fileName: 'en_US-lessac-medium.onnx.json',
@@ -106,7 +113,8 @@ const MODEL_SPECS = {
         license: 'Blizzard (non-commercial)',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_US/lessac/medium/MODEL_CARD',
         commercialUse: false,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json',
+        required: false
       },
       {
         fileName: 'en_US-lessac-low.onnx',
@@ -115,7 +123,8 @@ const MODEL_SPECS = {
         license: 'Blizzard (non-commercial)',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_US/lessac/low/MODEL_CARD',
         commercialUse: false,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx',
+        required: false
       },
       {
         fileName: 'en_US-lessac-low.onnx.json',
@@ -124,7 +133,8 @@ const MODEL_SPECS = {
         license: 'Blizzard (non-commercial)',
         licenseSource: 'https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_US/lessac/low/MODEL_CARD',
         commercialUse: false,
-        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json'
+        url: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx.json',
+        required: false
       }
     ]
   }

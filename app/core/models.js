@@ -264,13 +264,15 @@ function listModels(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = null) 
         message: !syncVerification.exists
           ? `falta ${file.fileName}`
           : (syncVerification.verified ? `${file.fileName} listo` : `${file.fileName} sin verificar`),
-        userDataExists
+        userDataExists,
+        required: file.required !== false
       };
     });
 
-    const installed = files.every(file => file.userDataExists);
-    const verified = installed && files.every(file => file.verified);
-    const missingFiles = files.filter(file => !file.userDataExists).map(file => file.fileName);
+    const requiredFiles = files.filter(file => file.required);
+    const requiredResolved = requiredFiles.every(file => file.exists);
+    const verified = requiredResolved && requiredFiles.every(file => file.verified);
+    const missingRequiredFiles = requiredFiles.filter(file => !file.exists).map(file => file.fileName);
 
     return {
       id: model.id,
@@ -278,16 +280,16 @@ function listModels(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = null) 
       engine: model.engine,
       dir,
       files,
-      installed,
+      installed: requiredResolved,
       verified,
-      complete: installed,
-      missing: !installed,
-      missingFiles,
+      complete: requiredResolved,
+      missing: !requiredResolved,
+      missingFiles: missingRequiredFiles,
       path: files.length === 1 ? files[0].path : null,
       fileName: files.length === 1 ? files[0].fileName : null,
-      message: installed
+      message: requiredResolved
         ? (verified ? 'Instalado y verificado' : 'Instalado (sin verificar)')
-        : `Incompleto: falta ${missingFiles.join(', ')}`
+        : `Incompleto: falta ${missingRequiredFiles.join(', ')}`
     };
   });
 
@@ -330,15 +332,18 @@ function listModelsAsync(modelsDir, catalog = MODEL_CATALOG, vendorModelsDir = n
 
     Promise.all(verifyPromises).then(() => {
       models.forEach((model) => {
-        const installed = model.files.every(file => file.userDataExists);
-        const verified = installed && model.files.every(file => file.verified);
-        model.installed = installed;
+        const requiredFiles = model.files.filter(file => file.required);
+        const requiredResolved = requiredFiles.every(file => file.exists);
+        const verified = requiredResolved && requiredFiles.every(file => file.verified);
+        const missingRequiredFiles = requiredFiles.filter(file => !file.exists).map(file => file.fileName);
+        model.installed = requiredResolved;
         model.verified = verified;
-        model.complete = installed;
-        model.missing = !installed;
-        model.message = installed
+        model.complete = requiredResolved;
+        model.missing = !requiredResolved;
+        model.missingFiles = missingRequiredFiles;
+        model.message = requiredResolved
           ? (verified ? 'Instalado y verificado' : 'Instalado (sin verificar)')
-          : `Incompleto: falta ${model.missingFiles.join(', ')}`;
+          : `Incompleto: falta ${missingRequiredFiles.join(', ')}`;
       });
       resolve(models);
     });
