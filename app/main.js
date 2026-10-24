@@ -9,7 +9,7 @@ const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir,
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
-const { KNOWN_MODELS, MODEL_CATALOG, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID, verifyModelFile } = require('./core/models.js');
+const { KNOWN_MODELS, MODEL_CATALOG, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID, verifyModelFile, E_MODEL_DOWNLOAD_FAILED, E_MODEL_CANCELLED, E_DOWNLOAD_REDIRECT, E_DOWNLOAD_HTTP, E_DOWNLOAD_HASH, E_DOWNLOAD_SIZE, E_DOWNLOAD_NETWORK } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 
@@ -492,7 +492,7 @@ ipcMain.handle('models:download', async (_, modelId) => {
   if (wanted) {
     selected = catalog.filter(model => model.id === wanted);
     if (selected.length === 0) {
-      throw new Error(`${E_MODEL_PATH_INVALID}: modelo desconocido "${wanted}". Válidos: ${catalog.map(model => model.id).join(', ')}`);
+      return { ok: false, code: E_MODEL_PATH_INVALID, message: `Modelo desconocido "${wanted}". Válidos: ${catalog.map(model => model.id).join(', ')}` };
     }
   }
 
@@ -518,7 +518,28 @@ ipcMain.handle('models:download', async (_, modelId) => {
         results.push(result);
       }
     }
-    return { results, models: listModels(dir) };
+    return { ok: true, results, models: listModels(dir) };
+  } catch (err) {
+    const msg = err.message || String(err);
+    let code = E_MODEL_DOWNLOAD_FAILED;
+    let userMsg = 'Error al descargar el modelo';
+    if (msg.startsWith(E_DOWNLOAD_REDIRECT)) { code = E_DOWNLOAD_REDIRECT; userMsg = 'Error de redirección en la descarga'; }
+    else if (msg.startsWith(E_DOWNLOAD_HTTP)) { code = E_DOWNLOAD_HTTP; userMsg = `Error HTTP: ${msg.split(':').slice(1).join(':').trim()}`; }
+    else if (msg.startsWith(E_DOWNLOAD_HASH)) { code = E_DOWNLOAD_HASH; userMsg = 'El hash del archivo no coincide'; }
+    else if (msg.startsWith(E_DOWNLOAD_SIZE)) { code = E_DOWNLOAD_SIZE; userMsg = 'El tamaño del archivo no coincide'; }
+    else if (msg.startsWith(E_DOWNLOAD_NETWORK)) { code = E_DOWNLOAD_NETWORK; userMsg = 'Error de red durante la descarga'; }
+    else if (msg.startsWith(E_MODEL_CANCELLED)) { code = E_MODEL_CANCELLED; userMsg = 'Descarga cancelada'; }
+    else if (msg.startsWith(E_MODEL_DOWNLOAD_FAILED)) { code = E_MODEL_DOWNLOAD_FAILED; userMsg = `Error en la descarga: ${msg.split(':').slice(1).join(':').trim()}`; }
+    // Clean .part files on failure
+    try {
+      const piperDir = path.join(dir, 'piper');
+      if (fs.existsSync(piperDir)) {
+        fs.readdirSync(piperDir).filter(f => f.endsWith('.part')).forEach(f => fs.unlinkSync(path.join(piperDir, f)));
+      }
+    } catch (_e) {
+      // ignore cleanup errors
+    }
+    return { ok: false, code, message: userMsg };
   } finally {
     if (activeModelController === controller) activeModelController = null;
   }
@@ -572,11 +593,11 @@ ipcMain.handle('piper:voiceDownload', async (_, voiceId) => {
   const catalog = KNOWN_MODELS;
   const piperModel = catalog.find(m => m.id === 'piper');
   if (!piperModel) {
-    throw new Error(`${E_MODEL_PATH_INVALID}: modelo piper no encontrado en catálogo`);
+    return { ok: false, code: E_MODEL_PATH_INVALID, message: 'Modelo piper no encontrado en catálogo' };
   }
-  const file = piperModel.files.find(f => f.fileName.startsWith(voiceId));
-  if (!file) {
-    throw new Error(`${E_MODEL_PATH_INVALID}: voz "${voiceId}" no encontrada en catálogo Piper`);
+  const files = piperModel.files.filter(f => f.fileName === `${voiceId}.onnx` || f.fileName === `${voiceId}.onnx.json`);
+  if (!files.length) {
+    return { ok: false, code: E_MODEL_PATH_INVALID, message: `Voz "${voiceId}" no encontrada en catálogo Piper` };
   }
 
   if (activeModelController) activeModelController.abort();
@@ -590,12 +611,37 @@ ipcMain.handle('piper:voiceDownload', async (_, voiceId) => {
   };
 
   try {
-    const result = await downloadModel(piperModel, dir, {
-      fileName: file.fileName,
-      onProgress,
-      signal: controller.signal
-    });
-    return { result, models: listModels(dir) };
+    const results = [];
+    for (const file of files) {
+      const result = await downloadModel(piperModel, dir, {
+        fileName: file.fileName,
+        onProgress,
+        signal: controller.signal
+      });
+      results.push(result);
+    }
+    return { ok: true, results, models: listModels(dir) };
+  } catch (err) {
+    const msg = err.message || String(err);
+    let code = E_MODEL_DOWNLOAD_FAILED;
+    let userMsg = 'Error al descargar la voz';
+    if (msg.startsWith(E_DOWNLOAD_REDIRECT)) { code = E_DOWNLOAD_REDIRECT; userMsg = 'Error de redirección en la descarga'; }
+    else if (msg.startsWith(E_DOWNLOAD_HTTP)) { code = E_DOWNLOAD_HTTP; userMsg = `Error HTTP: ${msg.split(':').slice(1).join(':').trim()}`; }
+    else if (msg.startsWith(E_DOWNLOAD_HASH)) { code = E_DOWNLOAD_HASH; userMsg = 'El hash del archivo no coincide'; }
+    else if (msg.startsWith(E_DOWNLOAD_SIZE)) { code = E_DOWNLOAD_SIZE; userMsg = 'El tamaño del archivo no coincide'; }
+    else if (msg.startsWith(E_DOWNLOAD_NETWORK)) { code = E_DOWNLOAD_NETWORK; userMsg = 'Error de red durante la descarga'; }
+    else if (msg.startsWith(E_MODEL_CANCELLED)) { code = E_MODEL_CANCELLED; userMsg = 'Descarga cancelada'; }
+    else if (msg.startsWith(E_MODEL_DOWNLOAD_FAILED)) { code = E_MODEL_DOWNLOAD_FAILED; userMsg = `Error en la descarga: ${msg.split(':').slice(1).join(':').trim()}`; }
+    // Clean .part files on failure
+    try {
+      const piperDir = path.join(dir, 'piper');
+      if (fs.existsSync(piperDir)) {
+        fs.readdirSync(piperDir).filter(f => f.endsWith('.part')).forEach(f => fs.unlinkSync(path.join(piperDir, f)));
+      }
+    } catch (_e) {
+      // ignore cleanup errors
+    }
+    return { ok: false, code, message: userMsg };
   } finally {
     if (activeModelController === controller) activeModelController = null;
   }
@@ -606,7 +652,7 @@ ipcMain.handle('piper:voiceImport', async (_, { onnxPath, jsonPath, voiceId }) =
   const catalog = KNOWN_MODELS;
   const piperModel = catalog.find(m => m.id === 'piper');
   if (!piperModel) {
-    throw new Error(`${E_MODEL_PATH_INVALID}: modelo piper no encontrado en catálogo`);
+    return { ok: false, code: E_MODEL_PATH_INVALID, message: 'Modelo piper no encontrado en catálogo' };
   }
 
   if (!onnxPath || !jsonPath) {
@@ -622,29 +668,29 @@ ipcMain.handle('piper:voiceImport', async (_, { onnxPath, jsonPath, voiceId }) =
     const onnx = result.filePaths.find(p => p.endsWith('.onnx'));
     const json = result.filePaths.find(p => p.endsWith('.json'));
     if (!onnx || !json) {
-      throw new Error('Se requieren ambos archivos .onnx y .onnx.json');
+      return { ok: false, code: E_MODEL_IMPORT_FAILED, message: 'Se requieren ambos archivos .onnx y .onnx.json' };
     }
     onnxPath = onnx;
     jsonPath = json;
   }
 
   if (!path.isAbsolute(onnxPath) || !fs.existsSync(onnxPath)) {
-    throw new Error(`${E_MODEL_IMPORT_FAILED}: archivo .onnx no encontrado o ruta inválida`);
+    return { ok: false, code: E_MODEL_IMPORT_FAILED, message: 'Archivo .onnx no encontrado o ruta inválida' };
   }
   if (!path.isAbsolute(jsonPath) || !fs.existsSync(jsonPath)) {
-    throw new Error(`${E_MODEL_IMPORT_FAILED}: archivo .onnx.json no encontrado o ruta inválida`);
+    return { ok: false, code: E_MODEL_IMPORT_FAILED, message: 'Archivo .onnx.json no encontrado o ruta inválida' };
   }
 
   try {
     JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
   } catch (err) {
-    throw new Error(`${E_MODEL_IMPORT_FAILED}: archivo JSON inválido: ${err.message}`);
+    return { ok: false, code: E_MODEL_IMPORT_FAILED, message: `Archivo JSON inválido: ${err.message}` };
   }
 
   const onnxFile = piperModel.files.find(f => f.fileName === `${voiceId}.onnx`);
   const jsonFile = piperModel.files.find(f => f.fileName === `${voiceId}.onnx.json`);
   if (!onnxFile || !jsonFile) {
-    throw new Error(`${E_MODEL_PATH_INVALID}: voz "${voiceId}" no encontrada en catálogo`);
+    return { ok: false, code: E_MODEL_PATH_INVALID, message: `Voz "${voiceId}" no encontrada en catálogo` };
   }
 
   const onnxDest = path.join(dir, 'piper', `${voiceId}.onnx`);
@@ -657,13 +703,10 @@ ipcMain.handle('piper:voiceImport', async (_, { onnxPath, jsonPath, voiceId }) =
   const jsonVerification = verifyModelFile(jsonDest, jsonFile);
 
   if (!onnxVerification.exists || !jsonVerification.exists) {
-    throw new Error(`${E_MODEL_IMPORT_FAILED}: no se pudo copiar los archivos`);
+    return { ok: false, code: E_MODEL_IMPORT_FAILED, message: 'No se pudo copiar los archivos' };
   }
 
-  return {
-    imported: { onnx: onnxDest, json: jsonDest },
-    models: listModels(dir)
-  };
+  return { ok: true, imported: { onnx: onnxDest, json: jsonDest }, models: listModels(dir) };
 });
 
 ipcMain.handle('piper:voiceSample', async (_, { voiceId, text }) => {
@@ -673,6 +716,7 @@ ipcMain.handle('piper:voiceSample', async (_, { voiceId, text }) => {
   const outputPath = path.join(voicesDir, stamp);
 
   const { synthesizeVoice: synthesizeVoicePiper } = require('./core/voice-piper.js');
+  const { E_VOICE_PIPER_MISSING, E_VOICE_PIPER_MODEL_MISSING, E_VOICE_PIPER_FAILED, E_VOICE_PIPER_CANCELLED } = require('./core/voice-piper.js');
 
   try {
     const result = await synthesizeVoicePiper({
@@ -684,9 +728,16 @@ ipcMain.handle('piper:voiceSample', async (_, { voiceId, text }) => {
       speed: 1.0,
       pause: 0.2
     }, {});
-    return { path: result.outputPath, name: path.basename(result.outputPath), duration: result.duration || 0 };
+    return { ok: true, path: result.outputPath, name: path.basename(result.outputPath), duration: result.duration || 0 };
   } catch (err) {
-    throw new Error(`E_VOICE_PIPER_FAILED: ${err.message}`);
+    const msg = err.message || String(err);
+    let code = E_VOICE_PIPER_FAILED;
+    let userMsg = 'Error al generar la muestra de voz';
+    if (msg.startsWith(E_VOICE_PIPER_MISSING)) { code = E_VOICE_PIPER_MISSING; userMsg = 'Runtime de Piper no instalado. Ejecute fetch-engines.'; }
+    else if (msg.startsWith(E_VOICE_PIPER_MODEL_MISSING)) { code = E_VOICE_PIPER_MODEL_MISSING; userMsg = 'Voz no descargada: pulse Descargar o Importar.'; }
+    else if (msg.startsWith(E_VOICE_PIPER_CANCELLED)) { code = E_VOICE_PIPER_CANCELLED; userMsg = 'Generación cancelada'; }
+    else if (msg.startsWith(E_VOICE_PIPER_FAILED)) { code = E_VOICE_PIPER_FAILED; userMsg = `Error en la síntesis: ${msg.split(':').slice(1).join(':').trim()}`; }
+    return { ok: false, code, message: userMsg };
   }
 });
 

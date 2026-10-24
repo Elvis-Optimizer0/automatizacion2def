@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const http = require('http');
 const https = require('https');
 const { CATALOG: MODEL_CATALOG } = require('./model-specs.js');
 
@@ -8,6 +9,12 @@ const E_MODEL_DOWNLOAD_FAILED = 'E_MODEL_DOWNLOAD_FAILED';
 const E_MODEL_IMPORT_FAILED = 'E_MODEL_IMPORT_FAILED';
 const E_MODEL_PATH_INVALID = 'E_MODEL_PATH_INVALID';
 const E_MODEL_CANCELLED = 'E_MODEL_CANCELLED';
+
+const E_DOWNLOAD_REDIRECT = 'E_DOWNLOAD_REDIRECT';
+const E_DOWNLOAD_HTTP = 'E_DOWNLOAD_HTTP';
+const E_DOWNLOAD_HASH = 'E_DOWNLOAD_HASH';
+const E_DOWNLOAD_SIZE = 'E_DOWNLOAD_SIZE';
+const E_DOWNLOAD_NETWORK = 'E_DOWNLOAD_NETWORK';
 
 const KNOWN_MODELS = MODEL_CATALOG;
 
@@ -468,6 +475,9 @@ function downloadToFile(url, dest, hooks = {}) {
     let request = null;
     let cancelled = false;
     let settled = false;
+    let redirectCount = 0;
+    const MAX_REDIRECTS = 5;
+    const currentUrl = url;
 
     const finish = (fn, value) => {
       if (settled) return;
@@ -485,35 +495,83 @@ function downloadToFile(url, dest, hooks = {}) {
       if (typeof signal.addEventListener === 'function') signal.addEventListener('abort', onAbort);
     }
 
-    const handleResponse = (response) => {
-      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        response.resume();
-        downloadToFile(response.headers.location, dest, hooks).then(resolve, reject);
-        return;
-      }
-      if (response.statusCode !== 200) {
-        response.resume();
-        finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: HTTP ${response.statusCode}`));
-        return;
-      }
-      const total = parseInt(response.headers['content-length'] || '0', 10);
-      let received = 0;
-      const fileStream = fs.createWriteStream(dest);
-      response.on('data', (chunk) => {
-        received += chunk.length;
-        onProgress({ progress: total ? Math.round((received / total) * 100) : 0, received, total });
-      });
-      response.pipe(fileStream);
-      fileStream.on('finish', () => { fileStream.close(() => finish(resolve, { bytes: received, total })); });
-      fileStream.on('error', (err) => finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: ${err.message}`)));
+    const isLoopbackHost = (host) => {
+      return host === '127.0.0.1' || host === 'localhost' || host === '::1';
     };
 
-    request = https.get(url, handleResponse);
-    request.on('error', (err) => {
-      if (cancelled) finish(reject, new Error(`${E_MODEL_CANCELLED}: download cancelled`));
-      else finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: ${err.message}`));
-    });
-    request.setTimeout(120000, () => { request.destroy(); finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: timeout`)); });
+    const isAllowedUrl = (urlString) => {
+      try {
+        const u = new URL(urlString);
+        if (u.protocol === 'https:') return true;
+        if (u.protocol === 'http:' && isLoopbackHost(u.hostname)) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
+    const resolveRedirect = (location, baseUrl) => {
+      try {
+        return new URL(location, baseUrl).href;
+      } catch (err) {
+        throw new Error(`E_DOWNLOAD_REDIRECT: invalid redirect location "${location}" from "${baseUrl}"`);
+      }
+    };
+
+    const doRequest = (requestUrl) => {
+      if (!isAllowedUrl(requestUrl)) {
+        finish(reject, new Error(`E_DOWNLOAD_REDIRECT: redirect to non-https remote host not allowed: ${requestUrl}`));
+        return;
+      }
+
+      const requestFactory = requestUrl.startsWith('https:') ? https : http;
+      request = requestFactory.get(requestUrl, (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          response.resume();
+          redirectCount++;
+          if (redirectCount > MAX_REDIRECTS) {
+            finish(reject, new Error(`E_DOWNLOAD_REDIRECT: too many redirects (max ${MAX_REDIRECTS})`));
+            return;
+          }
+          try {
+            const nextUrl = resolveRedirect(response.headers.location, requestUrl);
+            // Don't forward credentials across hosts
+            const currentHost = new URL(requestUrl).host;
+            const nextHost = new URL(nextUrl).host;
+            if (currentHost !== nextHost) {
+              // Strip auth headers for cross-host redirects
+              request = null; // Will be recreated without auth
+            }
+            doRequest(nextUrl);
+          } catch (err) {
+            finish(reject, err);
+          }
+          return;
+        }
+        if (response.statusCode !== 200) {
+          response.resume();
+          finish(reject, new Error(`E_DOWNLOAD_HTTP: HTTP ${response.statusCode}`));
+          return;
+        }
+        const total = parseInt(response.headers['content-length'] || '0', 10);
+        let received = 0;
+        const fileStream = fs.createWriteStream(dest);
+        response.on('data', (chunk) => {
+          received += chunk.length;
+          onProgress({ progress: total ? Math.round((received / total) * 100) : 0, received, total });
+        });
+        response.pipe(fileStream);
+        fileStream.on('finish', () => { fileStream.close(() => finish(resolve, { bytes: received, total })); });
+        fileStream.on('error', (err) => finish(reject, new Error(`${E_MODEL_DOWNLOAD_FAILED}: ${err.message}`)));
+      });
+      request.on('error', (err) => {
+        if (cancelled) finish(reject, new Error(`${E_MODEL_CANCELLED}: download cancelled`));
+        else finish(reject, new Error(`E_DOWNLOAD_NETWORK: ${err.message}`));
+      });
+      request.setTimeout(120000, () => { request.destroy(); finish(reject, new Error('E_DOWNLOAD_NETWORK: timeout')); });
+    };
+
+    doRequest(currentUrl);
   });
 }
 
@@ -589,6 +647,11 @@ module.exports = {
   E_MODEL_IMPORT_FAILED,
   E_MODEL_PATH_INVALID,
   E_MODEL_CANCELLED,
+  E_DOWNLOAD_REDIRECT,
+  E_DOWNLOAD_HTTP,
+  E_DOWNLOAD_HASH,
+  E_DOWNLOAD_SIZE,
+  E_DOWNLOAD_NETWORK,
   MODEL_CATALOG,
   KNOWN_MODELS,
   isTestMode,
