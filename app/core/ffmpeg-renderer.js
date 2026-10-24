@@ -379,7 +379,11 @@ async function renderPreview(options = {}) {
       const fontsDir = path.join(assetsDir, 'fonts');
       try {
         mergeFontsIntoDir(fontsDir, [getBundledFontsDir(), userFontsDir]);
-        fs.writeFileSync(subtitlesPath, buildAss([{ text, start: 0, duration: previewDuration }], scaledStyle, previewConfig), 'utf-8');
+        const previewAssResult = buildAss([{ text, start: 0, duration: previewDuration }], scaledStyle, previewConfig);
+        if (previewAssResult.warning) {
+          throw new Error(`${E_SUBTITLES_FAILED}: ${previewAssResult.warning}`);
+        }
+        fs.writeFileSync(subtitlesPath, previewAssResult.ass, 'utf-8');
       } catch (err) {
         throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
       }
@@ -478,10 +482,12 @@ async function renderVideo(options) {
       let subtitlesPath;
       if (subtitlesEnabled) {
         subtitlesPath = path.join(subtitlesDir, `subs-${outputConfig.id.replace(/[:]/g, '')}.ass`);
-        let content;
         try {
-          content = buildAss(scenes, payload.config.subtitles, outputConfig, { timeOffset: subtitleTimeOffset });
-          fs.writeFileSync(subtitlesPath, content, 'utf-8');
+          const assResult = buildAss(scenes, payload.config.subtitles, outputConfig, { timeOffset: subtitleTimeOffset });
+          if (assResult.warning) {
+            throw new Error(`${E_SUBTITLES_FAILED}: ${assResult.warning}`);
+          }
+          fs.writeFileSync(subtitlesPath, assResult.ass, 'utf-8');
         } catch (err) {
           throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
         }
@@ -528,12 +534,18 @@ async function renderVideo(options) {
     }
   }
 
+  const wordHighlightWarning = payload.config.subtitles?.wordHighlight
+    && scenes.some(scene => !Array.isArray(scene.words) || scene.words.length === 0)
+    ? 'word_highlight_requested_but_no_alignment_data'
+    : null;
+
   return {
     outputs,
     outputPath: outputs.length > 0 ? outputs[0].outputPath : payload.outputPath,
     duration: totalDuration,
     videoEncoder,
-    hwFallback
+    hwFallback,
+    warning: wordHighlightWarning
   };
 }
 

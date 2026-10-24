@@ -1,0 +1,213 @@
+{
+	"systeminfo": "WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | OPENMP = 1 | REPACK = 1 | ",
+	"model": {
+		"type": "base",
+		"multilingual": true,
+		"vocab": 51865,
+		"audio": {
+			"ctx": 1500,
+			"state": 512,
+			"head": 8,
+			"layer": 6
+		},
+		"text": {
+			"ctx": 448,
+			"state": 512,
+			"head": 8,
+			"layer": 6
+		},
+		"mels": 80,
+		"ftype": 1
+	},
+	"params": {
+		"model": "vendor\\whisper\\models\\ggml-base.bin",
+		"language": "es",
+		"translate": false
+	},
+	"result": {
+		"language": "es"
+	},
+	"transcription": [
+		{
+			"timestamps": {
+				"from": "00:00:00,000",
+				"to": "00:00:02,440"
+			},
+			"offsets": {
+				"from": 0,
+				"to": 2440
+			},
+			"text": " La deuda sube 30% este hago.",
+			"tokens": [
+				{
+					"text": "[_BEG_]",
+					"timestamps": {
+						"from": "00:00:00,000",
+						"to": "00:00:00,000"
+					},
+					"offsets": {
+						"from": 0,
+						"to": 0
+					},
+					"id": 50364,
+					"p": 0.988864,
+					"t_dtw": -1
+				},
+				{
+					"text": " La",
+					"timestamps": {
+						"from": "00:00:00,030",
+						"to": "00:00:00,150"
+					},
+					"offsets": {
+						"from": 30,
+						"to": 150
+					},
+					"id": 2369,
+					"p": 0.835029,
+					"t_dtw": -1
+				},
+				{
+					"text": " de",
+					"timestamps": {
+						"from": "00:00:00,180",
+						"to": "00:00:00,330"
+					},
+					"offsets": {
+						"from": 180,
+						"to": 330
+					},
+					"id": 368,
+					"p": 0.923491,
+					"t_dtw": -1
+				},
+				{
+					"text": "uda",
+					"timestamps": {
+						"from": "00:00:00,350",
+						"to": "00:00:00,640"
+					},
+					"offsets": {
+						"from": 350,
+						"to": 640
+					},
+					"id": 11152,
+					"p": 0.988442,
+					"t_dtw": -1
+				},
+				{
+					"text": " su",
+					"timestamps": {
+						"from": "00:00:00,640",
+						"to": "00:00:00,760"
+					},
+					"offsets": {
+						"from": 640,
+						"to": 760
+					},
+					"id": 459,
+					"p": 0.371957,
+					"t_dtw": -1
+				},
+				{
+					"text": "be",
+					"timestamps": {
+						"from": "00:00:00,850",
+						"to": "00:00:01,000"
+					},
+					"offsets": {
+						"from": 850,
+						"to": 1000
+					},
+					"id": 650,
+					"p": 0.980114,
+					"t_dtw": -1
+				},
+				{
+					"text": " 30",
+					"timestamps": {
+						"from": "00:00:01,000",
+						"to": "00:00:01,560"
+					},
+					"offsets": {
+						"from": 1000,
+						"to": 1560
+					},
+					"id": 2217,
+					"p": 0.962193,
+					"t_dtw": -1
+				},
+				{
+					"text": "%",
+					"timestamps": {
+						"from": "00:00:01,560",
+						"to": "00:00:01,650"
+					},
+					"offsets": {
+						"from": 1560,
+						"to": 1650
+					},
+					"id": 4,
+					"p": 0.691291,
+					"t_dtw": -1
+				},
+				{
+					"text": " este",
+					"timestamps": {
+						"from": "00:00:01,650",
+						"to": "00:00:02,020"
+					},
+					"offsets": {
+						"from": 1650,
+						"to": 2020
+					},
+					"id": 4065,
+					"p": 0.903004,
+					"t_dtw": -1
+				},
+				{
+					"text": " hago",
+					"timestamps": {
+						"from": "00:00:02,020",
+						"to": "00:00:02,430"
+					},
+					"offsets": {
+						"from": 2020,
+						"to": 2430
+					},
+					"id": 38721,
+					"p": 0.282638,
+					"t_dtw": -1
+				},
+				{
+					"text": ".",
+					"timestamps": {
+						"from": "00:00:02,430",
+						"to": "00:00:02,440"
+					},
+					"offsets": {
+						"from": 2430,
+						"to": 2440
+					},
+					"id": 13,
+					"p": 0.852645,
+					"t_dtw": -1
+				},
+				{
+					"text": "[_TT_122]",
+					"timestamps": {
+						"from": "00:00:02,440",
+						"to": "00:00:02,440"
+					},
+					"offsets": {
+						"from": 2440,
+						"to": 2440
+					},
+					"id": 50486,
+					"p": 0.0833866,
+					"t_dtw": -1
+				}
+			]
+		}
+	]
+}
