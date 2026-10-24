@@ -9,7 +9,7 @@ const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir,
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
-const { KNOWN_MODELS, MODEL_CATALOG, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID, verifyModelFile, E_MODEL_DOWNLOAD_FAILED, E_MODEL_CANCELLED, E_DOWNLOAD_REDIRECT, E_DOWNLOAD_HTTP, E_DOWNLOAD_HASH, E_DOWNLOAD_SIZE, E_DOWNLOAD_NETWORK } = require('./core/models.js');
+const { KNOWN_MODELS, MODEL_CATALOG, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID, verifyModelFile, E_MODEL_DOWNLOAD_FAILED, E_MODEL_CANCELLED, E_DOWNLOAD_REDIRECT, E_DOWNLOAD_HTTP, E_DOWNLOAD_HASH, E_DOWNLOAD_SIZE, E_DOWNLOAD_NETWORK, E_DOWNLOAD_TIMEOUT } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 
@@ -528,6 +528,7 @@ ipcMain.handle('models:download', async (_, modelId) => {
     else if (msg.startsWith(E_DOWNLOAD_HASH)) { code = E_DOWNLOAD_HASH; userMsg = 'El hash del archivo no coincide'; }
     else if (msg.startsWith(E_DOWNLOAD_SIZE)) { code = E_DOWNLOAD_SIZE; userMsg = 'El tamaño del archivo no coincide'; }
     else if (msg.startsWith(E_DOWNLOAD_NETWORK)) { code = E_DOWNLOAD_NETWORK; userMsg = 'Error de red durante la descarga'; }
+    else if (msg.startsWith(E_DOWNLOAD_TIMEOUT)) { code = E_DOWNLOAD_TIMEOUT; userMsg = 'Tiempo de espera agotado en la descarga'; }
     else if (msg.startsWith(E_MODEL_CANCELLED)) { code = E_MODEL_CANCELLED; userMsg = 'Descarga cancelada'; }
     else if (msg.startsWith(E_MODEL_DOWNLOAD_FAILED)) { code = E_MODEL_DOWNLOAD_FAILED; userMsg = `Error en la descarga: ${msg.split(':').slice(1).join(':').trim()}`; }
     // Clean .part files on failure
@@ -630,6 +631,7 @@ ipcMain.handle('piper:voiceDownload', async (_, voiceId) => {
     else if (msg.startsWith(E_DOWNLOAD_HASH)) { code = E_DOWNLOAD_HASH; userMsg = 'El hash del archivo no coincide'; }
     else if (msg.startsWith(E_DOWNLOAD_SIZE)) { code = E_DOWNLOAD_SIZE; userMsg = 'El tamaño del archivo no coincide'; }
     else if (msg.startsWith(E_DOWNLOAD_NETWORK)) { code = E_DOWNLOAD_NETWORK; userMsg = 'Error de red durante la descarga'; }
+    else if (msg.startsWith(E_DOWNLOAD_TIMEOUT)) { code = E_DOWNLOAD_TIMEOUT; userMsg = 'Tiempo de espera agotado en la descarga'; }
     else if (msg.startsWith(E_MODEL_CANCELLED)) { code = E_MODEL_CANCELLED; userMsg = 'Descarga cancelada'; }
     else if (msg.startsWith(E_MODEL_DOWNLOAD_FAILED)) { code = E_MODEL_DOWNLOAD_FAILED; userMsg = `Error en la descarga: ${msg.split(':').slice(1).join(':').trim()}`; }
     // Clean .part files on failure

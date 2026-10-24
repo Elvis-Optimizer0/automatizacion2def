@@ -212,11 +212,12 @@ test.describe('Piper voices dedicated E2E', () => {
   });
 
   test('marks a wrong-hash download as error and leaves no .part', async () => {
+    test.setTimeout(60000);
     const app = await launchApp({ VM_PIPER_VOICES_BASE_URL: `${voiceServerUrl}/bad` });
     try {
       await openPiperPanel(app.page, PIPER_VOICES.length);
       await voiceRow(app.page, VOICE_ID).locator('[data-action="download"]').click();
-      await waitForVoiceState(app.page, VOICE_ID, 'error');
+      await waitForVoiceState(app.page, VOICE_ID, 'error', 30000);
       const modelsDir = piperModelFiles(app.userDataDir);
       if (fs.existsSync(modelsDir)) {
         expect(fs.readdirSync(modelsDir).some((file) => file.endsWith('.part'))).toBe(false);
@@ -227,12 +228,12 @@ test.describe('Piper voices dedicated E2E', () => {
   });
 
   test('cancels a mid-download and leaves no .part', async () => {
-    test.setTimeout(180000);
+    test.setTimeout(60000);
     const app = await launchApp({ VM_PIPER_VOICES_BASE_URL: `${voiceServerUrl}/slow` });
     try {
       await openPiperPanel(app.page, PIPER_VOICES.length);
       await voiceRow(app.page, VOICE_ID).locator('[data-action="download"]').click();
-      await waitForVoiceState(app.page, VOICE_ID, 'descargando');
+      await waitForVoiceState(app.page, VOICE_ID, 'descargando', 15000);
       await voiceRow(app.page, VOICE_ID).locator('[data-action="cancel"]').click();
       await pageWaitForNotDownloading(app.page, VOICE_ID);
       const modelsDir = piperModelFiles(app.userDataDir);

@@ -15,6 +15,7 @@ const E_DOWNLOAD_HTTP = 'E_DOWNLOAD_HTTP';
 const E_DOWNLOAD_HASH = 'E_DOWNLOAD_HASH';
 const E_DOWNLOAD_SIZE = 'E_DOWNLOAD_SIZE';
 const E_DOWNLOAD_NETWORK = 'E_DOWNLOAD_NETWORK';
+const E_DOWNLOAD_TIMEOUT = 'E_DOWNLOAD_TIMEOUT';
 
 const KNOWN_MODELS = MODEL_CATALOG;
 
@@ -568,7 +569,7 @@ function downloadToFile(url, dest, hooks = {}) {
         if (cancelled) finish(reject, new Error(`${E_MODEL_CANCELLED}: download cancelled`));
         else finish(reject, new Error(`E_DOWNLOAD_NETWORK: ${err.message}`));
       });
-      request.setTimeout(120000, () => { request.destroy(); finish(reject, new Error('E_DOWNLOAD_NETWORK: timeout')); });
+      request.setTimeout(120000, () => { request.destroy(); finish(reject, new Error(`${E_DOWNLOAD_TIMEOUT}: network timeout after 120s`)); });
     };
 
     doRequest(currentUrl);
@@ -652,6 +653,7 @@ module.exports = {
   E_DOWNLOAD_HASH,
   E_DOWNLOAD_SIZE,
   E_DOWNLOAD_NETWORK,
+  E_DOWNLOAD_TIMEOUT,
   MODEL_CATALOG,
   KNOWN_MODELS,
   isTestMode,
