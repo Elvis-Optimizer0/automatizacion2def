@@ -248,9 +248,10 @@ function migrateProject(raw) {
   if (!migrated.timelineOptions || typeof migrated.timelineOptions !== 'object') migrated.timelineOptions = {};
 
   // Migration for voice engine (FASE 1): default to kokoro for old projects
+  // and migrate any project with engine='piper' to 'kokoro'
   if (!migrated.config.voice || typeof migrated.config.voice !== 'object') {
     migrated.config.voice = { language: 'es', engine: 'kokoro', voiceId: '', speed: 1, pause: 0.3 };
-  } else if (!migrated.config.voice.engine) {
+  } else if (!migrated.config.voice.engine || migrated.config.voice.engine === 'piper') {
     migrated.config.voice.engine = 'kokoro';
   }
 

@@ -43,12 +43,6 @@ Los binarios de FFmpeg/FFprobe se desempaquetan con `asarUnpack` y se invocan co
 > implicación GPL-3.0. Alternativa sin GPL: usar solo voces en inglés (misaki) o
 > sustituir espeak-ng por un G2P español con licencia permisiva.
 
-## Voz de respaldo: Piper
-
-- Código Piper (rhasspy/piper): **MIT**.
-- Pesos por voz: licencia individual (CC0, CC-BY, etc.). Verificar la licencia de
-  cada voz concreta antes de distribuirla.
-
 ## Alineación (Whisper): whisper.cpp
 
 - whisper.cpp (ggerganov): **MIT**.

@@ -70,4 +70,31 @@ test.describe('project file (save/open)', () => {
     expect(() => parseProjectFile({ config: { extras: { badge: { position: 'middle' } } } })).toThrow();
     expect(() => parseProjectFile(null)).toThrow();
   });
+
+  test('migrateProject converts voice.engine=piper to kokoro', () => {
+    const migrated = migrateProject({
+      version: 1,
+      images: [],
+      audio: { narration: null, music: null },
+      script: { raw: '' },
+      timeline: [],
+      config: { voice: { language: 'es', voiceId: 'es_piper', engine: 'piper', speed: 1.2 } }
+    });
+    expect(migrated.config.voice.engine).toBe('kokoro');
+    expect(migrated.config.voice.language).toBe('es');
+    expect(migrated.config.voice.voiceId).toBe('es_piper');
+    expect(migrated.config.voice.speed).toBe(1.2);
+  });
+
+  test('migrateProject defaults missing voice.engine to kokoro', () => {
+    const migrated = migrateProject({
+      version: 1,
+      images: [],
+      audio: { narration: null, music: null },
+      script: { raw: '' },
+      timeline: [],
+      config: { voice: { language: 'en', voiceId: 'af_heart' } }
+    });
+    expect(migrated.config.voice.engine).toBe('kokoro');
+  });
 });

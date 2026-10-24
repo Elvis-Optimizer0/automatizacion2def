@@ -46,15 +46,11 @@ test.describe.serial('Video Maker - Phase 7 local voice pipeline', () => {
 
     // Copy required models to userDataDir (set by global-setup)
     userDataDir = process.env.VM_TEST_USERDATA;
-    const piperVoiceDir = process.env.VM_TEST_PIPER_VOICE_DIR;
-    if (!piperVoiceDir) throw new Error('VM_TEST_PIPER_VOICE_DIR no está configurado');
     if (userDataDir) {
       const modelsDir = path.join(userDataDir, 'models');
       const kokoroModelsDir = path.join(modelsDir, 'kokoro');
-      const piperModelsDir = path.join(modelsDir, 'piper');
       const whisperModelsDir = path.join(modelsDir, 'whisper');
       fs.mkdirSync(kokoroModelsDir, { recursive: true });
-      fs.mkdirSync(piperModelsDir, { recursive: true });
       fs.mkdirSync(whisperModelsDir, { recursive: true });
       
       // Copy Kokoro models
@@ -65,10 +61,6 @@ test.describe.serial('Video Maker - Phase 7 local voice pipeline', () => {
       // Copy Whisper model
       const vendorWhisper = path.join(__dirname, '..', '..', 'vendor', 'whisper', 'models');
       fs.copyFileSync(path.join(vendorWhisper, 'ggml-base.bin'), path.join(whisperModelsDir, 'ggml-base.bin'));
-      
-      // Copy Piper models
-      fs.copyFileSync(path.join(piperVoiceDir, 'es_MX-ald-medium.onnx'), path.join(piperModelsDir, 'es_MX-ald-medium.onnx'));
-      fs.copyFileSync(path.join(piperVoiceDir, 'es_MX-ald-medium.onnx.json'), path.join(piperModelsDir, 'es_MX-ald-medium.onnx.json'));
     }
 
     electronApp = await electron.launch({

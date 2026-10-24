@@ -12,7 +12,7 @@ const kokoroRuntime = path.join(resourcesDir, 'kokoro', 'runtime');
 const kokoroModels = path.join(resourcesDir, 'kokoro', 'models');
 const whisperBin = path.join(resourcesDir, 'whisper', 'bin');
 const whisperModels = path.join(resourcesDir, 'whisper', 'models');
-const piperDir = path.join(resourcesDir, 'piper');
+
 
 function fail(message) {
   process.stderr.write(`[verify-package] ERROR: ${message}\n`);
@@ -27,14 +27,7 @@ function check() {
     path.join(kokoroModels, 'kokoro-v1.0.onnx'),
     path.join(kokoroModels, 'voices-v1.0.bin'),
     path.join(whisperBin, 'whisper-cli.exe'),
-    path.join(whisperModels, 'ggml-base.bin'),
-    path.join(piperDir, 'piper.exe'),
-    path.join(piperDir, 'espeak-ng.dll'),
-    path.join(piperDir, 'libtashkeel_model.ort'),
-    path.join(piperDir, 'onnxruntime.dll'),
-    path.join(piperDir, 'onnxruntime_providers_shared.dll'),
-    path.join(piperDir, 'piper_phonemize.dll'),
-    path.join(piperDir, 'espeak-ng-data', 'es_dict')
+    path.join(whisperModels, 'ggml-base.bin')
   ];
   const missing = files.filter((file) => !fs.existsSync(file));
   if (missing.length) {

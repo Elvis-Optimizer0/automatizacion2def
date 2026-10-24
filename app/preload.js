@@ -33,10 +33,6 @@ contextBridge.exposeInMainWorld('api', {
   downloadModels: (modelId) => ipcRenderer.invoke('models:download', modelId),
   importModel: (filePath) => ipcRenderer.invoke('models:import', filePath),
   cancelModels: () => ipcRenderer.invoke('models:cancel'),
-  downloadPiperVoice: (voiceId) => ipcRenderer.invoke('piper:voiceDownload', voiceId),
-  importPiperVoice: (voiceId, onnxPath, jsonPath) => ipcRenderer.invoke('piper:voiceImport', { voiceId, onnxPath, jsonPath }),
-  generatePiperVoiceSample: (voiceId, text) => ipcRenderer.invoke('piper:voiceSample', { voiceId, text }),
-  cancelPiperDownload: () => ipcRenderer.invoke('piper:cancel'),
   onRenderProgress: (callback) => {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('render:progress', handler);
@@ -51,10 +47,5 @@ contextBridge.exposeInMainWorld('api', {
     const handler = (_, progress) => callback(progress);
     ipcRenderer.on('models:progress', handler);
     return () => ipcRenderer.removeListener('models:progress', handler);
-  },
-  onPiperVoiceProgress: (callback) => {
-    const handler = (_, progress) => callback(progress);
-    ipcRenderer.on('piper:voiceProgress', handler);
-    return () => ipcRenderer.removeListener('piper:voiceProgress', handler);
   }
 });

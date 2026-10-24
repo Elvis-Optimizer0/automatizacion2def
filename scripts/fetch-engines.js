@@ -60,11 +60,6 @@ const ARTIFACTS = {
     url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
     sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
     file: 'ggml-base.bin'
-  },
-  piper: {
-    url: 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip',
-    sha256: 'f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea',
-    file: 'piper_windows_amd64.zip'
   }
 };
 
@@ -74,20 +69,8 @@ const PATHS = {
   kokoroModels: path.join(VENDOR, 'kokoro', 'models'),
   espeakDir: path.join(VENDOR, 'kokoro', 'espeak-ng'),
   whisperBin: path.join(VENDOR, 'whisper', 'bin'),
-  whisperModels: path.join(VENDOR, 'whisper', 'models'),
-  piperDir: path.join(VENDOR, 'piper'),
-  piperModels: path.join(VENDOR, 'piper', 'models')
+  whisperModels: path.join(VENDOR, 'whisper', 'models')
 };
-
-const PIPER_RUNTIME_FILES = [
-  'piper.exe',
-  'espeak-ng.dll',
-  'libtashkeel_model.ort',
-  'onnxruntime.dll',
-  'onnxruntime_providers_shared.dll',
-  'piper_phonemize.dll',
-  path.join('espeak-ng-data', 'es_dict')
-];
 
 const args = process.argv.slice(2);
 const FORCE = args.includes('--force');
@@ -218,32 +201,6 @@ function listZipEntries(zipPath) {
   return String(result.stdout || '').split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
 }
 
-function missingPiperRuntimeFiles(runtimeDir, fileSystem = fs) {
-  return PIPER_RUNTIME_FILES.filter((file) => !fileSystem.existsSync(path.join(runtimeDir, file)));
-}
-
-function isPiperRuntimeComplete(runtimeDir, fileSystem = fs) {
-  return missingPiperRuntimeFiles(runtimeDir, fileSystem).length === 0;
-}
-
-function findPiperRuntimeDir(sourceDir, zipEntries, fileSystem = fs) {
-  const candidates = zipEntries
-    .map((entry) => String(entry).replace(/\\/g, '/'))
-    .filter((entry) => path.posix.basename(entry) === 'piper.exe')
-    .map((entry) => path.posix.normalize(entry))
-    .filter((entry) => !path.posix.isAbsolute(entry) && !entry.split('/').includes('..'))
-    .sort((left, right) => left.split('/').length - right.split('/').length || left.localeCompare(right));
-
-  for (const entry of candidates) {
-    const absolute = path.join(sourceDir, ...entry.split('/'));
-    if (!fileSystem.existsSync(absolute)) continue;
-    const stat = fileSystem.statSync(absolute);
-    if (stat.isFile()) return path.dirname(absolute);
-  }
-
-  throw new Error('piper.exe no encontrado en el archivo Piper');
-}
-
 function moveContents(fromDir, toDir, fileSystem = fs) {
   ensureDir(toDir, fileSystem);
   for (const entry of fileSystem.readdirSync(fromDir)) {
@@ -253,26 +210,6 @@ function moveContents(fromDir, toDir, fileSystem = fs) {
     fileSystem.cpSync(source, target, { recursive: true, dereference: true });
     fileSystem.rmSync(source, { recursive: true, force: true });
   }
-}
-
-function placePiperRuntime(sourceDir, targetDir, options = {}) {
-  const fileSystem = options.fileSystem || fs;
-  const zipEntries = options.zipEntries || [];
-  const runtimeDir = findPiperRuntimeDir(sourceDir, zipEntries, fileSystem);
-  const missing = missingPiperRuntimeFiles(runtimeDir, fileSystem);
-  if (missing.length) {
-    throw new Error(`archivo Piper incompleto; faltan: ${missing.join(', ')}`);
-  }
-
-  fileSystem.rmSync(targetDir, { recursive: true, force: true });
-  moveContents(runtimeDir, targetDir, fileSystem);
-  ensureDir(path.join(targetDir, 'models'), fileSystem);
-
-  const installedMissing = missingPiperRuntimeFiles(targetDir, fileSystem);
-  if (installedMissing.length) {
-    throw new Error(`instalación Piper incompleta; faltan: ${installedMissing.join(', ')}`);
-  }
-  return targetDir;
 }
 
 function stampOk() {
@@ -287,8 +224,7 @@ function stampOk() {
     path.join(PATHS.kokoroModels, 'kokoro-v1.0.onnx'),
     path.join(PATHS.kokoroModels, 'voices-v1.0.bin'),
     path.join(PATHS.whisperBin, 'whisper-cli.exe'),
-    path.join(PATHS.whisperModels, 'ggml-base.bin'),
-    ...PIPER_RUNTIME_FILES.map((file) => path.join(PATHS.piperDir, file))
+    path.join(PATHS.whisperModels, 'ggml-base.bin')
   ];
   return required.every((file) => fs.existsSync(file));
 }
@@ -443,25 +379,6 @@ async function installKokoroModels() {
     fs.copyFileSync(downloaded, dest);
   }
 }
-async function installPiper() {
-  const exe = path.join(PATHS.piperDir, 'piper.exe');
-  const complete = isPiperRuntimeComplete(PATHS.piperDir);
-  if (!FORCE && complete) {
-    log('piper.exe ya presente');
-  } else {
-    if (fs.existsSync(exe)) log('instalación Piper incompleta; se vuelve a extraer');
-    const zip = await downloadArtifact('piper', path.join(CACHE, ARTIFACTS.piper.file));
-    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-piper-'));
-    try {
-      log('extrayendo piper');
-      extractZip(zip, temp);
-      const entries = listZipEntries(zip);
-      placePiperRuntime(temp, PATHS.piperDir, { fileSystem: fs, zipEntries: entries });
-    } finally {
-      fs.rmSync(temp, { recursive: true, force: true });
-    }
-  }
-}
 
 function verify() {
   const checks = [
@@ -471,8 +388,7 @@ function verify() {
     path.join(PATHS.runtimeDir, 'kokoro-runtime.exe'),
     path.join(PATHS.runtimeDir, 'runner.py'),
     path.join(PATHS.espeakDir, 'espeak-ng-data', 'es_dict'),
-    path.join(PATHS.whisperBin, 'whisper-cli.exe'),
-    ...PIPER_RUNTIME_FILES.map((file) => path.join(PATHS.piperDir, file))
+    path.join(PATHS.whisperBin, 'whisper-cli.exe')
   ];
   if (!SKIP_MODELS) {
     checks.push(
@@ -504,11 +420,10 @@ async function main() {
   buildLauncher();
   await installEspeak();
   await installWhisper();
-  await installPiper();
   if (!SKIP_MODELS) {
     await installKokoroModels();
   } else {
-    log('--skip-models: se omiten los modelos grandes (kokoro/whisper/piper)');
+    log('--skip-models: se omiten los modelos grandes (kokoro/whisper)');
   }
   verify();
   if (SKIP_MODELS) {
@@ -516,7 +431,7 @@ async function main() {
   } else {
     writeStamp();
   }
-  log('listo: motores en vendor/kokoro, vendor/whisper y vendor/piper');
+  log('listo: motores en vendor/kokoro y vendor/whisper');
 }
 
 if (require.main === module) {
@@ -529,8 +444,5 @@ module.exports = {
   PIP_PACKAGES,
   ARTIFACTS,
   PATHS,
-  PIPER_RUNTIME_FILES,
-  configHash,
-  isPiperRuntimeComplete,
-  placePiperRuntime
+  configHash
 };

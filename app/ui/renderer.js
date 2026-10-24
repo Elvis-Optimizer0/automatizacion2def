@@ -776,217 +776,6 @@ function syncVoiceControls() {
   }
   updateVoiceButtons();
   refreshVoiceSelect();
-  updatePiperVoicesPanel();
-}
-
-function updatePiperVoicesPanel() {
-  const panel = document.getElementById('piper-voices-panel');
-  const engine = document.getElementById('voice-engine')?.value || 'kokoro';
-  if (!panel) return;
-  if (engine === 'piper') {
-    panel.hidden = false;
-    renderPiperVoicesList();
-  } else {
-    panel.hidden = true;
-  }
-}
-
-function renderPiperVoicesList() {
-  const list = document.getElementById('piper-voices-list');
-  if (!list) return;
-
-  // We'll fetch models via API in the handler, but for initial render we need the models info
-  // For now, use the hardcoded Piper voices from model-specs
-  const piperVoices = [
-    { id: 'es_MX-ald-medium', name: 'es_MX - Ald (medium)', language: 'es_MX', license: 'Unlicense', commercialUse: true },
-    { id: 'es_MX-ald-x_low', name: 'es_MX - Ald (x_low)', language: 'es_MX', license: 'No declarada en MODEL_CARD', commercialUse: false },
-    { id: 'es_ES-carlfm-x_low', name: 'es_ES - Carlfm (x_low)', language: 'es_ES', license: 'Public domain', commercialUse: true },
-    { id: 'en_US-lessac-medium', name: 'en_US - Lessac (medium)', language: 'en_US', license: 'Blizzard (non-commercial)', commercialUse: false },
-    { id: 'en_US-lessac-low', name: 'en_US - Lessac (low)', language: 'en_US', license: 'Blizzard (non-commercial)', commercialUse: false }
-  ];
-
-  const modelsInfo = window.__TEST_STATE__ ? window.__TEST_STATE__ : null;
-  let piperModelInfo = null;
-  if (modelsInfo && modelsInfo.models) {
-    piperModelInfo = modelsInfo.models.find(m => m.id === 'piper');
-  }
-
-  list.innerHTML = '';
-  piperVoices.forEach(voice => {
-    const row = document.createElement('div');
-    row.className = 'piper-voice-row';
-    row.dataset.voiceId = voice.id;
-
-    // Check if voice is downloaded (look in piper model info)
-    let state = 'no_descargada';
-    let errorMsg = null;
-    if (piperModelInfo && piperModelInfo.files) {
-      const onnxFile = piperModelInfo.files.find(f => f.fileName === `${voice.id}.onnx`);
-      const jsonFile = piperModelInfo.files.find(f => f.fileName === `${voice.id}.onnx.json`);
-      if (onnxFile && jsonFile && onnxFile.userDataExists && jsonFile.userDataExists) {
-        state = onnxFile.verified && jsonFile.verified ? 'lista' : 'error';
-        if (state === 'error') errorMsg = 'Archivos no verificados (hash o tamaño incorrecto)';
-      }
-    }
-
-    const stateLabels = {
-      'no_descargada': 'No descargada',
-      'descargando': 'Descargando…',
-      'lista': 'Lista',
-      'error': 'Error'
-    };
-
-    row.innerHTML = `
-      <div class="piper-voice-header">
-        <span class="piper-voice-id">${voice.name}</span>
-        <span class="piper-voice-state ${state}" data-state="${state}">${stateLabels[state]}</span>
-      </div>
-      <div class="piper-voice-actions">
-        ${state === 'no_descargada' ? `
-          <button class="btn btn-secondary btn-sm" data-action="download" data-voice-id="${voice.id}">Descargar</button>
-        ` : ''}
-        ${state === 'descargando' ? `
-          <button class="btn btn-secondary btn-sm" data-action="cancel" data-voice-id="${voice.id}" disabled>Cancelar</button>
-          <div class="piper-voice-progress" hidden>
-            <div class="piper-voice-progress-bar"><div class="piper-voice-progress-fill"></div></div>
-            <span class="piper-voice-progress-text">0%</span>
-          </div>
-        ` : ''}
-        ${state === 'lista' ? `
-          <button class="btn btn-secondary btn-sm" data-action="sample" data-voice-id="${voice.id}">Muestra</button>
-          <button class="btn btn-secondary btn-sm" data-action="import" data-voice-id="${voice.id}">Importar…</button>
-        ` : ''}
-        ${state === 'error' ? `
-          <button class="btn btn-secondary btn-sm" data-action="download" data-voice-id="${voice.id}">Reintentar</button>
-        ` : ''}
-        ${state !== 'descargando' && state !== 'lista' ? `
-          <button class="btn btn-secondary btn-sm" data-action="import" data-voice-id="${voice.id}">Importar .onnx+.json</button>
-        ` : ''}
-      </div>
-      ${errorMsg ? `<div class="piper-voice-error">${errorMsg}</div>` : ''}
-    `;
-    list.appendChild(row);
-  });
-
-  // Add event listeners
-  list.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const action = btn.dataset.action;
-      const voiceId = btn.dataset.voiceId;
-      await handlePiperVoiceAction(action, voiceId);
-    });
-  });
-}
-
-async function handlePiperVoiceAction(action, voiceId) {
-  const row = document.querySelector(`.piper-voice-row[data-voice-id="${voiceId}"]`);
-  if (!row) return;
-
-  const stateEl = row.querySelector('.piper-voice-state');
-  const actionsEl = row.querySelector('.piper-voice-actions');
-  let progressEl = row.querySelector('.piper-voice-progress');
-
-  const setState = (state) => {
-    stateEl.textContent = { no_descargada: 'No descargada', descargando: 'Descargando…', lista: 'Lista', error: 'Error' }[state];
-    stateEl.className = `piper-voice-state ${state}`;
-    stateEl.dataset.state = state;
-  };
-
-  if (action === 'download') {
-    setState('descargando');
-    actionsEl.innerHTML = `
-      <button class="btn btn-secondary btn-sm" data-action="cancel" data-voice-id="${voiceId}">Cancelar</button>
-      <div class="piper-voice-progress">
-        <div class="piper-voice-progress-bar"><div class="piper-voice-progress-fill"></div></div>
-        <span class="piper-voice-progress-text">0%</span>
-      </div>
-    `;
-    progressEl = row.querySelector('.piper-voice-progress');
-    if (progressEl) progressEl.hidden = false;
-
-    try {
-      await window.api.downloadPiperVoice(voiceId);
-      setState('lista');
-      actionsEl.innerHTML = `
-        <button class="btn btn-secondary btn-sm" data-action="sample" data-voice-id="${voiceId}">Muestra</button>
-        <button class="btn btn-secondary btn-sm" data-action="import" data-voice-id="${voiceId}">Importar…</button>
-      `;
-      if (progressEl) progressEl.hidden = true;
-      showToast(`Voz ${voiceId} descargada`, 'success');
-    } catch (err) {
-      setState('error');
-      actionsEl.innerHTML = `
-        <button class="btn btn-secondary btn-sm" data-action="download" data-voice-id="${voiceId}">Reintentar</button>
-        <button class="btn btn-secondary btn-sm" data-action="import" data-voice-id="${voiceId}">Importar .onnx+.json</button>
-      `;
-      if (progressEl) progressEl.hidden = true;
-      const msg = err.message || String(err);
-      row.querySelector('.piper-voice-error')?.remove();
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'piper-voice-error';
-      errorDiv.textContent = msg.includes('E_MODEL') ? `Descarga fallida: ${msg.split(': ').pop()}` : `Descarga fallida: ${msg}`;
-      row.appendChild(errorDiv);
-    }
-  } else if (action === 'cancel') {
-    await window.api.cancelPiperDownload();
-    setState('no_descargada');
-    actionsEl.innerHTML = `
-      <button class="btn btn-secondary btn-sm" data-action="download" data-voice-id="${voiceId}">Descargar</button>
-      <button class="btn btn-secondary btn-sm" data-action="import" data-voice-id="${voiceId}">Importar .onnx+.json</button>
-    `;
-    if (progressEl) progressEl.hidden = true;
-  } else if (action === 'sample') {
-    const btn = row.querySelector('[data-action="sample"]');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Generando…';
-    }
-    try {
-      await window.api.generatePiperVoiceSample(voiceId, 'Prueba de voz Piper.');
-      showToast('Muestra generada', 'success');
-    } catch (err) {
-      showToast(`Error generando muestra: ${err.message}`, 'error');
-    } finally {
-      const btnAfter = row.querySelector('[data-action="sample"]');
-      if (btnAfter) {
-        btnAfter.disabled = false;
-        btnAfter.textContent = 'Muestra';
-      }
-    }
-  } else if (action === 'import') {
-    const onnxPath = prompt('Ruta absoluta al archivo .onnx:');
-    if (!onnxPath) return;
-    const jsonPath = prompt('Ruta absoluta al archivo .onnx.json:');
-    if (!jsonPath) return;
-
-    const btn = row.querySelector('[data-action="import"]');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Importando…';
-    }
-    try {
-      await window.api.importPiperVoice(voiceId, onnxPath.trim(), jsonPath.trim());
-      setState('lista');
-      actionsEl.innerHTML = `
-        <button class="btn btn-secondary btn-sm" data-action="sample" data-voice-id="${voiceId}">Muestra</button>
-        <button class="btn btn-secondary btn-sm" data-action="import" data-voice-id="${voiceId}">Importar…</button>
-      `;
-      showToast('Voz importada correctamente', 'success');
-    } catch (err) {
-      setState('error');
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'piper-voice-error';
-      errorDiv.textContent = `Importación fallida: ${err.message}`;
-      row.querySelector('.piper-voice-error')?.remove();
-      row.appendChild(errorDiv);
-    } finally {
-      const btnAfter = row.querySelector('[data-action="import"]');
-      if (btnAfter) {
-        btnAfter.disabled = false;
-        btnAfter.textContent = 'Importar…';
-      }
-    }
-  }
 }
 
 function fillVoiceTextFromScript() {
@@ -1061,25 +850,16 @@ async function handleGenerateVoice() {
   }
 
   const modelsInfo = await window.api.listModels();
-  const selectedEngine = document.getElementById('voice-engine')?.value || 'kokoro';
   
-  if (selectedEngine === 'kokoro') {
-    const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
-    if (!kokoro || !kokoro.installed) {
-      showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
-      return;
-    }
-    const whisper = modelsInfo.models.find(m => m.id === 'whisper');
-    if (!whisper || !whisper.installed) {
-      showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
-      return;
-    }
-  } else if (selectedEngine === 'piper') {
-    const piper = modelsInfo.models.find(m => m.id === 'piper');
-    if (!piper || !piper.installed) {
-      showToast('Falta el modelo Piper. Descárgalo o impórtalo primero.', 'error');
-      return;
-    }
+  const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
+  if (!kokoro || !kokoro.installed) {
+    showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
+    return;
+  }
+  const whisper = modelsInfo.models.find(m => m.id === 'whisper');
+  if (!whisper || !whisper.installed) {
+    showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
+    return;
   }
 
   voiceState.generating = true;
@@ -3717,24 +3497,6 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshModelsList();
   detectCodecs();
   handleProbeGpu();
-
-  // Listen for Piper voice download progress
-  window.api.onPiperVoiceProgress((progress) => {
-    const row = document.querySelector(`.piper-voice-row[data-voice-id="${progress.voiceId}"]`);
-    if (!row) return;
-    const progressEl = row.querySelector('.piper-voice-progress');
-    const progressFill = row.querySelector('.piper-voice-progress-fill');
-    const progressText = row.querySelector('.piper-voice-progress-text');
-    if (progressEl) progressEl.hidden = false;
-    if (progressFill) progressFill.style.width = `${progress.progress || 0}%`;
-    if (progressText) progressText.textContent = `${progress.progress || 0}%`;
-  });
-
-  // Show/hide Piper voices panel when engine changes
-  const engineSelect = document.getElementById('voice-engine');
-  if (engineSelect) {
-    engineSelect.addEventListener('change', updatePiperVoicesPanel);
-  }
 
   console.log('Video Maker v0.7.6 - Renderer loaded');
 });

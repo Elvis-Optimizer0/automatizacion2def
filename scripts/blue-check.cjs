@@ -112,9 +112,8 @@ async function main() {
     { name: 'initial', png: path.join(screenshotDir, 'initial.png') },
     { name: 'loaded', png: path.join(screenshotDir, 'loaded.png') },
     { name: 'voice-panel', png: path.join(screenshotDir, 'voice-panel.png') },
-    { name: 'piper-engine', png: path.join(screenshotDir, 'piper-engine.png') },
-    { name: 'piper-voices', png: path.join(screenshotDir, 'piper-voices.png') },
-    { name: 'piper-voice-descargando', png: path.join(screenshotDir, 'piper-voice-descargando.png') },
+    { name: 'kokoro-engine', png: path.join(screenshotDir, 'kokoro-engine.png') },
+    { name: 'kokoro-voices', png: path.join(screenshotDir, 'kokoro-voices.png') },
     { name: 'models', png: path.join(screenshotDir, 'models.png') },
     { name: 'dropdowns-open', png: path.join(screenshotDir, 'dropdowns-open.png') }
   ];
@@ -155,41 +154,24 @@ async function main() {
   await window.waitForFunction(() => !document.getElementById('voice-panel').hidden, null, { timeout: 5000 });
   await window.screenshot({ path: screens[2].png });
 
-  await window.selectOption('#voice-engine', 'piper');
-  await window.waitForFunction(() => !document.getElementById('piper-voices-panel').hidden, null, { timeout: 5000 });
+  await window.selectOption('#voice-engine', 'kokoro');
+  await window.waitForFunction(() => document.getElementById('voice-select').options.length > 0, null, { timeout: 5000 });
   await window.screenshot({ path: screens[3].png });
 
   await window.evaluate(() => {
     const state = window.__TEST_STATE__;
     state.models = [{
-      id: 'piper',
-      name: 'Piper TTS voces',
+      id: 'kokoro',
+      name: 'Kokoro voz (ONNX)',
       files: [
-        { fileName: 'es_MX-ald-medium.onnx', exists: true, verified: true, userDataExists: true },
-        { fileName: 'es_MX-ald-medium.onnx.json', exists: true, verified: true, userDataExists: true },
-        { fileName: 'es_MX-ald-x_low.onnx', exists: false, verified: false, userDataExists: false },
-        { fileName: 'es_MX-ald-x_low.onnx.json', exists: false, verified: false, userDataExists: false },
-        { fileName: 'es_ES-carlfm-x_low.onnx', exists: true, verified: false, userDataExists: true },
-        { fileName: 'es_ES-carlfm-x_low.onnx.json', exists: true, verified: false, userDataExists: true },
-        { fileName: 'en_US-lessac-medium.onnx', exists: true, verified: true, userDataExists: true },
-        { fileName: 'en_US-lessac-medium.onnx.json', exists: true, verified: true, userDataExists: true },
-        { fileName: 'en_US-lessac-low.onnx', exists: false, verified: false, userDataExists: false },
-        { fileName: 'en_US-lessac-low.onnx.json', exists: false, verified: false, userDataExists: false }
+        { fileName: 'kokoro-v1.0.onnx', exists: true, verified: true, userDataExists: true },
+        { fileName: 'voices-v1.0.bin', exists: true, verified: true, userDataExists: true }
       ]
     }];
     window.__TEST_RENDER__.renderAll();
   });
-  await window.waitForFunction(() => document.querySelectorAll('.piper-voice-row').length > 0, null, { timeout: 5000 });
+  await window.waitForFunction(() => document.getElementById('voice-select').options.length > 0, null, { timeout: 5000 });
   await window.screenshot({ path: screens[4].png });
-
-  await window.evaluate(() => {
-    const row = document.querySelector('.piper-voice-row');
-    const stateEl = row.querySelector('.piper-voice-state');
-    stateEl.textContent = 'Descargando…';
-    stateEl.className = 'piper-voice-state descargando';
-    stateEl.dataset.state = 'descargando';
-  });
-  await window.screenshot({ path: screens[5].png });
 
   await window.evaluate(() => {
     document.getElementById('models-panel').scrollIntoView({ block: 'start' });
