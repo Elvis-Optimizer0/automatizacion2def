@@ -1,6 +1,7 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
 const path = require('path');
 const {
   resolvePiperRuntime,
@@ -212,7 +213,7 @@ test.describe('Piper catalog validation', () => {
     expect(MODEL_SPECS.piper.files.length).toBe(voices.length * 2);
   });
 
-  test('each catalog voice has onnx, json and license metadata', () => {
+  test('each catalog voice has onnx, json, license, source and commercial metadata', () => {
     for (const voiceId of piperVoiceIds()) {
       const onnx = MODEL_SPECS.piper.files.find((file) => file.fileName === `${voiceId}.onnx`);
       const json = MODEL_SPECS.piper.files.find((file) => file.fileName === `${voiceId}.onnx.json`);
@@ -220,6 +221,10 @@ test.describe('Piper catalog validation', () => {
       expect(json.url).toMatch(/^https:\/\//);
       expect(onnx.license).toBeTruthy();
       expect(json.license).toBe(onnx.license);
+      expect(onnx.licenseSource).toMatch(/^https:\/\/huggingface\.co\/rhasspy\/piper-voices\/raw\//);
+      expect(json.licenseSource).toBe(onnx.licenseSource);
+      expect(typeof onnx.commercialUse).toBe('boolean');
+      expect(json.commercialUse).toBe(onnx.commercialUse);
     }
   });
 
@@ -230,6 +235,18 @@ test.describe('Piper catalog validation', () => {
     expect(byVoice.get('es_ES-carlfm-x_low.onnx').commercialUse).toBe(true);
     expect(byVoice.get('en_US-lessac-medium.onnx').commercialUse).toBe(false);
     expect(byVoice.get('en_US-lessac-low.onnx').commercialUse).toBe(false);
+  });
+
+  test('docs list every catalog voice id and agree with commercialUse', () => {
+    const root = path.join(__dirname, '..', '..');
+    const licenses = fs.readFileSync(path.join(root, 'docs', 'licenses.md'), 'utf8');
+    const models = fs.readFileSync(path.join(root, 'docs', 'models.md'), 'utf8');
+    for (const voiceId of piperVoiceIds()) {
+      const onnx = MODEL_SPECS.piper.files.find((file) => file.fileName === `${voiceId}.onnx`);
+      expect(licenses).toContain(voiceId);
+      expect(models).toContain(voiceId);
+      expect(models).toContain(onnx.licenseSource);
+    }
   });
 
   test('Spanish voices have es_MX and es_ES', () => {
