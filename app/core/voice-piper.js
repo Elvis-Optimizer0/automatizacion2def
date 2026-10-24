@@ -9,6 +9,7 @@ const E_VOICE_PIPER_MISSING = 'E_VOICE_PIPER_MISSING';
 const E_VOICE_PIPER_MODEL_MISSING = 'E_VOICE_PIPER_MODEL_MISSING';
 const E_VOICE_PIPER_FAILED = 'E_VOICE_PIPER_FAILED';
 const E_VOICE_PIPER_CANCELLED = 'E_VOICE_PIPER_CANCELLED';
+const E_VOICE_PIPER_UNKNOWN_VOICE = 'E_VOICE_PIPER_UNKNOWN_VOICE';
 
 function resolvePiperRuntime(options = {}) {
   const runtime = resolveBundledPiperRuntime(options);
@@ -44,6 +45,64 @@ function resolvePiperPaths(modelsDirParam) {
     ? path.join(modelsDirParam, 'piper')
     : runtime.modelsDir;
   return { piperExe: runtime.executable, piperDataDir: runtime.piperDataDir, modelsDir };
+}
+
+function resolveSynthesisPaths(options) {
+  const { outputPath, modelsDir, voiceId } = options;
+
+  if (!outputPath || !path.isAbsolute(outputPath)) {
+    throw new Error(`${E_VOICE_PIPER_FAILED}: outputPath debe ser una ruta absoluta (recibido: ${outputPath})`);
+  }
+
+  if (!voiceId) {
+    throw new Error(`${E_VOICE_PIPER_UNKNOWN_VOICE}: voiceId no proporcionado`);
+  }
+
+  const runtime = resolvePiperRuntime();
+  if (!runtime.executable) {
+    throw new Error(`${E_VOICE_PIPER_MISSING}: piper.exe no encontrado. Ejecute fetch-engines.`);
+  }
+  if (!fs.existsSync(runtime.piperDataDir)) {
+    throw new Error(`${E_VOICE_PIPER_MISSING}: espeak-ng-data no encontrado en ${runtime.piperDataDir}. Ejecute fetch-engines.`);
+  }
+
+  const resolvedModelsDir = modelsDir
+    ? path.join(modelsDir, 'piper')
+    : runtime.modelsDir;
+
+  const voiceMap = {
+    'es_MX-ald-medium': { model: 'es_MX-ald-medium', language: 'es_MX' },
+    'es_MX-ald-x_low': { model: 'es_MX-ald-x_low', language: 'es_MX' },
+    'es_ES-carlfm-x_low': { model: 'es_ES-carlfm-x_low', language: 'es_ES' },
+    'en_US-lessac-medium': { model: 'en_US-lessac-medium', language: 'en_US' },
+    'en_US-lessac-low': { model: 'en_US-lessac-low', language: 'en_US' }
+  };
+
+  const voiceInfo = voiceMap[voiceId];
+  if (!voiceInfo) {
+    throw new Error(`${E_VOICE_PIPER_UNKNOWN_VOICE}: voz "${voiceId}" no reconocida`);
+  }
+
+  const modelFile = `${voiceInfo.model}.onnx`;
+  const configFile = `${voiceInfo.model}.onnx.json`;
+
+  const modelPath = path.join(resolvedModelsDir, modelFile);
+  const configPath = path.join(resolvedModelsDir, configFile);
+
+  if (!fs.existsSync(modelPath)) {
+    throw new Error(`${E_VOICE_PIPER_MODEL_MISSING}: modelo no encontrado: ${modelPath}`);
+  }
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`${E_VOICE_PIPER_MODEL_MISSING}: config no encontrado: ${configPath}`);
+  }
+
+  return {
+    piperExe: runtime.executable,
+    piperDataDir: runtime.piperDataDir,
+    modelPath,
+    configPath,
+    tempOutputPath: outputPath.replace('.wav', '_piper_temp.wav')
+  };
 }
 
 function buildPiperArgs(options, modelPath, configPath, piperExe, piperDataDir) {
@@ -102,53 +161,32 @@ function synthesizeVoicePiper(options, hooks = {}) {
       outputPath,
       modelsDir,
       language,
-      voiceId
+      voiceId,
+      speed,
+      pause
     } = options;
-
-    if (!outputPath || !path.isAbsolute(outputPath)) {
-      reject(new Error(`${E_VOICE_PIPER_FAILED}: outputPath debe ser una ruta absoluta`));
-      return;
-    }
 
     if (!text || !text.trim()) {
       reject(new Error(`${E_VOICE_PIPER_FAILED}: texto vacío`));
       return;
     }
 
-    const resolved = resolvePiperPaths(modelsDir);
-
-    const voiceMap = {
-      'es_MX-ald-medium': { model: 'es_MX-ald-medium', language: 'es_MX' },
-      'es_MX-ald-x_low': { model: 'es_MX-ald-x_low', language: 'es_MX' },
-      'es_ES-carlfm-x_low': { model: 'es_ES-carlfm-x_low', language: 'es_ES' },
-      'en_US-lessac-medium': { model: 'en_US-lessac-medium', language: 'en_US' },
-      'en_US-lessac-low': { model: 'en_US-lessac-low', language: 'en_US' }
-    };
-
-    const voiceKey = voiceId || voiceMap[language] || 'es_MX-ald-medium';
-    const modelFile = `${voiceKey}.onnx`;
-    const configFile = `${voiceKey}.onnx.json`;
-
-    const modelPath = path.join(resolved.modelsDir, modelFile);
-    const configPath = path.join(resolved.modelsDir, configFile);
-
-    if (!fs.existsSync(modelPath)) {
-      throw new Error(`${E_VOICE_PIPER_MODEL_MISSING}: modelo no encontrado: ${modelPath}`);
+    let resolvedPaths;
+    try {
+      resolvedPaths = resolveSynthesisPaths({ outputPath, modelsDir, voiceId, language });
+    } catch (err) {
+      reject(err);
+      return;
     }
-    if (!fs.existsSync(configPath)) {
-      throw new Error(`${E_VOICE_PIPER_MODEL_MISSING}: config no encontrado: ${configPath}`);
-    }
-
-    const tempOutputPath = outputPath.replace('.wav', '_piper_temp.wav');
 
     const piperArgs = buildPiperArgs({
-      outputPath: tempOutputPath,
+      outputPath: resolvedPaths.tempOutputPath,
       speaker: 0,
       noise_scale: 0.667,
-      length_scale: 1.0 / (options.speed || 1.0),
+      length_scale: 1.0 / (speed || 1.0),
       noise_w: 0.8,
-      sentence_silence: options.pause || 0.2
-    }, modelPath, configPath, resolved.piperExe, resolved.piperDataDir);
+      sentence_silence: pause || 0.2
+    }, resolvedPaths.modelPath, resolvedPaths.configPath, resolvedPaths.piperExe, resolvedPaths.piperDataDir);
 
     let cancelled = false;
     let settled = false;
@@ -174,7 +212,7 @@ function synthesizeVoicePiper(options, hooks = {}) {
 
     const childEnv = { ...process.env, PYTHONIOENCODING: 'utf-8' };
 
-    const child = spawn(resolved.piperExe, piperArgs.slice(1), {
+    const child = spawn(resolvedPaths.piperExe, piperArgs.slice(1), {
       windowsHide: true,
       env: childEnv,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -201,11 +239,11 @@ function synthesizeVoicePiper(options, hooks = {}) {
         finish(reject, new Error(E_VOICE_PIPER_FAILED + ': piper exited with code ' + code + ': ' + errorOutput));
         return;
       }
-      if (!fs.existsSync(tempOutputPath)) {
+      if (!fs.existsSync(resolvedPaths.tempOutputPath)) {
         finish(reject, new Error(E_VOICE_PIPER_FAILED + ': output file not created'));
         return;
       }
-      fs.renameSync(tempOutputPath, outputPath);
+      fs.renameSync(resolvedPaths.tempOutputPath, outputPath);
       const stats = fs.statSync(outputPath);
       if (stats.size === 0) {
         finish(reject, new Error(E_VOICE_PIPER_FAILED + ': output file is empty'));
@@ -242,8 +280,10 @@ module.exports = {
   E_VOICE_PIPER_MODEL_MISSING,
   E_VOICE_PIPER_FAILED,
   E_VOICE_PIPER_CANCELLED,
+  E_VOICE_PIPER_UNKNOWN_VOICE,
   resolvePiperRuntime,
   buildPiperArgs,
   synthesizeVoice: synthesizeVoicePiper,
-  checkVoiceEngine: checkVoiceEnginePiper
+  checkVoiceEngine: checkVoiceEnginePiper,
+  resolveSynthesisPaths
 };
