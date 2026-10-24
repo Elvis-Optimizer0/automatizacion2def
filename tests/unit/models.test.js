@@ -399,6 +399,13 @@ test.describe('Piper voice download and import', () => {
     });
   });
 
+  test('piper catalog ids are unique', () => {
+    const catalog = piperCatalog();
+    const piper = catalog.find(m => m.id === 'piper');
+    const ids = piperVoiceIds(piper);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   test('downloaded voice has both onnx and json files', async () => {
     const dir = makeTempDir();
     try {
@@ -624,8 +631,8 @@ test.describe('Piper voice download and import', () => {
     voices.forEach(voiceId => {
       const onnxFile = piper.files.find(f => f.fileName === `${voiceId}.onnx`);
       const jsonFile = piper.files.find(f => f.fileName === `${voiceId}.onnx.json`);
-      expect(onnxFile.sha256).toMatch(/^[0-9a-f]{64}$|^pending$/);
-      expect(jsonFile.sha256).toMatch(/^[0-9a-f]{64}$|^pending$/);
+      expect(onnxFile.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(jsonFile.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(onnxFile.sizeBytes).toBeGreaterThan(0);
       expect(jsonFile.sizeBytes).toBeGreaterThan(0);
       expect(onnxFile.license).toBeTruthy();
