@@ -345,11 +345,11 @@ function buildAudioFilterGraph(options = {}) {
 
   if (hasMusic) {
     const musicIndex = inputCount + 1;
-    parts.push(`[${narrationIndex}:a]volume=1.0[narr]`);
-    parts.push(`[${musicIndex}:a]volume=${num(musicVolume)}[mus]`);
+    parts.push(`[${narrationIndex}:a]volume=1.0,aresample=48000,pan=stereo|FL=FC|FR=FC[narr]`);
+    parts.push(`[${musicIndex}:a]volume=${num(musicVolume)},aresample=48000,pan=stereo|FL=FC|FR=FC[mus]`);
     parts.push(`[narr][mus]amix=inputs=2:duration=first:dropout_transition=0,atrim=0:${trimEnd},asetpts=N/SR/TB[aout]`);
   } else {
-    parts.push(`[${narrationIndex}:a]atrim=0:${trimEnd},asetpts=N/SR/TB[aout]`);
+    parts.push(`[${narrationIndex}:a]aresample=48000,pan=stereo|FL=FC|FR=FC,atrim=0:${trimEnd},asetpts=N/SR/TB[aout]`);
   }
 
   return parts.join(';');
