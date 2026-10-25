@@ -26,6 +26,7 @@ const DIALOG_OR_RENDER_CONTROLS = new Set([
   'paste-script-btn', 'load-script-btn', 'save-project-btn', 'open-project-btn',
   'export-btn', 'open-output-folder-btn',
   'import-font-btn', 'preview-btn', 'models-import-btn',
+  'voice-cancel-btn', 'voice-generate-btn', 'voice-sample-btn',
   'images-drop-zone', 'audio-narration-drop', 'audio-music-drop', 'focus-editor'
 ]);
 
