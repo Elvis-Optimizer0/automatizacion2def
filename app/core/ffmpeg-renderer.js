@@ -379,7 +379,7 @@ async function renderPreview(options = {}) {
       const fontsDir = path.join(assetsDir, 'fonts');
       try {
         mergeFontsIntoDir(fontsDir, [getBundledFontsDir(), userFontsDir]);
-        const previewAssResult = buildAss([{ text, start: 0, duration: previewDuration }], scaledStyle, previewConfig);
+        const previewAssResult = buildAss([{ text, start: 0, duration: previewDuration }], scaledStyle, previewConfig, { returnObject: true });
         if (previewAssResult.warning) {
           throw new Error(`${E_SUBTITLES_FAILED}: ${previewAssResult.warning}`);
         }
@@ -483,7 +483,7 @@ async function renderVideo(options) {
       if (subtitlesEnabled) {
         subtitlesPath = path.join(subtitlesDir, `subs-${outputConfig.id.replace(/[:]/g, '')}.ass`);
         try {
-          const assResult = buildAss(scenes, payload.config.subtitles, outputConfig, { timeOffset: subtitleTimeOffset });
+          const assResult = buildAss(scenes, payload.config.subtitles, outputConfig, { timeOffset: subtitleTimeOffset, returnObject: true });
           if (assResult.warning) {
             throw new Error(`${E_SUBTITLES_FAILED}: ${assResult.warning}`);
           }

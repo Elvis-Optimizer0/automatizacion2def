@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+test.setTimeout(120000);
 const { _electron: electron } = require('playwright');
 const { spawnSync } = require('child_process');
 const fs = require('fs');

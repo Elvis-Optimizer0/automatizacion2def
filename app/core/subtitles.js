@@ -201,6 +201,7 @@ function buildSubtitleEvents(scenes, style, options = {}) {
 }
 
 function buildAss(scenes, style, outputConfig, options = {}) {
+  const { returnObject = false } = options;
   const resolvedStyle = { ...DEFAULT_SUBTITLE_STYLE, ...(style || {}) };
   const w = outputConfig && outputConfig.w ? outputConfig.w : 1920;
   const h = outputConfig && outputConfig.h ? outputConfig.h : 1080;
@@ -208,6 +209,12 @@ function buildAss(scenes, style, outputConfig, options = {}) {
   const alignment = SUBTITLE_ALIGNMENTS.includes(resolvedStyle.alignment) ? resolvedStyle.alignment : 2;
   const marginH = Math.max(0, Math.round(resolvedStyle.marginH));
   const marginV = Math.max(0, Math.round(resolvedStyle.marginV));
+
+  const eventsResult = buildSubtitleEvents(scenes, resolvedStyle, options);
+  if (eventsResult && eventsResult.warning) {
+    return returnObject ? { ass: null, warning: eventsResult.warning } : null;
+  }
+  const events = eventsResult;
 
   const background = resolvedStyle.background || {};
   const shadow = resolvedStyle.shadow || {};
@@ -252,7 +259,6 @@ function buildAss(scenes, style, outputConfig, options = {}) {
   const dy = Math.round((Number(shadow.distance) || 0) * Math.sin(rad));
   const anim = animationTags(resolvedStyle.animation);
 
-  const events = buildSubtitleEvents(scenes, resolvedStyle, options);
   const dialogue = events.map(event => {
     const prefix = event.shadow
       ? `{\\an${alignment}\\pos(${shadowAnchor.x + dx},${shadowAnchor.y + dy})${shadowTags}}`
@@ -260,24 +266,46 @@ function buildAss(scenes, style, outputConfig, options = {}) {
     return `Dialogue: ${event.layer},${assTime(event.start)},${assTime(event.end)},Default,,0,0,0,,${prefix}${event.text}`;
   });
 
-  return [
-    '[Script Info]',
-    'ScriptType: v4.00+',
-    `PlayResX: ${w}`,
-    `PlayResY: ${h}`,
-    'WrapStyle: 2',
-    'ScaledBorderAndShadow: yes',
-    'YCbCr Matrix: TV.601',
-    '',
-    '[V4+ Styles]',
-    'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    styleLine,
-    '',
-    '[Events]',
-    'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
-    ...dialogue,
-    ''
-  ].join('\n');
+  return returnObject
+    ? {
+      ass: [
+        '[Script Info]',
+        'ScriptType: v4.00+',
+        `PlayResX: ${w}`,
+        `PlayResY: ${h}`,
+        'WrapStyle: 2',
+        'ScaledBorderAndShadow: yes',
+        'YCbCr Matrix: TV.601',
+        '',
+        '[V4+ Styles]',
+        'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+        styleLine,
+        '',
+        '[Events]',
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+        ...dialogue,
+        ''
+      ].join('\n'),
+      warning: null
+    }
+    : [
+      '[Script Info]',
+      'ScriptType: v4.00+',
+      `PlayResX: ${w}`,
+      `PlayResY: ${h}`,
+      'WrapStyle: 2',
+      'ScaledBorderAndShadow: yes',
+      'YCbCr Matrix: TV.601',
+      '',
+      '[V4+ Styles]',
+      'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+      styleLine,
+      '',
+      '[Events]',
+      'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      ...dialogue,
+      ''
+    ].join('\n');
 }
 
 module.exports = {

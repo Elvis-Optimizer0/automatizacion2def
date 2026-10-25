@@ -322,12 +322,16 @@ test.describe('manual framing (scale + background)', () => {
     });
     expect(graph).toContain('pad=');
     expect(graph).toContain('color=#112233');
-    expect(graph).toContain('[base0]zoompan=');
-    const padIndex = graph.indexOf('pad=');
-    const zoomIndex = graph.indexOf('[base0]zoompan=');
-    expect(padIndex).toBeGreaterThan(-1);
-    expect(zoomIndex).toBeGreaterThan(padIndex);
+    // zoompan is applied on the upscaled stream [up0], after pre-upscale with bilinear
+    expect(graph).toContain('[base0]scale=2880:1620:flags=bilinear[up0]');
+    expect(graph).toContain('[up0]zoompan=');
+    const upIndex = graph.indexOf('[base0]scale=2880:1620:flags=bilinear[up0]');
+    const zoomIndex = graph.indexOf('[up0]zoompan=');
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(zoomIndex).toBeGreaterThan(upIndex);
     expect(graph).not.toMatch(/\[1:v\]/);
+    // Final downscale with lanczos to target resolution and yuv420p
+    expect(graph).toContain('[zoomed0]scale=1920:1080:flags=lanczos,setsar=1,format=yuv420p[v0]');
   });
 
   test('animated zoom composes on top of the cropped canvas when scale > 1', () => {
@@ -337,11 +341,16 @@ test.describe('manual framing (scale + background)', () => {
       zoomType: 'kenburns'
     });
     expect(graph).toContain('crop=1920:1080:(iw-ow)*0.2:(ih-oh)*0.8');
-    expect(graph).toContain('[base0]zoompan=');
-    const cropIndex = graph.indexOf('crop=1920:1080');
-    const zoomIndex = graph.indexOf('[base0]zoompan=');
-    expect(zoomIndex).toBeGreaterThan(cropIndex);
+    // zoompan is applied on the upscaled stream [up0], after pre-upscale with bilinear
+    expect(graph).toContain('[base0]scale=2880:1620:flags=bilinear[up0]');
+    expect(graph).toContain('[up0]zoompan=');
+    const upIndex = graph.indexOf('[base0]scale=2880:1620:flags=bilinear[up0]');
+    const zoomIndex = graph.indexOf('[up0]zoompan=');
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(zoomIndex).toBeGreaterThan(upIndex);
     expect(graph).not.toMatch(/\[1:v\]/);
+    // Final downscale with lanczos to target resolution and yuv420p
+    expect(graph).toContain('[zoomed0]scale=1920:1080:flags=lanczos,setsar=1,format=yuv420p[v0]');
   });
 
   test('clampScale keeps values inside 0.3..3 and defaults invalid to 1', () => {

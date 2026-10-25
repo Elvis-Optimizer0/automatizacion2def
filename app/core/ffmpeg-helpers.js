@@ -287,13 +287,13 @@ function buildSceneVideoFilter(scene, index, options = {}) {
   const zoomType = resolveZoomType(zoomOptions.zoomType, options.zoomMode, index, options.zoomSeed);
   
   if (options.zoomEnabled && zoomType !== 'none') {
-    // Pre-upscale 2x with lanczos, apply zoompan on upscaled, then downscale with lanczos
-    // This provides sub-pixel precision and eliminates jitter with acceptable performance
-    const UPSCALE_FACTOR = 2;
-    const upscaledW = w * UPSCALE_FACTOR;
-    const upscaledH = h * UPSCALE_FACTOR;
+    // Pre-upscale 1.5x with bilinear (fast), apply zoompan on upscaled, then downscale with lanczos (quality)
+    // 1.5x upscale = 2.25x pixels vs 4x for 2x, still provides sub-pixel precision
+    const UPSCALE_FACTOR = 1.5;
+    const upscaledW = Math.round(w * UPSCALE_FACTOR / 2) * 2; // even dimensions
+    const upscaledH = Math.round(h * UPSCALE_FACTOR / 2) * 2;
     const zoomFilterStr = buildZoomFilter(scene, upscaledW, upscaledH, { ...zoomOptions, zoomType }, focus);
-    const upscaleFilter = `[${baseLabel}]scale=${upscaledW}:${upscaledH}:flags=lanczos[up${index}]`;
+    const upscaleFilter = `[${baseLabel}]scale=${upscaledW}:${upscaledH}:flags=bilinear[up${index}]`;
     const zoomFilter = `[up${index}]${zoomFilterStr}[zoomed${index}]`;
     const downscaleFilter = `[zoomed${index}]scale=${w}:${h}:flags=lanczos,setsar=1,format=yuv420p[v${index}]`;
     parts.push(upscaleFilter);

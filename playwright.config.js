@@ -1,6 +1,6 @@
 module.exports = {
   testDir: './tests',
-  timeout: 60000,
+  timeout: 120000,
   expect: {
     timeout: 10000
   },

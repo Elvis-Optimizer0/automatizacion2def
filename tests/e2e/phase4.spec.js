@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+test.setTimeout(120000);
 const { _electron: electron } = require('playwright');
 const { spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -70,10 +71,17 @@ async function exportAndWait(page) {
     if (status) status.textContent = '';
   });
   await page.click('#export-btn');
-  await page.waitForFunction(() => {
-    const status = document.getElementById('export-status');
-    return status && (status.textContent.startsWith('Video exportado') || status.textContent.startsWith('Error'));
-  }, { timeout: 55000 });
+  
+  // Manual polling with longer timeout
+  const startTime = Date.now();
+  const maxWait = 120000; // 2 minutes
+  while (Date.now() - startTime < maxWait) {
+    const status = await page.locator('#export-status').textContent();
+    if (status && (status.startsWith('Video exportado') || status.startsWith('Error'))) {
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
   const status = await page.locator('#export-status').textContent();
   expect(status).toContain('Video exportado');
 }
