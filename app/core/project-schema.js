@@ -114,8 +114,11 @@ const subtitlesSchema = z.object({
 
 const voiceSchema = z.object({
   language: z.enum(['es', 'en']).default('es'),
+  engine: z.enum(['kokoro', 'edge']).default('kokoro'),
   voiceId: z.string().default(''),
   speed: z.number().min(0.5).max(2).default(1),
+  rate: z.string().default('+6%'),
+  pitch: z.string().default('+0Hz'),
   pause: z.number().min(0).max(3).default(0.3)
 }).default({});
 
@@ -250,9 +253,17 @@ function migrateProject(raw) {
   // Migration for voice engine (FASE 1): default to kokoro for old projects
   // and migrate any project with engine='piper' to 'kokoro'
   if (!migrated.config.voice || typeof migrated.config.voice !== 'object') {
-    migrated.config.voice = { language: 'es', engine: 'kokoro', voiceId: '', speed: 1, pause: 0.3 };
-  } else if (!migrated.config.voice.engine || migrated.config.voice.engine === 'piper') {
-    migrated.config.voice.engine = 'kokoro';
+    migrated.config.voice = { language: 'es', engine: 'kokoro', voiceId: '', speed: 1, rate: '+6%', pitch: '+0Hz', pause: 0.3 };
+  } else {
+    if (!migrated.config.voice.engine || migrated.config.voice.engine === 'piper') {
+      migrated.config.voice.engine = 'kokoro';
+    }
+    if (!migrated.config.voice.rate) {
+      migrated.config.voice.rate = '+6%';
+    }
+    if (!migrated.config.voice.pitch) {
+      migrated.config.voice.pitch = '+0Hz';
+    }
   }
 
   // Migration for AI settings (FASE 2): default to null

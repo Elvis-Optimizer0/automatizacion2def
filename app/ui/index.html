@@ -106,7 +106,8 @@
           <div class="export-control-row">
             <label for="voice-engine">Motor de voz</label>
             <select id="voice-engine" class="export-select">
-              <option value="kokoro">Kokoro (neuronal, alta calidad)</option>
+              <option value="kokoro">Kokoro (neuronal, alta calidad, local)</option>
+              <option value="edge">Voz neuronal de Microsoft (requiere internet)</option>
             </select>
           </div>
           <div class="export-control-row">
@@ -114,13 +115,25 @@
             <select id="voice-select" class="export-select"></select>
           </div>
           <div class="export-control-row">
-            <label for="voice-speed">Velocidad</label>
+            <label for="voice-speed">Velocidad (Kokoro)</label>
             <input type="number" id="voice-speed" class="export-input" min="0.5" max="2" step="0.05" value="1">
+          </div>
+          <div class="export-control-row" id="voice-rate-row">
+            <label for="voice-rate">Velocidad (Edge TTS)</label>
+            <input type="text" id="voice-rate" class="export-input" placeholder="+6%" value="+6%">
+          </div>
+          <div class="export-control-row" id="voice-pitch-row">
+            <label for="voice-pitch">Tono (Edge TTS)</label>
+            <input type="text" id="voice-pitch" class="export-input" placeholder="+0Hz" value="+0Hz">
           </div>
           <div class="export-control-row">
             <label for="voice-pause">Pausa entre párrafos (s)</label>
             <input type="number" id="voice-pause" class="export-input" min="0" max="3" step="0.1" value="0.3">
           </div>
+        </div>
+        <div class="voice-engine-notes">
+          <p class="engine-note warning">⚠ No oficial: puede dejar de funcionar</p>
+          <p class="engine-note info">🌐 Requiere internet</p>
         </div>
         <button id="voice-sample-btn" class="btn btn-secondary btn-sm" type="button">Escuchar muestra</button>
         <label for="voice-text" class="audio-label">Texto que se va a leer (editable)</label>

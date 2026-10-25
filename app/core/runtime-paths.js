@@ -65,6 +65,20 @@ function resolveKokoroRuntime(options = {}) {
   return { dir, executable, modelsDir, searched };
 }
 
+function resolveEdgeRuntime(options = {}) {
+  const searched = bundledSearchDirs('kokoro', options);
+  const dir = resolveBundledDir('kokoro', options);
+  if (!dir) {
+    return { dir: null, executable: null, runnerPath: null, searched };
+  }
+  const runnerPath = firstExisting([
+    path.join(dir, 'runtime', 'edge-runner.py'),
+    path.join(dir, 'edge-runner.py'),
+    path.join(dir, 'kokoro', 'edge-runner.py')
+  ]);
+  return { dir, executable: null, runnerPath, searched };
+}
+
 function resolveWhisperRuntime(options = {}) {
   const searched = bundledSearchDirs('whisper', options);
   const dir = resolveBundledDir('whisper', options);
@@ -92,5 +106,6 @@ module.exports = {
   bundledSearchDirs,
   resolveBundledDir,
   resolveKokoroRuntime,
+  resolveEdgeRuntime,
   resolveWhisperRuntime
 };

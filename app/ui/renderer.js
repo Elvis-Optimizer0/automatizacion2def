@@ -768,14 +768,38 @@ function syncVoiceControls() {
   if (engine && voice.engine) engine.value = voice.engine;
   const speed = document.getElementById('voice-speed');
   if (speed) speed.value = voice.speed;
+  const rate = document.getElementById('voice-rate');
+  if (rate) rate.value = voice.rate || '+6%';
+  const pitch = document.getElementById('voice-pitch');
+  if (pitch) pitch.value = voice.pitch || '+0Hz';
   const pause = document.getElementById('voice-pause');
   if (pause) pause.value = voice.pause;
   const select = document.getElementById('voice-select');
   if (select && voice.voiceId && voiceState.voices.some(v => v.id === voice.voiceId)) {
     select.value = voice.voiceId;
   }
+  updateEngineUI(voice.engine);
   updateVoiceButtons();
   refreshVoiceSelect();
+}
+
+function updateEngineUI(engine) {
+  const speedRow = document.getElementById('voice-speed')?.closest('.export-control-row');
+  const rateRow = document.getElementById('voice-rate-row');
+  const pitchRow = document.getElementById('voice-pitch-row');
+  const notes = document.querySelector('.voice-engine-notes');
+  
+  if (engine === 'edge') {
+    if (speedRow) speedRow.style.display = 'none';
+    if (rateRow) rateRow.style.display = 'flex';
+    if (pitchRow) pitchRow.style.display = 'flex';
+    if (notes) notes.style.display = 'block';
+  } else {
+    if (speedRow) speedRow.style.display = 'flex';
+    if (rateRow) rateRow.style.display = 'none';
+    if (pitchRow) pitchRow.style.display = 'none';
+    if (notes) notes.style.display = 'none';
+  }
 }
 
 function fillVoiceTextFromScript() {
@@ -849,17 +873,20 @@ async function handleGenerateVoice() {
     return;
   }
 
-  const modelsInfo = await window.api.listModels();
-  
-  const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
-  if (!kokoro || !kokoro.installed) {
-    showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
-    return;
-  }
-  const whisper = modelsInfo.models.find(m => m.id === 'whisper');
-  if (!whisper || !whisper.installed) {
-    showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
-    return;
+  const engine = state.config.voice.engine || 'kokoro';
+  if (engine === 'kokoro') {
+    const modelsInfo = await window.api.listModels();
+    
+    const kokoro = modelsInfo.models.find(m => m.id === 'kokoro');
+    if (!kokoro || !kokoro.installed) {
+      showToast('Falta el modelo Kokoro. Descárgalo o impórtalo primero.', 'error');
+      return;
+    }
+    const whisper = modelsInfo.models.find(m => m.id === 'whisper');
+    if (!whisper || !whisper.installed) {
+      showToast('Falta el modelo Whisper. Descárgalo o impórtalo primero.', 'error');
+      return;
+    }
   }
 
   voiceState.generating = true;
@@ -869,13 +896,18 @@ async function handleGenerateVoice() {
   const removeListener = window.api.onVoiceProgress((progress) => setVoiceProgress(progress.progress));
 
   try {
-    const result = await window.api.generateVoice({
+    const options = {
       text,
       language: state.config.voice.language,
       voiceId: state.config.voice.voiceId,
       speed: state.config.voice.speed,
       pause: state.config.voice.pause
-    });
+    };
+    if (engine === 'edge') {
+      options.rate = state.config.voice.rate || '+6%';
+      options.pitch = state.config.voice.pitch || '+0Hz';
+    }
+    const result = await window.api.generateVoice(options);
     await applyGeneratedNarration(result);
     setVoiceProgress(100);
     setVoiceStatus(`Voz generada (${formatTime(result.duration)})`, 'success');
@@ -909,11 +941,17 @@ async function handleCancelVoice() {
 
 async function handleVoiceSample() {
   try {
-    const result = await window.api.generateVoiceSample({
+    const engine = state.config.voice.engine || 'kokoro';
+    const options = {
       language: state.config.voice.language,
       voiceId: state.config.voice.voiceId,
       speed: state.config.voice.speed
-    });
+    };
+    if (engine === 'edge') {
+      options.rate = state.config.voice.rate || '+6%';
+      options.pitch = state.config.voice.pitch || '+0Hz';
+    }
+    const result = await window.api.generateVoiceSample(options);
     if (voiceState.sampleAudio) voiceState.sampleAudio.pause();
     voiceState.sampleAudio = new Audio(`file://${result.path}`);
     await voiceState.sampleAudio.play();
@@ -3243,6 +3281,7 @@ const CONTROLS = [
       state.config.voice.voiceId = '';
       refreshVoiceSelect();
       updateVoiceButtons();
+      updateEngineUI(e.target.value);
     }
   },
   {
@@ -3266,6 +3305,20 @@ const CONTROLS = [
     handler: (e) => {
       const value = parseFloat(e.target.value);
       state.config.voice.pause = isNaN(value) ? 0.3 : Math.min(3, Math.max(0, value));
+    }
+  },
+  {
+    id: 'voice-rate',
+    tipo: 'input',
+    handler: (e) => {
+      state.config.voice.rate = e.target.value || '+6%';
+    }
+  },
+  {
+    id: 'voice-pitch',
+    tipo: 'input',
+    handler: (e) => {
+      state.config.voice.pitch = e.target.value || '+0Hz';
     }
   },
   {

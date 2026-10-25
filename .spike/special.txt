@@ -1,0 +1,1 @@
+Prueba con caracteres especiales: & < > " ' á é í ó ú ñ ¿ ¡ € $ 123 45.67

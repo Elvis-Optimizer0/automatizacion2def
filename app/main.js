@@ -423,7 +423,10 @@ ipcMain.handle('voice:sample', async (_, options) => {
   const language = opts.language === 'en' ? 'en' : 'es';
   const voices = listVoiceCatalog(language);
   const voiceId = opts.voiceId || (voices[0] ? voices[0].id : '');
-  return runVoiceGeneration(getSamplePhrase(language), { language, voiceId, speed: opts.speed || 1, pause: 0.2 });
+  const sampleOpts = { language, voiceId, speed: opts.speed || 1, pause: 0.2 };
+  if (opts.rate) sampleOpts.rate = opts.rate;
+  if (opts.pitch) sampleOpts.pitch = opts.pitch;
+  return runVoiceGeneration(getSamplePhrase(language), sampleOpts);
 });
 
 ipcMain.handle('voice:cancel', async () => {

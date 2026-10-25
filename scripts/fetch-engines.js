@@ -13,7 +13,7 @@ const CACHE = path.join(ROOT, '.engine-cache');
 const STAMP = path.join(VENDOR, '.engines-stamp.json');
 const ASSETS = path.join(__dirname, 'assets');
 
-const CONFIG_VERSION = '2026-10-18-v1';
+const CONFIG_VERSION = '2026-10-25-v1';
 
 const PYTHON_VERSION = '3.13.16';
 const PIP_PACKAGES = [
@@ -22,7 +22,8 @@ const PIP_PACKAGES = [
   'numpy==2.5.4',
   'soundfile==0.14.0',
   'phonemizer==3.4.0',
-  'espeakng-loader==0.2.4'
+  'espeakng-loader==0.2.4',
+  'edge-tts==7.3.1'
 ];
 
 const ARTIFACTS = {
@@ -301,22 +302,23 @@ function buildLauncher() {
   const exe = path.join(PATHS.runtimeDir, 'kokoro-runtime.exe');
   if (!FORCE && fs.existsSync(exe)) {
     log('kokoro-runtime.exe ya compilado');
-    return;
+  } else {
+    ensureDir(PATHS.runtimeDir);
+    const csc = path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
+    if (!fs.existsSync(csc)) {
+      fail(`no se encontró csc.exe en ${csc}; se necesita .NET Framework 4.x para compilar el lanzador.`);
+    }
+    log('compilando kokoro-runtime.exe');
+    run(csc, [
+      '/nologo',
+      '/target:exe',
+      '/platform:x64',
+      `/out:${exe}`,
+      path.join(ASSETS, 'kokoro-launcher.cs')
+    ]);
   }
-  ensureDir(PATHS.runtimeDir);
-  const csc = path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
-  if (!fs.existsSync(csc)) {
-    fail(`no se encontró csc.exe en ${csc}; se necesita .NET Framework 4.x para compilar el lanzador.`);
-  }
-  log('compilando kokoro-runtime.exe');
-  run(csc, [
-    '/nologo',
-    '/target:exe',
-    '/platform:x64',
-    `/out:${exe}`,
-    path.join(ASSETS, 'kokoro-launcher.cs')
-  ]);
   fs.copyFileSync(path.join(ASSETS, 'kokoro-runner.py'), path.join(PATHS.runtimeDir, 'runner.py'));
+  fs.copyFileSync(path.join(ASSETS, 'edge-runner.py'), path.join(PATHS.runtimeDir, 'edge-runner.py'));
 }
 
 async function installEspeak() {

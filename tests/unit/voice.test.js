@@ -152,3 +152,58 @@ test.describe('simulated voice generation', () => {
     }
   });
 });
+
+test.describe('edge voice catalog', () => {
+  test('includes edge voices for Spanish and English', () => {
+    const edgeVoices = VOICE_CATALOG.filter(v => v.engine === 'edge');
+    expect(edgeVoices.length).toBeGreaterThan(0);
+    const esEdge = edgeVoices.filter(v => v.language === 'es');
+    const enEdge = edgeVoices.filter(v => v.language === 'en');
+    expect(esEdge.length).toBeGreaterThan(0);
+    expect(enEdge.length).toBeGreaterThan(0);
+    expect(esEdge.map(v => v.id)).toContain('es-MX-JorgeNeural');
+    expect(enEdge.map(v => v.id)).toContain('en-US-AriaNeural');
+  });
+
+  test('listVoices filters by engine', () => {
+    const edgeEs = listVoices('es', 'edge');
+    const kokoroEs = listVoices('es', 'kokoro');
+    expect(edgeEs.every(v => v.engine === 'edge')).toBe(true);
+    expect(kokoroEs.every(v => v.engine === 'kokoro')).toBe(true);
+    expect(edgeEs.map(v => v.id)).toContain('es-MX-JorgeNeural');
+    expect(kokoroEs.map(v => v.id)).toContain('ef_dora');
+  });
+});
+
+test.describe('edge engine resolution', () => {
+  test('returns null when no bundled edge runtime', () => {
+    expect(resolveEngine('es-MX-JorgeNeural', {}, { bundled: false })).toBeNull();
+  });
+
+  test('checkVoiceEngine reports missing edge runtime components', () => {
+    const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vm-edge-models-'));
+    try {
+      const readiness = checkVoiceEngine('es-MX-JorgeNeural', {}, modelsDir, { bundled: false });
+      expect(readiness.engine).toBe('edge');
+      expect(readiness.ready).toBe(false);
+      expect(readiness.runtime).toBeNull();
+      expect(readiness.runnerPath).toBeNull();
+    } finally {
+      fs.rmSync(modelsDir, { recursive: true, force: true });
+    }
+  });
+
+  test('buildVoiceEngineError includes edge-specific messages', () => {
+    const readiness = {
+      engine: 'edge',
+      runtime: null,
+      runnerPath: null,
+      runtimeSearchDirs: [],
+      bundledDir: null,
+      modelFound: true,
+      missingFiles: []
+    };
+    const message = buildVoiceEngineError(readiness);
+    expect(message).toContain('falta el runtime de edge');
+  });
+});

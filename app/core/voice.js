@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { checkModelFiles } = require('./models.js');
-const { resolveKokoroRuntime } = require('./runtime-paths.js');
+const { resolveKokoroRuntime, resolveEdgeRuntime } = require('./runtime-paths.js');
 
 const E_VOICE_ENGINE_MISSING = 'E_VOICE_ENGINE_MISSING';
 const E_VOICE_FAILED = 'E_VOICE_FAILED';
@@ -24,7 +24,27 @@ const VOICE_CATALOG = [
   { id: 'am_michael', name: 'Michael', language: 'en', engine: 'kokoro', quality: 'alta' },
   { id: 'am_adam', name: 'Adam', language: 'en', engine: 'kokoro', quality: 'alta' },
   { id: 'bf_emma', name: 'Emma', language: 'en', engine: 'kokoro', quality: 'media' },
-  { id: 'bm_george', name: 'George', language: 'en', engine: 'kokoro', quality: 'media' }
+  { id: 'bm_george', name: 'George', language: 'en', engine: 'kokoro', quality: 'alta' },
+  { id: 'es-MX-JorgeNeural', name: 'Jorge (México)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-MX-DaliaNeural', name: 'Dalia (México)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-ES-AlvaroNeural', name: 'Álvaro (España)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-ES-ElviraNeural', name: 'Elvira (España)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-ES-XimenaNeural', name: 'Ximena (España)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-AR-ElenaNeural', name: 'Elena (Argentina)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-AR-TomasNeural', name: 'Tomás (Argentina)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-CO-GonzaloNeural', name: 'Gonzalo (Colombia)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-CO-SalomeNeural', name: 'Salomé (Colombia)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-CL-CatalinaNeural', name: 'Catalina (Chile)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-CL-LorenzoNeural', name: 'Lorenzo (Chile)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-EC-AndreaNeural', name: 'Andrea (Ecuador)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'es-EC-LuisNeural', name: 'Luis (Ecuador)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-US-AlonsoNeural', name: 'Alonso (EE. UU.)', language: 'es', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'es-US-PalomaNeural', name: 'Paloma (EE. UU.)', language: 'es', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'en-US-AriaNeural', name: 'Aria (EE. UU.)', language: 'en', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'en-US-GuyNeural', name: 'Guy (EE. UU.)', language: 'en', engine: 'edge', quality: 'alta', gender: 'male' },
+  { id: 'en-US-JennyNeural', name: 'Jenny (EE. UU.)', language: 'en', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'en-GB-LibbyNeural', name: 'Libby (Reino Unido)', language: 'en', engine: 'edge', quality: 'alta', gender: 'female' },
+  { id: 'en-GB-RyanNeural', name: 'Ryan (Reino Unido)', language: 'en', engine: 'edge', quality: 'alta', gender: 'male' }
 ];
 
 const SAMPLE_PHRASES = {
@@ -38,9 +58,13 @@ function normalizeLanguage(language) {
   return 'es';
 }
 
-function listVoices(language) {
+function listVoices(language, engine) {
   const lang = normalizeLanguage(language);
-  return VOICE_CATALOG.filter(voice => voice.language === lang);
+  let voices = VOICE_CATALOG.filter(voice => voice.language === lang);
+  if (engine) {
+    voices = voices.filter(voice => voice.engine === engine);
+  }
+  return voices;
 }
 
 function getVoice(voiceId) {
@@ -101,6 +125,22 @@ function resolveEngine(voiceId, env = process.env, options = {}) {
     return null;
   }
 
+  if (engine === 'edge') {
+    const bundled = resolveEdgeRuntime(options);
+    if (bundled.runnerPath) {
+      const pythonExe = path.join(bundled.dir, 'runtime', 'python', 'python.exe');
+      if (fs.existsSync(pythonExe)) {
+        return {
+          engine: 'edge',
+          pythonExe,
+          runnerPath: bundled.runnerPath,
+          source: 'bundled'
+        };
+      }
+    }
+    return null;
+  }
+
   return null;
 }
 
@@ -108,29 +148,60 @@ function checkVoiceEngine(voiceId, env = process.env, modelsDir, options = {}) {
   const voice = getVoice(voiceId);
   const engine = voice ? voice.engine : 'kokoro';
 
-  const bundled = resolveKokoroRuntime(options);
+  if (engine === 'kokoro') {
+    const bundled = resolveKokoroRuntime(options);
 
-  const runtime = bundled.executable
-    || (isUsableBinary(env.VM_KOKORO_BIN) ? env.VM_KOKORO_BIN : null);
+    const runtime = bundled.executable
+      || (isUsableBinary(env.VM_KOKORO_BIN) ? env.VM_KOKORO_BIN : null);
 
-  const modelsBaseDir = bundled.executable
-    ? bundled.modelsDir
-    : modelsDir || null;
+    const modelsBaseDir = bundled.executable
+      ? bundled.modelsDir
+      : modelsDir || null;
 
-  const modelInfo = checkModelFiles(modelsBaseDir, engine);
+    const modelInfo = checkModelFiles(modelsBaseDir, engine);
+
+    return {
+      engine,
+      runtimeEnv: 'VM_KOKORO_BIN',
+      runtime,
+      bundled: !!bundled.executable,
+      bundledDir: bundled.dir,
+      runtimeSearchDirs: bundled.searched || [],
+      modelsDir: modelsBaseDir,
+      modelDir: modelInfo.modelDir,
+      modelFound: modelInfo.modelFound,
+      missingFiles: modelInfo.missingFiles,
+      ready: !!runtime && modelInfo.missingFiles.length === 0
+    };
+  }
+
+  if (engine === 'edge') {
+    const bundled = resolveEdgeRuntime(options);
+    const hasPython = !!bundled.dir && fs.existsSync(path.join(bundled.dir, 'runtime', 'python', 'python.exe'));
+    const pythonExe = hasPython ? path.join(bundled.dir, 'runtime', 'python', 'python.exe') : null;
+    const hasRunner = !!bundled.runnerPath;
+    const hasEdgeTts = hasPython && fs.existsSync(path.join(path.dirname(pythonExe), 'Lib', 'site-packages', 'edge_tts', '__init__.py'));
+
+    return {
+      engine: 'edge',
+      runtimeEnv: 'VM_EDGE_PYTHON',
+      runtime: hasPython ? pythonExe : null,
+      runnerPath: bundled.runnerPath,
+      bundled: hasPython && hasRunner && hasEdgeTts,
+      bundledDir: bundled.dir,
+      runtimeSearchDirs: bundled.searched || [],
+      modelsDir: null,
+      modelDir: null,
+      modelFound: true,
+      missingFiles: [],
+      ready: hasPython && hasRunner && hasEdgeTts
+    };
+  }
 
   return {
     engine,
-    runtimeEnv: 'VM_KOKORO_BIN',
-    runtime,
-    bundled: !!bundled.executable,
-    bundledDir: bundled.dir,
-    runtimeSearchDirs: bundled.searched || [],
-    modelsDir: modelsBaseDir,
-    modelDir: modelInfo.modelDir,
-    modelFound: modelInfo.modelFound,
-    missingFiles: modelInfo.missingFiles,
-    ready: !!runtime && modelInfo.missingFiles.length === 0
+    runtime: null,
+    ready: false
   };
 }
 
@@ -149,7 +220,17 @@ function buildVoiceEngineError(readiness) {
       : '';
     details.push(`falta el runtime de ${readiness.engine}${where}`);
   }
-  return `${E_VOICE_ENGINE_MISSING}: ${details.length ? details.join('; ') : 'no hay motor de voz local instalado'}`;
+  if (readiness.engine === 'edge' && readiness.runtime && !readiness.runnerPath) {
+    details.push('falta edge-runner.py en el directorio del runtime');
+  }
+  if (readiness.engine === 'edge' && readiness.runtime && readiness.runnerPath) {
+    const pythonExe = path.join(readiness.bundledDir, 'runtime', 'python', 'python.exe');
+    const edgeTtsPath = path.join(path.dirname(pythonExe), 'Lib', 'site-packages', 'edge_tts', '__init__.py');
+    if (!fs.existsSync(edgeTtsPath)) {
+      details.push('falta el paquete edge-tts en el Python embebido (ejecute fetch-engines)');
+    }
+  }
+  return `${E_VOICE_ENGINE_MISSING}: ${details.length ? details.join('; ') : 'no hay motor de voz instalado'}`;
 }
 
 function buildEngineArgs(engine, options) {
@@ -158,6 +239,8 @@ function buildEngineArgs(engine, options) {
   if (options.voiceId) args.push('--voice', options.voiceId);
   if (voice && voice.language) args.push('--lang', voice.language);
   if (options.speed) args.push('--speed', String(options.speed));
+  if (options.rate) args.push('--rate', String(options.rate));
+  if (options.pitch) args.push('--pitch', String(options.pitch));
   return args;
 }
 
@@ -198,8 +281,13 @@ function synthesizeVoice(options, hooks = {}) {
         reject(new Error(buildVoiceEngineError(readiness)));
         return;
       }
-      command = engine.executable;
-      args = buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause });
+      if (engine.engine === 'kokoro') {
+        command = engine.executable;
+        args = buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause });
+      } else if (engine.engine === 'edge') {
+        command = engine.pythonExe;
+        args = [engine.runnerPath, ...buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause })];
+      }
     }
 
     const childEnv = testMode
