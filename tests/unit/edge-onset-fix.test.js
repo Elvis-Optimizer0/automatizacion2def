@@ -8,6 +8,11 @@ const ROOT = path.join(__dirname, '..', '..');
 const EDGE_RUNNER = path.join(ROOT, 'vendor', 'kokoro', 'runtime', 'edge-runner.py');
 const PYTHON_EXE = path.join(ROOT, 'vendor', 'kokoro', 'runtime', 'python', 'python.exe');
 
+// Check if Edge TTS runtime is available
+function isEdgeRuntimeAvailable() {
+  return fs.existsSync(EDGE_RUNNER) && fs.existsSync(PYTHON_EXE);
+}
+
 function runEdgeTts(text, voice, rate, pitch, outputPath) {
   return new Promise((resolve, reject) => {
     const args = [
@@ -80,45 +85,52 @@ function runEdgeTts(text, voice, rate, pitch, outputPath) {
 
 function analyzeWavOnset(filepath) {
   return new Promise((resolve, reject) => {
-    const pythonScript = 'import wave, sys, struct, math\n' +
-      'filepath = sys.argv[1]\n' +
-      'with wave.open(filepath, \'rb\') as wf:\n' +
-      '    n_channels = wf.getnchannels()\n' +
-      '    sample_width = wf.getsampwidth()\n' +
-      '    framerate = wf.getframerate()\n' +
-      '    n_frames = wf.getnframes()\n' +
-      '    frames_10ms = int(framerate * 0.01)\n' +
-      '    wf.setpos(0)\n' +
-      '    raw_data = wf.readframes(frames_10ms)\n' +
-      '    if sample_width == 2:\n' +
-      '        fmt = \'<\' + \'h\' * (len(raw_data) // 2)\n' +
-      '        samples = struct.unpack(fmt, raw_data)\n' +
-      '    elif sample_width == 1:\n' +
-      '        fmt = \'<\' + \'B\' * len(raw_data)\n' +
-      '        samples = struct.unpack(fmt, raw_data)\n' +
-      '        samples = [s - 128 for s in samples]\n' +
-      '    else:\n' +
-      '        print("ERROR: Unsupported sample width")\n' +
-      '        sys.exit(1)\n' +
-      '    if n_channels == 2:\n' +
-      '        mono = [(samples[i] + samples[i+1]) / 2.0 for i in range(0, len(samples), 2)]\n' +
-      '        samples = mono\n' +
-      '    first_nonzero = -1\n' +
-      '    for i, s in enumerate(samples):\n' +
-      '        if abs(s) > 0:\n' +
-      '            first_nonzero = i\n' +
-      '            break\n' +
-      '    if first_nonzero >= 0:\n' +
-      '        time_ms = first_nonzero / framerate * 1000\n' +
-      '        print("FIRST_NONZERO_MS:" + str(time_ms))\n' +
-      '    else:\n' +
-      '        print("FIRST_NONZERO_MS:SILENCE")';
+    const pythonScript = `
+import wave, sys, struct, math
+filepath = sys.argv[1]
+with wave.open(filepath, 'rb') as wf:
+    n_channels = wf.getnchannels()
+    sample_width = wf.getsampwidth()
+    framerate = wf.getframerate()
+    n_frames = wf.getnframes()
+    frames_10ms = int(framerate * 0.01)
+    wf.setpos(0)
+    raw_data = wf.readframes(frames_10ms)
+    if sample_width == 2:
+        fmt = '<' + 'h' * (len(raw_data) // 2)
+        samples = struct.unpack(fmt, raw_data)
+    elif sample_width == 1:
+        fmt = '<' + 'B' * len(raw_data)
+        samples = struct.unpack(fmt, raw_data)
+        samples = [s - 128 for s in samples]
+    else:
+        print("ERROR: Unsupported sample width")
+        sys.exit(1)
+    if n_channels == 2:
+        mono = [(samples[i] + samples[i+1]) / 2.0 for i in range(0, len(samples), 2)]
+        samples = mono
+    first_nonzero = -1
+    for i, s in enumerate(samples):
+        if abs(s) > 0:
+            first_nonzero = i
+            break
+    if first_nonzero >= 0:
+        time_ms = first_nonzero / framerate * 1000
+        print("FIRST_NONZERO_MS:" + str(time_ms))
+    else:
+        print("FIRST_NONZERO_MS:SILENCE")
+`;
     
-    const python = spawn('python', ['-c', pythonScript, filepath], { windowsHide: true });
+    // Write script to temp file to avoid indentation issues with -c
+    const scriptPath = path.join(os.tmpdir(), 'analyze_onset_' + Date.now() + '.py');
+    fs.writeFileSync(scriptPath, pythonScript);
+    
+    const python = spawn('python', [scriptPath, filepath], { windowsHide: true });
     let stdout = '';
     python.stdout.on('data', d => stdout += d.toString());
     python.stderr.on('data', d => console.error('[py err]', d.toString()));
     python.on('close', code => {
+      fs.unlink(scriptPath, () => {}); // cleanup
       if (code === 0) {
         const match = stdout.match(/FIRST_NONZERO_MS:([\d.]+|SILENCE)/);
         if (match) {
@@ -133,6 +145,9 @@ function analyzeWavOnset(filepath) {
   });
 }
 
+// Skip tests if Edge runtime is not available (e.g., in CI unit test environment)
+const skipIfNoEdgeRuntime = isEdgeRuntimeAvailable() ? test : test.skip;
+
 test.describe('Edge TTS onset fix', () => {
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edge-onset-'));
   const voice = 'es-MX-JorgeNeural';
@@ -144,7 +159,7 @@ test.describe('Edge TTS onset fix', () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  test('pipeline output has no leading silence (onset at ~0ms)', async () => {
+  skipIfNoEdgeRuntime('pipeline output has no leading silence (onset at ~0ms)', async () => {
     const outputPath = path.join(testDir, 'test_onset.wav');
     
     await runEdgeTts(testText, voice, rate, pitch, outputPath);
@@ -161,7 +176,7 @@ test.describe('Edge TTS onset fix', () => {
     expect(onset).toBeLessThan(10);
   });
 
-  test('raw edge-tts MP3 still has leading silence (sanity check)', async () => {
+  skipIfNoEdgeRuntime('raw edge-tts MP3 still has leading silence (sanity check)', async () => {
     const runPython = (script, args) => new Promise((resolve, reject) => {
       const child = spawn(PYTHON_EXE, ['-c', script, ...args], { windowsHide: true });
       let stdout = '', stderr = '';
