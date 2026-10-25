@@ -233,6 +233,8 @@ function buildVoiceEngineError(readiness) {
   return `${E_VOICE_ENGINE_MISSING}: ${details.length ? details.join('; ') : 'no hay motor de voz instalado'}`;
 }
 
+const ffmpegStatic = require('ffmpeg-static');
+
 function buildEngineArgs(engine, options) {
   const voice = getVoice(options.voiceId);
   const args = ['--output', options.outputPath];
@@ -241,6 +243,7 @@ function buildEngineArgs(engine, options) {
   if (options.speed) args.push('--speed', String(options.speed));
   if (options.rate) args.push('--rate', String(options.rate));
   if (options.pitch) args.push('--pitch', String(options.pitch));
+  if (options.ffmpegPath) args.push('--ffmpeg', options.ffmpegPath);
   return args;
 }
 
@@ -288,7 +291,7 @@ function synthesizeVoice(options, hooks = {}) {
         args = buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause });
       } else if (engine.engine === 'edge') {
         command = engine.pythonExe;
-        args = [engine.runnerPath, ...buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause })];
+        args = [engine.runnerPath, ...buildEngineArgs(engine, { ...opts, outputPath, language, speed, pause, ffmpegPath: ffmpegStatic })];
       }
     }
 

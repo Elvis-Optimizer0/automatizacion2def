@@ -36,7 +36,7 @@ async def synthesize_chunk(communicate, output_path):
         return False
 
 
-def mp3_to_wav(mp3_path, wav_path):
+def mp3_to_wav(mp3_path, wav_path, ffmpeg_path):
     """Convert MP3 to 48kHz stereo WAV using ffmpeg, trimming leading silence."""
     import subprocess
     try:
@@ -46,7 +46,7 @@ def mp3_to_wav(mp3_path, wav_path):
         # start_duration=0.05: minimum silence duration to trigger removal (50ms)
         # start_silence=0.05: same as start_duration
         result = subprocess.run([
-            "ffmpeg", "-y", "-i", mp3_path,
+            ffmpeg_path, "-y", "-i", mp3_path,
             "-af", "silenceremove=start_periods=1:start_threshold=-50dB:start_duration=0.05:start_silence=0.05",
             "-ar", "48000", "-ac", "2",
             "-c:a", "pcm_s16le", wav_path
@@ -79,6 +79,7 @@ async def main():
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--rate", default="+6%")
     parser.add_argument("--pitch", default="+0Hz")
+    parser.add_argument("--ffmpeg", help="Path to ffmpeg executable")
     args = parser.parse_args()
 
     payload = read_payload()
@@ -128,7 +129,8 @@ async def main():
     emit({"type": "progress", "progress": 80, "message": "convirtiendo audio"})
 
     # Convert MP3 to 48kHz stereo WAV
-    if not mp3_to_wav(mp3_path, output):
+    ffmpeg_path = args.ffmpeg if args.ffmpeg else "ffmpeg"
+    if not mp3_to_wav(mp3_path, output, ffmpeg_path):
         return 7
 
     # Clean up temp MP3
