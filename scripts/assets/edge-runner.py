@@ -37,11 +37,17 @@ async def synthesize_chunk(communicate, output_path):
 
 
 def mp3_to_wav(mp3_path, wav_path):
-    """Convert MP3 to 48kHz stereo WAV using ffmpeg."""
+    """Convert MP3 to 48kHz stereo WAV using ffmpeg, trimming leading silence."""
     import subprocess
     try:
+        # silenceremove: trim leading silence (edge-tts produces ~91ms leading silence)
+        # start_periods=1: remove silence from start
+        # start_threshold=-50dB: silence threshold
+        # start_duration=0.05: minimum silence duration to trigger removal (50ms)
+        # start_silence=0.05: same as start_duration
         result = subprocess.run([
             "ffmpeg", "-y", "-i", mp3_path,
+            "-af", "silenceremove=start_periods=1:start_threshold=-50dB:start_duration=0.05:start_silence=0.05",
             "-ar", "48000", "-ac", "2",
             "-c:a", "pcm_s16le", wav_path
         ], capture_output=True, timeout=60)
