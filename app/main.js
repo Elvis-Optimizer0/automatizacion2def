@@ -409,7 +409,9 @@ async function runVoiceGeneration(text, options) {
     const result = await synthesizeVoice({ ...options, text, outputPath, modelsDir }, { onProgress, signal: controller.signal });
     return { path: result.outputPath, name: path.basename(result.outputPath), duration: result.duration };
   } finally {
-    if (activeVoiceController === controller) activeVoiceController = null;
+    if (activeVoiceController === controller) {
+      activeVoiceController = null;
+    }
   }
 }
 
@@ -432,7 +434,6 @@ ipcMain.handle('voice:sample', async (_, options) => {
 ipcMain.handle('voice:cancel', async () => {
   if (activeVoiceController) {
     activeVoiceController.abort();
-    activeVoiceController = null;
     return { cancelled: true };
   }
   return { cancelled: false };

@@ -244,6 +244,8 @@ function buildEngineArgs(engine, options) {
   return args;
 }
 
+const SYNTHESIS_TIMEOUT_MS = 180000;
+
 function synthesizeVoice(options, hooks = {}) {
   return new Promise((resolve, reject) => {
     const opts = options || {};
@@ -309,12 +311,21 @@ function synthesizeVoice(options, hooks = {}) {
     let stdout = '';
     let stderr = '';
 
+    const timeoutTimer = setTimeout(() => {
+      if (!settled) {
+        cancelled = true;
+        try { child.kill(); } catch (err) { void err; }
+        finish(reject, new Error(`${E_VOICE_FAILED}: synthesis timed out after ${SYNTHESIS_TIMEOUT_MS / 1000}s`));
+      }
+    }, SYNTHESIS_TIMEOUT_MS);
+
     const onAbort = () => {
       cancelled = true;
       try { child.kill(); } catch (err) { void err; }
     };
 
     const cleanup = () => {
+      clearTimeout(timeoutTimer);
       if (hooks.signal && typeof hooks.signal.removeEventListener === 'function') {
         hooks.signal.removeEventListener('abort', onAbort);
       }
@@ -352,9 +363,9 @@ function synthesizeVoice(options, hooks = {}) {
 
     child.stderr.on('data', (data) => { stderr += data.toString(); });
 
-    const wantsStdin = testMode || (engine && engine.engine === 'kokoro');
+    const wantsStdin = testMode || (engine && (engine.engine === 'kokoro' || engine.engine === 'edge'));
     if (wantsStdin) {
-      child.stdin.write(JSON.stringify({ outputPath, duration, text, language, speed, pause, voiceId: opts.voiceId }));
+      child.stdin.write(JSON.stringify({ outputPath, duration, text, language, speed, pause, voiceId: opts.voiceId, rate: opts.rate, pitch: opts.pitch }));
       child.stdin.end();
     }
 
