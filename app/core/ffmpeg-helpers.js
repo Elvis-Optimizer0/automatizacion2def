@@ -14,7 +14,11 @@ const HEIGHT = 1080;
 const FIT_MODES = ['cover', 'blur', 'frame'];
 
 const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
-const ZOOM_MODES = ['fixed', 'alternate', 'random'];
+// ZOOM_MODES: 'fixed' = one effect for all scenes (Fijo)
+// 'alternate' = flip opposites on odd scenes (existing)
+// 'random' = random from all RANDOM_ZOOM_TYPES (existing)
+// 'checked' = random from user-checked effects, no repeats (Aleatorio)
+const ZOOM_MODES = ['fixed', 'alternate', 'random', 'checked'];
 const RANDOM_ZOOM_TYPES = ['kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
 const ZOOM_OPPOSITE = {
   zoomIn: 'zoomOut',
@@ -163,7 +167,7 @@ function seededRandom(seed, index) {
   return (t >>> 0) / 4294967296;
 }
 
-function resolveZoomType(baseType, mode, index, seed) {
+function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
   const base = ZOOM_TYPES.includes(baseType) ? baseType : 'kenburns';
   if (mode === 'random') {
     const r = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index);
@@ -172,57 +176,109 @@ function resolveZoomType(baseType, mode, index, seed) {
   if (mode === 'alternate') {
     return index % 2 === 0 ? base : (ZOOM_OPPOSITE[base] || base);
   }
+  if (mode === 'checked') {
+    const checked = Array.isArray(checkedEffects) && checkedEffects.length > 0
+      ? checkedEffects.filter(t => RANDOM_ZOOM_TYPES.includes(t))
+      : RANDOM_ZOOM_TYPES;
+    if (checked.length === 0) return base;
+    if (checked.length === 1) return checked[0];
+    // Pick from checked effects, avoiding same as previous scene
+    const r = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index);
+    let pick = checked[Math.floor(r * checked.length) % checked.length];
+    if (index > 0) {
+      const prevR = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index - 1);
+      const prevPick = checked[Math.floor(prevR * checked.length) % checked.length];
+      if (pick === prevPick) {
+        // Shift to next effect in checked list
+        const idx = checked.indexOf(pick);
+        pick = checked[(idx + 1) % checked.length];
+      }
+    }
+    return pick;
+  }
   return base;
 }
 
-function buildZoomFilter(scene, w, h, options, focus) {
+// Zoom filter v2: uses sub-pixel precise crop on upscaled source with continuous time and smoothstep easing
+function buildZoomFilterV2(scene, w, h, options, focus) {
   const type = ZOOM_TYPES.includes(options.zoomType) ? options.zoomType : 'kenburns';
   if (type === 'none') return '';
 
   const start = num(options.zoomStartScale != null ? options.zoomStartScale : 1.0);
   const intensity = num(options.zoomIntensity != null ? options.zoomIntensity : 0.15);
-  const frames = Math.max(1, Math.round(scene.duration * FPS));
+  const duration = num(scene.duration);
   const maxZoom = num(start + intensity);
   const around = num(start + intensity / 2);
   const fx = num(clamp01(focus.x));
   const fy = num(clamp01(focus.y));
 
-  const progress = `on/${frames}`;
-  const xCenter = `iw*${fx}-iw/zoom/2`;
-  const yCenter = `ih*${fy}-ih/zoom/2`;
-  const clampX = (expr) => `max(0,min(iw-iw/zoom,${expr}))`;
-  const clampY = (expr) => `max(0,min(ih-ih/zoom,${expr}))`;
-  const zIn = `min(${start}+${intensity}*${progress},${maxZoom})`;
-  const zOut = `max(${maxZoom}-${intensity}*${progress},${start})`;
-  const zPulse = `${around}-${num(intensity / 2)}*cos(2*PI*${progress})`;
+  // Upscale factor: 3x for quality/speed balance
+  const UPSCALE = 3;
+  const uw = w * UPSCALE;
+  const uh = h * UPSCALE;
 
-  let zExpr = zIn;
-  let xExpr = xCenter;
-  let yExpr = yCenter;
+  // Smoothstep easing: 3t^2 - 2t^3 for t in [0,1]
+  const ease = `t/${duration}`;
+  const smooth = `3*${ease}*${ease}-2*${ease}*${ease}*${ease}`;
 
+  // Zoom expression using continuous time with smoothstep
+  let zExpr;
   if (type === 'zoomOut') {
-    zExpr = zOut;
+    zExpr = `${maxZoom}-${intensity}*${smooth}`;
   } else if (type === 'pulse') {
-    zExpr = zPulse;
+    zExpr = `${around}-${num(intensity / 2)}*cos(2*PI*t/${duration})`;
   } else if (type === 'kenburns') {
-    zExpr = zIn;
-    xExpr = `iw*${fx}-iw/zoom/2+(iw-iw/zoom)*(${progress}-0.5)`;
-    yExpr = `ih*${fy}-ih/zoom/2+(ih-ih/zoom)*(${progress}-0.5)`;
+    zExpr = `${start}+${intensity}*${smooth}`;
+  } else {
+    // panLeft, panRight, panUp, panDown, zoomIn all use maxZoom or start+intensity*smooth
+    zExpr = type === 'zoomIn' ? `${start}+${intensity}*${smooth}` : `${maxZoom}`;
+  }
+  zExpr = `min(max(${zExpr},${start}),${maxZoom})`;
+
+  // Center position expressions (in upscaled coordinates)
+  // For kenburns: pan from center toward focus point
+  // For pans: pan across the image at constant zoom
+  let cxExpr, cyExpr;
+  const ufx = fx * uw;
+  const ufy = fy * uh;
+  const ucenter_x = uw / 2;
+  const ucenter_y = uh / 2;
+
+  if (type === 'kenburns') {
+    // Pan from center toward focus point as we zoom in
+    cxExpr = `${ucenter_x}+(${ufx}-${ucenter_x})*${smooth}`;
+    cyExpr = `${ucenter_y}+(${ufy}-${ucenter_y})*${smooth}`;
   } else if (type === 'panLeft') {
-    zExpr = `${maxZoom}`;
-    xExpr = `(iw-iw/zoom)*(1-${progress})`;
+    cxExpr = `${uw}-${w}/${maxZoom}/2+(${w}/${maxZoom}/2-${uw}+${w}/${maxZoom}/2)*${smooth}`; // right to left
+    cyExpr = `${ucenter_y}`;
   } else if (type === 'panRight') {
-    zExpr = `${maxZoom}`;
-    xExpr = `(iw-iw/zoom)*${progress}`;
+    cxExpr = `${w}/${maxZoom}/2+(${uw}-${w}/${maxZoom}/2-${w}/${maxZoom}/2)*${smooth}`; // left to right
+    cyExpr = `${ucenter_y}`;
   } else if (type === 'panUp') {
-    zExpr = `${maxZoom}`;
-    yExpr = `(ih-ih/zoom)*(1-${progress})`;
+    cxExpr = `${ucenter_x}`;
+    cyExpr = `${uh}-${h}/${maxZoom}/2+(${h}/${maxZoom}/2-${uh}+${h}/${maxZoom}/2)*${smooth}`; // bottom to top
   } else if (type === 'panDown') {
-    zExpr = `${maxZoom}`;
-    yExpr = `(ih-ih/zoom)*${progress}`;
+    cxExpr = `${ucenter_x}`;
+    cyExpr = `${h}/${maxZoom}/2+(${uh}-${h}/${maxZoom}/2-${h}/${maxZoom}/2)*${smooth}`; // top to bottom
+  } else { // zoomIn, zoomOut, pulse
+    cxExpr = `${ufx}`;
+    cyExpr = `${ufy}`;
   }
 
-  return `zoompan=z='${zExpr}':d=1:x='${clampX(xExpr)}':y='${clampY(yExpr)}':s=${w}x${h}:fps=${FPS}`;
+  // Crop dimensions (sub-pixel precise)
+  const cropW = `iw/${zExpr}`;
+  const cropH = `ih/${zExpr}`;
+  const cropX = `max(0,min(iw-${cropW},${cxExpr}-${cropW}/2))`;
+  const cropY = `max(0,min(ih-${cropH},${cyExpr}-${cropH}/2))`;
+
+  // Filter chain: upscale -> crop (zoom/pan) -> downscale -> format
+  // We use scale with lanczos for both up and down
+  return `scale=${uw}:${uh}:flags=lanczos,crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=lanczos`;
+}
+
+// Legacy buildZoomFilter kept for compatibility - delegates to v2
+function buildZoomFilter(scene, w, h, options, focus) {
+  return buildZoomFilterV2(scene, w, h, options, focus);
 }
 
 function buildSceneVideoFilter(scene, index, options = {}) {
@@ -284,7 +340,7 @@ function buildSceneVideoFilter(scene, index, options = {}) {
     zoomStartScale: sceneZoom.startScale != null ? sceneZoom.startScale : options.zoomStartScale,
     zoomIntensity: sceneZoom.intensity != null ? sceneZoom.intensity : options.zoomIntensity
   };
-  const zoomType = resolveZoomType(zoomOptions.zoomType, options.zoomMode, index, options.zoomSeed);
+  const zoomType = resolveZoomType(zoomOptions.zoomType, options.zoomMode, index, options.zoomSeed, options.zoomCheckedEffects);
   if (options.zoomEnabled && zoomType !== 'none') {
     chain.push(buildZoomFilter(scene, w, h, { ...zoomOptions, zoomType }, focus));
   }
@@ -583,6 +639,7 @@ module.exports = {
   ZOOM_TYPES,
   ZOOM_MODES,
   DEFAULT_ZOOM_SEED,
+  RANDOM_ZOOM_TYPES,
   TRANSITION_TYPES,
   TRANSITION_MODES,
   TRANSITION_MAP,

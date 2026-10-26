@@ -156,7 +156,7 @@ const DEFAULT_SCALE = 1.0;
 const SCALE_MIN = 0.3;
 const SCALE_MAX = 3.0;
 const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
-const ZOOM_MODES = ['fixed', 'alternate', 'random'];
+const ZOOM_MODES = ['fixed', 'alternate', 'random', 'checked'];
 const TRANSITION_TYPES = ['cut', 'fade', 'fadeblack', 'dissolve', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'curtainLeft', 'curtainRight', 'circle'];
 const TRANSITION_MODES = ['fixed', 'alternate', 'random'];
 const FORMAT_FOCUS_KEY = {
@@ -225,6 +225,7 @@ const state = {
     zoomEnabled: true,
     zoomType: 'kenburns',
     zoomMode: 'fixed',
+    zoomCheckedEffects: [],
     zoomSeed: 12345,
     zoomStartScale: 1.0,
     zoomIntensity: 0.15,
@@ -611,6 +612,13 @@ function applySceneSettingsToAll() {
   });
   renderTimeline();
   showToast('Ajustes de escena aplicados a todas', 'success');
+}
+
+function updateZoomCheckedEffectsVisibility() {
+  const container = document.getElementById('zoom-checked-effects-row');
+  if (!container) return;
+  const mode = state.exportOptions.zoomMode;
+  container.style.display = mode === 'checked' ? 'block' : 'none';
 }
 
 function handleDurationChange(e) {
@@ -1472,12 +1480,20 @@ async function handlePreview() {
   }
 
   try {
+    const focus = scene.image[FORMAT_FOCUS_KEY[state.config.outputs[0] || '16:9']] || { x: 0.5, y: 0.5, scale: 1 };
     const result = await window.api.renderPreview({
       imagePath: scene.image.path,
       text: scene.text || '',
       duration: Math.min(5, scene.duration || 5),
       format: state.config.outputs[0] || '16:9',
-      subtitles: state.config.subtitles
+      subtitles: state.config.subtitles,
+      zoomEnabled: state.exportOptions.zoomEnabled,
+      zoomType: state.exportOptions.zoomType,
+      zoomMode: state.exportOptions.zoomMode,
+      zoomSeed: state.exportOptions.zoomSeed,
+      zoomStartScale: state.exportOptions.zoomStartScale,
+      zoomIntensity: state.exportOptions.zoomIntensity,
+      focus
     });
     if (!result || !result.outputPath) return;
     if (video) {
@@ -2592,6 +2608,23 @@ const CONTROLS = [
     rutaConfig: 'exportOptions.zoomMode',
     handler: (e) => {
       state.exportOptions.zoomMode = ZOOM_MODES.includes(e.target.value) ? e.target.value : 'fixed';
+      updateZoomCheckedEffectsVisibility();
+    }
+  },
+  {
+    id: 'zoom-checked-effects',
+    tipo: 'checklist',
+    rutaConfig: 'exportOptions.zoomCheckedEffects',
+    handler: (e) => {
+      const value = e.target.value;
+      const checked = e.target.checked;
+      const effects = state.exportOptions.zoomCheckedEffects;
+      const idx = effects.indexOf(value);
+      if (checked && idx === -1) {
+        effects.push(value);
+      } else if (!checked && idx !== -1) {
+        effects.splice(idx, 1);
+      }
     }
   },
   {
@@ -3426,6 +3459,12 @@ function setupControl(control) {
       element.addEventListener('change', control.handler);
     } else if (control.tipo === 'select') {
       element.addEventListener('change', control.handler);
+    } else if (control.tipo === 'checklist') {
+      // checklist is a container with checkbox children
+      const checkboxes = element.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => {
+        cb.addEventListener('change', control.handler);
+      });
     } else if (control.tipo === 'focuseditor') {
       let dragging = false;
       element.addEventListener('click', control.handler);

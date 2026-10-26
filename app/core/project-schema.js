@@ -138,6 +138,7 @@ const renderOptionsSchema = z.object({
   zoomEnabled: z.boolean().default(true),
   zoomType: z.enum(ZOOM_TYPES).default('kenburns'),
   zoomMode: z.enum(ZOOM_MODES).default('fixed'),
+  zoomCheckedEffects: z.array(z.enum(ZOOM_TYPES)).default([]),
   zoomSeed: z.number().int().default(DEFAULT_ZOOM_SEED),
   zoomStartScale: z.number().min(1).max(4).default(1.0),
   zoomIntensity: z.number().min(0).max(1).default(0.15),
@@ -269,6 +270,11 @@ function migrateProject(raw) {
   // Migration for AI settings (FASE 2): default to null
   if (migrated.ai === undefined) {
     migrated.ai = null;
+  }
+
+  // Migration for zoom checked effects (FASE 3): default to empty array for old projects
+  if (!Array.isArray(migrated.renderOptions.zoomCheckedEffects)) {
+    migrated.renderOptions.zoomCheckedEffects = [];
   }
 
   return migrated;

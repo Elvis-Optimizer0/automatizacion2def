@@ -10,7 +10,8 @@ const {
   buildSubtitlesFilter,
   calculateTotalDuration,
   normalizeScenesToDuration,
-  resolveInputDurations
+  resolveInputDurations,
+  buildZoomFilter
 } = require('./ffmpeg-helpers.js');
 const {
   assertOutputConfig,
@@ -331,7 +332,7 @@ function runFfmpeg(ffmpegPath, args, totalDuration, onProgress, errorPrefix = E_
 }
 
 async function renderPreview(options = {}) {
-  const { imagePath, text = '', duration = 5, format = '16:9', subtitles, outputPath, userFontsDir } = options;
+  const { imagePath, text = '', duration = 5, format = '16:9', subtitles, outputPath, userFontsDir, zoomEnabled = true, zoomType = 'kenburns', zoomMode = 'fixed', zoomSeed = 12345, zoomStartScale = 1.0, zoomIntensity = 0.15, focus = { x: 0.5, y: 0.5, scale: 1 } } = options;
 
   verifyBinaries();
 
@@ -352,8 +353,28 @@ async function renderPreview(options = {}) {
   const ffmpegPath = getFfmpegPath();
 
   try {
-    let graph = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,format=yuv420p[base]`;
-    let mapLabel = '[base]';
+    // Build base filter with fit mode (cover)
+    let graph = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}[base0]`;
+    let mapLabel = '[base0]';
+
+    // Apply zoom filter if enabled (using same logic as export)
+    if (zoomEnabled && zoomType !== 'none') {
+      const zoomFilter = buildZoomFilter({ duration: previewDuration }, width, height, {
+        zoomType,
+        zoomStartScale,
+        zoomIntensity,
+        zoomMode,
+        zoomSeed,
+        zoomCheckedEffects: []
+      }, focus);
+      if (zoomFilter) {
+        graph += `;[base0]${zoomFilter}[base1]`;
+        mapLabel = '[base1]';
+      }
+    }
+
+    graph += `;${mapLabel}setsar=1,format=yuv420p[vbase]`;
+    mapLabel = '[vbase]';
 
     if (subtitlesEnabled) {
       fs.mkdirSync(assetsDir, { recursive: true });
@@ -384,7 +405,7 @@ async function renderPreview(options = {}) {
         throw new Error(`${E_SUBTITLES_FAILED}: ${err.message}`);
       }
 
-      graph += `;${buildSubtitlesFilter({ subtitlesPath, fontsDir, inputLabel: 'base', outputLabel: 'vout' })}`;
+      graph += `;${buildSubtitlesFilter({ subtitlesPath, fontsDir, inputLabel: 'vbase', outputLabel: 'vout' })}`;
       mapLabel = '[vout]';
     }
 

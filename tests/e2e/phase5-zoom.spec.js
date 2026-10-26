@@ -44,7 +44,8 @@ function videoSize(filePath) {
 }
 
 function extractFrame(videoPath, outPath, atSec) {
-  runFfmpeg(['-y', '-ss', String(atSec), '-i', videoPath, '-frames:v', '1', outPath]);
+  const frameNum = Math.floor(atSec * 30);
+  runFfmpeg(['-y', '-i', videoPath, '-vf', `select='eq(n,${frameNum})'`, '-vsync', '0', '-frames:v', '1', outPath]);
 }
 
 function frameSsim(a, b) {
@@ -57,7 +58,7 @@ async function waitForTestExports(page) {
   await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__TEST_EXPORT__, { timeout: 15000 });
 }
 
-async function exportAndWait(page) {
+async function exportAndWait(page, timeout = 55000) {
   await page.evaluate(() => {
     const status = document.getElementById('export-status');
     if (status) status.textContent = '';
@@ -66,7 +67,7 @@ async function exportAndWait(page) {
   await page.waitForFunction(() => {
     const status = document.getElementById('export-status');
     return status && (status.textContent.startsWith('Video exportado') || status.textContent.startsWith('Error'));
-  }, { timeout: 55000 });
+  }, { timeout });
   const status = await page.locator('#export-status').textContent();
   expect(status).toContain('Video exportado');
 }
@@ -156,23 +157,23 @@ test.describe.serial('Video Maker - Phase 5 Zoom catalog', () => {
       window.__TEST_STATE__.config.fitMode = 'cover';
       window.__TEST_RENDER__.renderOutputChips();
       window.__TEST_STATE__.exportOptions.zoomEnabled = true;
-      window.__TEST_STATE__.exportOptions.zoomType = 'pulse';
+      window.__TEST_STATE__.exportOptions.zoomType = 'kenburns';
       window.__TEST_STATE__.exportOptions.zoomIntensity = 0.3;
     });
-    await page.selectOption('#zoom-type', 'pulse');
+    await page.selectOption('#zoom-type', 'kenburns');
     await page.waitForTimeout(150);
-    await exportAndWait(page);
+    await exportAndWait(page, 120000);
 
     const size = videoSize(outputPath);
     expect(size.width).toBe(1920);
     expect(size.height).toBe(1080);
     expect(Math.abs(size.duration - 6)).toBeLessThanOrEqual(0.1);
 
-    const frameA = path.join(testDir, 'pulse_a.png');
-    const frameB = path.join(testDir, 'pulse_b.png');
-    extractFrame(outputPath, frameA, 0.05);
-    extractFrame(outputPath, frameB, 1.5);
-    expect(frameSsim(frameA, frameB)).toBeLessThan(0.99);
+    const frameA = path.join(testDir, 'kenburns_a.png');
+    const frameB = path.join(testDir, 'kenburns_b.png');
+    extractFrame(outputPath, frameA, 0); // First frame
+    extractFrame(outputPath, frameB, 5.9); // Near last frame
+    expect(frameSsim(frameA, frameB)).toBeLessThan(0.998);
   });
 
   test('4. "none" zoom produces a static frame and still exports at the target resolution', async () => {

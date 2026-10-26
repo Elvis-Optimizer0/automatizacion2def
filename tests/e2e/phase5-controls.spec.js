@@ -88,9 +88,9 @@ test.describe.serial('Video Maker - Phase 5 Controls', () => {
       const ids = [];
       document.querySelectorAll('button[id], select[id], textarea[id]').forEach(el => ids.push(el.id));
       document.querySelectorAll('input[id]').forEach(el => {
-        if (!el.readOnly && el.type !== 'file') ids.push(el.id);
+        if (!el.readOnly && el.type !== 'file' && !el.id.startsWith('zoom-checked-')) ids.push(el.id);
       });
-      ['images-drop-zone', 'audio-narration-drop', 'audio-music-drop', 'focus-editor'].forEach(id => {
+      ['images-drop-zone', 'audio-narration-drop', 'audio-music-drop', 'focus-editor', 'zoom-checked-effects'].forEach(id => {
         if (document.getElementById(id)) ids.push(id);
       });
       return [...new Set(ids)];

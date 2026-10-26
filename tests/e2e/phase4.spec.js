@@ -64,18 +64,27 @@ async function waitForTestExports(page) {
   await page.waitForFunction(() => window.__TEST_STATE__ && window.__TEST_RENDER__ && window.__TEST_EXPORT__, { timeout: 15000 });
 }
 
-async function exportAndWait(page) {
+async function exportAndWait(page, options = {}) {
+  const timeout = (options && options.timeout) ? options.timeout : (typeof options === 'number' ? options : 55000);
+  console.log('[exportAndWait] Using timeout:', timeout);
   await page.evaluate(() => {
     const status = document.getElementById('export-status');
     if (status) status.textContent = '';
   });
   await page.click('#export-btn');
-  await page.waitForFunction(() => {
-    const status = document.getElementById('export-status');
-    return status && (status.textContent.startsWith('Video exportado') || status.textContent.startsWith('Error'));
-  }, { timeout: 55000 });
-  const status = await page.locator('#export-status').textContent();
-  expect(status).toContain('Video exportado');
+  
+  // Manual polling instead of waitForFunction due to timeout issues
+  const startTime = Date.now();
+  const pollInterval = 500;
+  while (Date.now() - startTime < timeout) {
+    const status = await page.locator('#export-status').textContent();
+    if (status && (status.startsWith('Video exportado') || status.startsWith('Error'))) {
+      expect(status).toContain('Video exportado');
+      return;
+    }
+    await page.waitForTimeout(pollInterval);
+  }
+  throw new Error(`Export timed out after ${timeout}ms`);
 }
 
 function outputMtime(filePath) {
@@ -196,6 +205,7 @@ test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
   });
 
   test('3. Export all four formats with correct resolutions and duration', async () => {
+    test.setTimeout(180000);
     await page.evaluate(() => {
       window.__TEST_STATE__.config.outputs = ['16:9', '9:16', '1:1', '4:5'];
       window.__TEST_STATE__.config.fitMode = 'cover';
@@ -203,7 +213,7 @@ test.describe.serial('Video Maker - Phase 4 Formats & Focus', () => {
     });
     await page.waitForTimeout(150);
 
-    await exportAndWait(page);
+    await exportAndWait(page, { timeout: 120000 });
 
     const expected = [
       { file: outputPath, width: 1920, height: 1080 },

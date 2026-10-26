@@ -338,8 +338,22 @@
             <select id="zoom-mode" class="export-select">
               <option value="fixed" selected>Fijo</option>
               <option value="alternate">Alternar</option>
-              <option value="random">Aleatorio</option>
+              <option value="random">Aleatorio (todos)</option>
+              <option value="checked">Aleatorio (seleccionados)</option>
             </select>
+          </div>
+          <div class="export-control-row" id="zoom-checked-effects-row" style="display: none;">
+            <label>Efectos permitidos</label>
+            <div class="checklist" id="zoom-checked-effects">
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-kenburns" value="kenburns" checked><span>Ken Burns</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-zoomin" value="zoomIn"><span>Acercar</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-zoomout" value="zoomOut"><span>Alejar</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-pulse" value="pulse"><span>Pulso</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-panleft" value="panLeft"><span>Paneo izquierda</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-panright" value="panRight"><span>Paneo derecha</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-panup" value="panUp"><span>Paneo arriba</span></label>
+              <label class="checklist-item"><input type="checkbox" id="zoom-checked-pandown" value="panDown"><span>Paneo abajo</span></label>
+            </div>
           </div>
           <div class="export-control-row">
             <label for="zoom-seed">Semilla</label>
