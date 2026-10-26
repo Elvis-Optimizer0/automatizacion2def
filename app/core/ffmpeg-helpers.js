@@ -212,8 +212,8 @@ function buildZoomFilterV2(scene, w, h, options, focus) {
   const fx = num(clamp01(focus.x));
   const fy = num(clamp01(focus.y));
 
-  // Upscale factor: 3x for quality/speed balance
-  const UPSCALE = 3;
+  // Upscale factor: 2x for speed (GitHub Actions runners are slow)
+  const UPSCALE = 2;
   const uw = w * UPSCALE;
   const uh = h * UPSCALE;
 
@@ -271,9 +271,8 @@ function buildZoomFilterV2(scene, w, h, options, focus) {
   const cropX = `max(0,min(iw-${cropW},${cxExpr}-${cropW}/2))`;
   const cropY = `max(0,min(ih-${cropH},${cyExpr}-${cropH}/2))`;
 
-  // Filter chain: upscale -> crop (zoom/pan) -> downscale -> format
-  // We use scale with lanczos for both up and down
-  return `scale=${uw}:${uh}:flags=lanczos,crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=lanczos`;
+  // Filter chain: upscale (bilinear) -> crop (zoom/pan) -> downscale (lanczos)
+  return `scale=${uw}:${uh}:flags=bilinear,crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=lanczos`;
 }
 
 // Legacy buildZoomFilter kept for compatibility - delegates to v2

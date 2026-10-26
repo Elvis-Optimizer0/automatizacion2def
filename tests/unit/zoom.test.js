@@ -25,15 +25,15 @@ test.describe('zoom catalog', () => {
     expect(DEFAULT_ZOOM_SEED).toBe(12345);
   });
 
-  test('each zoom filter uses upscale-crop-downscale chain with lanczos', () => {
+  test('each zoom filter uses upscale-crop-downscale chain with bilinear upscale and lanczos downscale', () => {
     for (const type of ZOOM_TYPES) {
       const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: type, zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
       if (type === 'none') {
         expect(filter).toBe('');
         continue;
       }
-      // New structure: scale up -> crop -> scale down
-      expect(filter).toContain('scale=5760:3240:flags=lanczos'); // 3x upscale
+      // New structure: scale up (2x bilinear) -> crop -> scale down (lanczos)
+      expect(filter).toContain('scale=3840:2160:flags=bilinear'); // 2x upscale
       expect(filter).toContain('crop=w=\'');
       expect(filter).toContain('h=\'');
       expect(filter).toContain('x=\'');
@@ -81,9 +81,9 @@ test.describe('zoom catalog', () => {
 
   test('kenburns zooms toward the focus point with smoothstep', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'kenburns', zoomStartScale: 1, zoomIntensity: 0.15 }, focus);
-    // Focus point at 0.2, 0.8 in upscaled coords: 1152, 2592
-    expect(filter).toContain('1152');
-    expect(filter).toContain('2592');
+    // Focus point at 0.2, 0.8 in 2x upscaled coords: 768, 1728
+    expect(filter).toContain('768');
+    expect(filter).toContain('1728');
     // Zoom uses smoothstep easing
     expect(filter).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
     expect(filter).not.toContain('on/');
@@ -158,9 +158,9 @@ test.describe('zoom catalog', () => {
     expect(graph).not.toContain('on/');
 
     const fallback = buildSceneVideoFilter({ duration: 4, focus }, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.2, zoomStartScale: 1 });
-    // Kenburns pans toward focus point (0.2, 0.8) -> 1152, 2592 in upscaled
-    expect(fallback).toContain('1152');
-    expect(fallback).toContain('2592');
+    // Kenburns pans toward focus point (0.2, 0.8) -> 768, 1728 in 2x upscaled
+    expect(fallback).toContain('768');
+    expect(fallback).toContain('1728');
   });
 
   test('invalid zoom type is rejected by the schema', () => {
