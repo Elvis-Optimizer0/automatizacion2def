@@ -34,12 +34,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup ffmpeg in PATH
-        run: |
-          $ffmpegPath = (Resolve-Path "node_modules/ffmpeg-static/ffmpeg*").Path
-          $ffmpegDir = Split-Path $ffmpegPath
-          echo "$ffmpegDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Run linter
         run: npm run lint
 

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
+const ffmpegStatic = require('ffmpeg-static');
 
 const ROOT = path.join(__dirname, '..', '..');
 const EDGE_RUNNER = path.join(ROOT, 'vendor', 'kokoro', 'runtime', 'edge-runner.py');
@@ -20,7 +21,8 @@ function runEdgeTts(text, voice, rate, pitch, outputPath) {
       '--output', outputPath,
       '--voice', voice,
       '--rate', rate,
-      '--pitch', pitch
+      '--pitch', pitch,
+      '--ffmpeg', ffmpegStatic
     ];
 
     const child = spawn(PYTHON_EXE, args, {
