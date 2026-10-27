@@ -11,7 +11,8 @@ const {
   calculateTotalDuration,
   normalizeScenesToDuration,
   resolveInputDurations,
-  buildZoomFilter
+  buildZoomFilter,
+  DEFAULT_SLIDE_SPEED
 } = require('./ffmpeg-helpers.js');
 const {
   assertOutputConfig,
@@ -207,6 +208,9 @@ function buildFfmpegArgs(options) {
   const transitionDuration = renderOptions.transitionDuration != null
     ? renderOptions.transitionDuration
     : 1.0;
+  const slideSpeed = renderOptions.slideSpeed != null
+    ? renderOptions.slideSpeed
+    : DEFAULT_SLIDE_SPEED;
   const inputDurations = resolveInputDurations(scenes, {
     transitionType,
     transitionMode,
@@ -266,7 +270,8 @@ function buildFfmpegArgs(options) {
     transitionType,
     transitionMode,
     transitionSeed,
-    transitionDuration
+    transitionDuration,
+    slideSpeed
   });
 
   const encoderArgs = videoEncoder === 'h264_amf'

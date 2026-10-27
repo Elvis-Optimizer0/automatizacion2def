@@ -7,17 +7,41 @@ const {
   BACKGROUND_MODES
 } = require('./output-formats.js');
 
-const FPS = 30;
+const {
+  FPS,
+  TRANSITION_CATALOG,
+  TRANSITION_IDS,
+  TRANSITION_MAP,
+  TRANSITION_DEFAULTS,
+  SLIDING_TRANSITION_IDS,
+  EASING,
+  MOTION_SPECS,
+  num,
+  clamp01,
+  clampScale,
+  backgroundModeFor,
+  safeColor,
+  transitionDurationFor,
+  resolveBoundaryTypes,
+  resolveTransitionType,
+  resolveInputDurations,
+  seededRandom,
+  buildSceneFilter,
+  buildCustomTransitionFilter,
+  buildSlidingTransitionSegment,
+  buildXfadeFilter,
+  calculateTotalDuration,
+  normalizeScenesToDuration,
+  isSlidingTransition,
+  DEFAULT_SLIDE_SPEED
+} = require('./transitions-v2.js');
+
 const WIDTH = 1920;
 const HEIGHT = 1080;
 
 const FIT_MODES = ['cover', 'blur', 'frame'];
 
 const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
-// ZOOM_MODES: 'fixed' = one effect for all scenes (Fijo)
-// 'alternate' = flip opposites on odd scenes (existing)
-// 'random' = random from all RANDOM_ZOOM_TYPES (existing)
-// 'checked' = random from user-checked effects, no repeats (Aleatorio)
 const ZOOM_MODES = ['fixed', 'alternate', 'random', 'checked'];
 const RANDOM_ZOOM_TYPES = ['kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
 const ZOOM_OPPOSITE = {
@@ -30,22 +54,9 @@ const ZOOM_OPPOSITE = {
 };
 const DEFAULT_ZOOM_SEED = 12345;
 
-const TRANSITION_MAP = {
-  cut: 'fade',
-  fade: 'fade',
-  fadeblack: 'fadeblack',
-  dissolve: 'dissolve',
-  slideLeft: 'slideleft',
-  slideRight: 'slideright',
-  slideUp: 'slideup',
-  slideDown: 'slidedown',
-  curtainLeft: 'wipeleft',
-  curtainRight: 'wiperight',
-  circle: 'circleopen'
-};
-const TRANSITION_TYPES = Object.keys(TRANSITION_MAP);
+const TRANSITION_TYPES = TRANSITION_IDS;
 const TRANSITION_MODES = ['fixed', 'alternate', 'random'];
-const RANDOM_TRANSITION_TYPES = TRANSITION_TYPES.filter((t) => t !== 'cut');
+const RANDOM_TRANSITION_TYPES = TRANSITION_IDS.filter((t) => t !== 'cut');
 const TRANSITION_OPPOSITE = {
   slideLeft: 'slideRight',
   slideRight: 'slideLeft',
@@ -74,97 +85,8 @@ function xfadeNameFor(type) {
   return TRANSITION_MAP[type] || TRANSITION_MAP.fade;
 }
 
-function resolveTransitionType(baseType, mode, index, seed) {
-  const base = TRANSITION_TYPES.includes(baseType) ? baseType : 'fade';
-  if (mode === 'random') {
-    const r = seededRandom(seed != null ? seed : DEFAULT_TRANSITION_SEED, index);
-    return RANDOM_TRANSITION_TYPES[Math.floor(r * RANDOM_TRANSITION_TYPES.length) % RANDOM_TRANSITION_TYPES.length];
-  }
-  if (mode === 'alternate') {
-    return index % 2 === 0 ? base : (TRANSITION_OPPOSITE[base] || base);
-  }
-  return base;
-}
-
 function fixAsarPath(p) {
   return p.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
-}
-
-function num(value, decimals = 6) {
-  return Number(Number(value).toFixed(decimals));
-}
-
-function clamp01(value) {
-  if (typeof value !== 'number' || isNaN(value)) return DEFAULT_FOCUS.x;
-  return Math.min(1, Math.max(0, value));
-}
-
-function clampScale(value) {
-  if (typeof value !== 'number' || isNaN(value)) return DEFAULT_SCALE;
-  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
-}
-
-function backgroundModeFor(mode) {
-  return BACKGROUND_MODES.includes(mode) ? mode : BACKGROUND_MODES[0];
-}
-
-function safeColor(color) {
-  if (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) return color;
-  return 'black';
-}
-
-function transitionDurationFor(scenes, i, transitionType, transitionDuration) {
-  if (transitionType === 'cut') {
-    return num(1 / FPS);
-  }
-  const prevDur = scenes[i - 1].duration;
-  const currDur = scenes[i].duration;
-  return num(Math.min(transitionDuration, prevDur / 2, currDur / 2));
-}
-
-function sceneInputDuration(scenes, i, transitionType, transitionDuration) {
-  const base = scenes[i].duration;
-  if (i >= scenes.length - 1) {
-    return num(base);
-  }
-  const transDur = transitionDurationFor(scenes, i + 1, transitionType, transitionDuration);
-  return num(base + transDur);
-}
-
-function resolveBoundaryTypes(scenes, options = {}) {
-  const {
-    transitionType = 'fade',
-    transitionMode = 'fixed',
-    transitionSeed
-  } = options;
-  const types = [];
-  for (let i = 1; i < scenes.length; i++) {
-    const override = scenes[i] && scenes[i].transition && scenes[i].transition.type;
-    types[i] = TRANSITION_TYPES.includes(override)
-      ? override
-      : resolveTransitionType(transitionType, transitionMode, i - 1, transitionSeed);
-  }
-  return types;
-}
-
-function resolveInputDurations(scenes, options = {}) {
-  const boundaryTypes = resolveBoundaryTypes(scenes, options);
-  const transitionDuration = options.transitionDuration != null ? options.transitionDuration : 1.0;
-  return scenes.map((scene, i) => {
-    if (i >= scenes.length - 1) {
-      return num(scene.duration);
-    }
-    const transDur = transitionDurationFor(scenes, i + 1, boundaryTypes[i + 1], transitionDuration);
-    return num(scene.duration + transDur);
-  });
-}
-
-function seededRandom(seed, index) {
-  let t = ((Number(seed) >>> 0) + Math.imul(index + 1, 0x9e3779b9)) >>> 0;
-  t = Math.imul(t ^ (t >>> 16), 0x21f0aaad);
-  t = Math.imul(t ^ (t >>> 15), 0x735a2d97);
-  t ^= t >>> 15;
-  return (t >>> 0) / 4294967296;
 }
 
 function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
@@ -182,14 +104,12 @@ function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
       : RANDOM_ZOOM_TYPES;
     if (checked.length === 0) return base;
     if (checked.length === 1) return checked[0];
-    // Pick from checked effects, avoiding same as previous scene
     const r = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index);
     let pick = checked[Math.floor(r * checked.length) % checked.length];
     if (index > 0) {
       const prevR = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index - 1);
       const prevPick = checked[Math.floor(prevR * checked.length) % checked.length];
       if (pick === prevPick) {
-        // Shift to next effect in checked list
         const idx = checked.indexOf(pick);
         pick = checked[(idx + 1) % checked.length];
       }
@@ -199,7 +119,6 @@ function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
   return base;
 }
 
-// Zoom filter v2: uses sub-pixel precise crop on upscaled source with continuous time and smoothstep easing
 function buildZoomFilterV2(scene, w, h, options, focus) {
   const type = ZOOM_TYPES.includes(options.zoomType) ? options.zoomType : 'kenburns';
   if (type === 'none') return '';
@@ -212,16 +131,13 @@ function buildZoomFilterV2(scene, w, h, options, focus) {
   const fx = num(clamp01(focus.x));
   const fy = num(clamp01(focus.y));
 
-  // Upscale factor: 2x for speed (GitHub Actions runners are slow)
   const UPSCALE = 2;
   const uw = w * UPSCALE;
   const uh = h * UPSCALE;
 
-  // Smoothstep easing: 3t^2 - 2t^3 for t in [0,1]
   const ease = `t/${duration}`;
   const smooth = `3*${ease}*${ease}-2*${ease}*${ease}*${ease}`;
 
-  // Zoom expression using continuous time with smoothstep
   let zExpr;
   if (type === 'zoomOut') {
     zExpr = `${maxZoom}-${intensity}*${smooth}`;
@@ -230,52 +146,44 @@ function buildZoomFilterV2(scene, w, h, options, focus) {
   } else if (type === 'kenburns') {
     zExpr = `${start}+${intensity}*${smooth}`;
   } else {
-    // panLeft, panRight, panUp, panDown, zoomIn all use maxZoom or start+intensity*smooth
     zExpr = type === 'zoomIn' ? `${start}+${intensity}*${smooth}` : `${maxZoom}`;
   }
   zExpr = `min(max(${zExpr},${start}),${maxZoom})`;
 
-  // Center position expressions (in upscaled coordinates)
-  // For kenburns: pan from center toward focus point
-  // For pans: pan across the image at constant zoom
-  let cxExpr, cyExpr;
   const ufx = fx * uw;
   const ufy = fy * uh;
   const ucenter_x = uw / 2;
   const ucenter_y = uh / 2;
 
+  let cxExpr, cyExpr;
   if (type === 'kenburns') {
-    // Pan from center toward focus point as we zoom in
     cxExpr = `${ucenter_x}+(${ufx}-${ucenter_x})*${smooth}`;
     cyExpr = `${ucenter_y}+(${ufy}-${ucenter_y})*${smooth}`;
   } else if (type === 'panLeft') {
-    cxExpr = `${uw}-${w}/${maxZoom}/2+(${w}/${maxZoom}/2-${uw}+${w}/${maxZoom}/2)*${smooth}`; // right to left
+    cxExpr = `${uw}-${w}/${maxZoom}/2+(${w}/${maxZoom}/2-${uw}+${w}/${maxZoom}/2)*${smooth}`;
     cyExpr = `${ucenter_y}`;
   } else if (type === 'panRight') {
-    cxExpr = `${w}/${maxZoom}/2+(${uw}-${w}/${maxZoom}/2-${w}/${maxZoom}/2)*${smooth}`; // left to right
+    cxExpr = `${w}/${maxZoom}/2+(${uw}-${w}/${maxZoom}/2-${w}/${maxZoom}/2)*${smooth}`;
     cyExpr = `${ucenter_y}`;
   } else if (type === 'panUp') {
     cxExpr = `${ucenter_x}`;
-    cyExpr = `${uh}-${h}/${maxZoom}/2+(${h}/${maxZoom}/2-${uh}+${h}/${maxZoom}/2)*${smooth}`; // bottom to top
+    cyExpr = `${uh}-${h}/${maxZoom}/2+(${h}/${maxZoom}/2-${uh}+${h}/${maxZoom}/2)*${smooth}`;
   } else if (type === 'panDown') {
     cxExpr = `${ucenter_x}`;
-    cyExpr = `${h}/${maxZoom}/2+(${uh}-${h}/${maxZoom}/2-${h}/${maxZoom}/2)*${smooth}`; // top to bottom
-  } else { // zoomIn, zoomOut, pulse
+    cyExpr = `${h}/${maxZoom}/2+(${uh}-${h}/${maxZoom}/2-${h}/${maxZoom}/2)*${smooth}`;
+  } else {
     cxExpr = `${ufx}`;
     cyExpr = `${ufy}`;
   }
 
-  // Crop dimensions (sub-pixel precise)
   const cropW = `iw/${zExpr}`;
   const cropH = `ih/${zExpr}`;
   const cropX = `max(0,min(iw-${cropW},${cxExpr}-${cropW}/2))`;
   const cropY = `max(0,min(ih-${cropH},${cyExpr}-${cropH}/2))`;
 
-  // Filter chain: upscale (bilinear) -> crop (zoom/pan) -> downscale (lanczos)
   return `scale=${uw}:${uh}:flags=bilinear,crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=lanczos`;
 }
 
-// Legacy buildZoomFilter kept for compatibility - delegates to v2
 function buildZoomFilter(scene, w, h, options, focus) {
   return buildZoomFilterV2(scene, w, h, options, focus);
 }
@@ -354,7 +262,8 @@ function buildVideoFilterGraph(scenes, options = {}) {
   assertOutputConfig(options.outputConfig);
 
   const {
-    transitionDuration = 1.0
+    transitionDuration = 1.0,
+    slideSpeed = DEFAULT_SLIDE_SPEED
   } = options;
 
   const n = scenes.length;
@@ -376,11 +285,23 @@ function buildVideoFilterGraph(scenes, options = {}) {
     accumulated += scenes[i - 1].duration;
     const transDur = transitionDurationFor(scenes, i, boundaryTypes[i], transitionDuration);
     const offset = num(accumulated);
-    parts.push(`[${currentLabel}][v${i}]xfade=transition=${xfadeNameFor(boundaryTypes[i])}:duration=${transDur}:offset=${offset}[x${i}]`);
-    currentLabel = `x${i}`;
+    const transitionType = boundaryTypes[i];
+    
+    if (isSlidingTransition(transitionType)) {
+      // For sliding transitions, use xfade with adjusted duration to simulate slideSpeed
+      // The effective transition duration is transDur / slideSpeed, which makes the slide faster
+      const effectiveDur = num(transDur / slideSpeed);
+      parts.push(`[${currentLabel}][v${i}]xfade=transition=${xfadeNameFor(transitionType)}:duration=${effectiveDur}:offset=${offset}[x${i}]`);
+      currentLabel = `x${i}`;
+    } else {
+      parts.push(`[${currentLabel}][v${i}]xfade=transition=${xfadeNameFor(transitionType)}:duration=${transDur}:offset=${offset}[x${i}]`);
+      currentLabel = `x${i}`;
+    }
   }
 
-  parts.push(`[${currentLabel}]copy[${finalLabel}]`);
+  if (currentLabel !== finalLabel) {
+    parts.push(`[${currentLabel}]copy[${finalLabel}]`);
+  }
   return parts.join(';');
 }
 
@@ -529,20 +450,20 @@ function buildSubtitlesFilter(options = {}) {
 function buildFullFilterGraph(scenes, options = {}) {
   assertOutputConfig(options.outputConfig);
 
-  const { hasMusic = false, totalDuration, musicVolume = 0.3, extras, fontPath, subtitlesPath, fontsDir } = options;
+  const { hasMusic = false, totalDuration, musicVolume = 0.3, extras, fontPath, subtitlesPath, fontsDir, slideSpeed = DEFAULT_SLIDE_SPEED } = options;
   const extrasEnabled = hasExtras(extras);
   const subsEnabled = !!subtitlesPath;
 
   let videoParts;
   if (!subsEnabled) {
     const videoLabel = extrasEnabled ? 'vmain' : 'vout';
-    const videoGraph = buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: videoLabel });
+    const videoGraph = buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: videoLabel, slideSpeed });
     const extrasGraph = extrasEnabled
       ? buildExtrasFilter({ extras, outputConfig: options.outputConfig, totalDuration, fontPath, inputLabel: 'vmain', outputLabel: 'vout' })
       : '';
     videoParts = [videoGraph, extrasGraph].filter(Boolean).join(';');
   } else {
-    const graphs = [buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: 'vstage0' })];
+    const graphs = [buildVideoFilterGraph(scenes, { ...options, finalVideoLabel: 'vstage0', slideSpeed })];
     let currentLabel = 'vstage0';
     let stageIndex = 1;
 
@@ -598,38 +519,6 @@ function validateOffsets(scenes, _transitionType = 'fade', _transitionDuration =
   return { valid: true, offsets };
 }
 
-function calculateTotalDuration(scenes) {
-  return num(scenes.reduce((sum, s) => sum + s.duration, 0));
-}
-
-function normalizeScenesToDuration(scenes, targetDuration) {
-  const total = scenes.reduce((sum, s) => sum + s.duration, 0);
-  if (!targetDuration || targetDuration <= 0 || total <= 0) {
-    let cursor = 0;
-    return scenes.map((scene) => {
-      const start = num(cursor);
-      const duration = num(scene.duration);
-      cursor = num(cursor + duration);
-      return { ...scene, start, duration };
-    });
-  }
-
-  const scale = targetDuration / total;
-  let accumulated = 0;
-
-  return scenes.map((scene, index) => {
-    const isLast = index === scenes.length - 1;
-    const duration = isLast ? num(targetDuration - accumulated) : num(scene.duration * scale);
-    const normalized = {
-      ...scene,
-      start: num(accumulated),
-      duration
-    };
-    accumulated += duration;
-    return normalized;
-  });
-}
-
 module.exports = {
   FPS,
   WIDTH,
@@ -656,7 +545,12 @@ module.exports = {
   seededRandom,
   safeColor,
   transitionDurationFor,
-  sceneInputDuration,
+  sceneInputDuration: (scenes, i, transitionType, transitionDuration) => {
+    const base = scenes[i].duration;
+    if (i >= scenes.length - 1) return num(base);
+    const transDur = transitionDurationFor(scenes, i + 1, transitionType, transitionDuration);
+    return num(base + transDur);
+  },
   buildZoomFilter,
   buildSceneVideoFilter,
   buildVideoFilterGraph,
@@ -670,5 +564,22 @@ module.exports = {
   buildFullFilterGraph,
   validateOffsets,
   calculateTotalDuration,
-  normalizeScenesToDuration
+  normalizeScenesToDuration,
+  DEFAULT_SLIDE_SPEED,
+  SLIDING_TRANSITION_IDS,
+  isSlidingTransition,
+  TRANSITION_CATALOG,
+  TRANSITION_IDS,
+  TRANSITION_DEFAULTS,
+  EASING,
+  MOTION_SPECS,
+  getTransitionCatalog: () => TRANSITION_CATALOG.map(t => ({
+    id: t.id,
+    displayName: t.displayName,
+    xfadeName: t.xfadeName,
+    defaultDuration: t.defaultDuration,
+    isCut: t.isCut,
+    isSliding: t.isSliding
+  })),
+  getMotionSpec: (id) => MOTION_SPECS[id] ? { ...MOTION_SPECS[id] } : { ...MOTION_SPECS.fade }
 };

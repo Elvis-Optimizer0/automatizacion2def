@@ -11,7 +11,9 @@ const {
   resolveBoundaryTypes,
   resolveInputDurations,
   validateOffsets,
-  xfadeNameFor
+  xfadeNameFor,
+  isSlidingTransition,
+  SLIDING_TRANSITION_IDS
 } = require('../../app/core/ffmpeg-helpers.js');
 const { parseRenderPayload } = require('../../app/core/project-schema.js');
 const { resolveOutputConfig } = require('../../app/core/output-formats.js');
@@ -30,13 +32,22 @@ test.describe('transition catalog', () => {
     expect(DEFAULT_TRANSITION_SEED).toBe(4242);
   });
 
-  test('each transition produces a valid graph with the expected xfade name', () => {
+  test('each transition produces a valid graph with the expected filter', () => {
     for (const type of TRANSITION_TYPES) {
       const graph = buildVideoFilterGraph(scenes(2), { outputConfig, transitionType: type, transitionDuration: 1 });
-      const match = graph.match(/xfade=transition=([a-z]+):duration=([\d.]+):offset=([\d.]+)/);
-      expect(match[1]).toBe(xfadeNameFor(type));
-      expect(parseFloat(match[2])).toBeCloseTo(type === 'cut' ? 1 / FPS : 1, 4);
-      expect(match[3]).toBe('3');
+      if (isSlidingTransition(type)) {
+        // Sliding transitions use xfade with adjusted duration for slideSpeed
+        const match = graph.match(/xfade=transition=([a-z]+):duration=([\d.]+):offset=([\d.]+)/);
+        expect(match[1]).toBe(xfadeNameFor(type));
+        expect(parseFloat(match[2])).toBeCloseTo(1 / 1.05, 4); // slideSpeed=1.05
+        expect(match[3]).toBe('3');
+      } else {
+        // Non-sliding transitions use xfade
+        const match = graph.match(/xfade=transition=([a-z]+):duration=([\d.]+):offset=([\d.]+)/);
+        expect(match[1]).toBe(xfadeNameFor(type));
+        expect(parseFloat(match[2])).toBeCloseTo(type === 'cut' ? 1 / FPS : 1, 4);
+        expect(match[3]).toBe('3');
+      }
       expect(graph).not.toContain('\\');
       expect(graph).not.toMatch(/[A-Za-z]:\\/);
     }
@@ -60,6 +71,7 @@ test.describe('transition catalog', () => {
       }
       const graph = buildVideoFilterGraph(four, { outputConfig, transitionType: type, transitionDuration: 1 });
       const found = [...graph.matchAll(/offset=([\d.]+)/g)].map(m => parseFloat(m[1]));
+      // All transitions now use xfade, so offsets should match exactly
       expect(found).toEqual(offsets);
     }
   });
@@ -127,7 +139,9 @@ test.describe('transition catalog', () => {
     expect(types[2]).toBe('fade');
 
     const graph = buildVideoFilterGraph(list, { outputConfig, transitionType: 'fade', transitionDuration: 1 });
-    expect(graph).toContain('xfade=transition=slidedown:duration=1:offset=3');
+    // First boundary uses slideDown (sliding -> xfade with adjusted duration)
+    expect(graph).toContain('xfade=transition=slidedown:duration=0.952381:offset=3');
+    // Second boundary uses fade (non-sliding -> xfade)
     expect(graph).toContain('xfade=transition=fade:duration=1:offset=6');
   });
 

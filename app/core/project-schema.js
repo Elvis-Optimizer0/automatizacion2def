@@ -18,7 +18,8 @@ const {
   DEFAULT_ZOOM_SEED,
   TRANSITION_TYPES,
   TRANSITION_MODES,
-  DEFAULT_TRANSITION_SEED
+  DEFAULT_TRANSITION_SEED,
+  DEFAULT_SLIDE_SPEED
 } = require('./ffmpeg-helpers.js');
 const { SUBTITLE_ANIMATIONS } = require('./subtitles.js');
 
@@ -145,7 +146,8 @@ const renderOptionsSchema = z.object({
   transitionType: z.enum(TRANSITION_TYPES).default('fade'),
   transitionMode: z.enum(TRANSITION_MODES).default('fixed'),
   transitionSeed: z.number().int().default(DEFAULT_TRANSITION_SEED),
-  transitionDuration: z.number().min(0).max(10).default(1.0)
+  transitionDuration: z.number().min(0).max(10).default(1.0),
+  slideSpeed: z.number().min(0.7).max(2.0).default(DEFAULT_SLIDE_SPEED)
 }).default({});
 
 const sceneZoomSchema = z.object({
@@ -275,6 +277,11 @@ function migrateProject(raw) {
   // Migration for zoom checked effects (FASE 3): default to empty array for old projects
   if (!Array.isArray(migrated.renderOptions.zoomCheckedEffects)) {
     migrated.renderOptions.zoomCheckedEffects = [];
+  }
+
+  // Migration for slideSpeed (FASE 4): default to DEFAULT_SLIDE_SPEED for old projects
+  if (typeof migrated.renderOptions.slideSpeed !== 'number') {
+    migrated.renderOptions.slideSpeed = DEFAULT_SLIDE_SPEED;
   }
 
   return migrated;

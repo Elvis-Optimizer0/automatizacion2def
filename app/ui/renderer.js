@@ -2689,6 +2689,33 @@ const CONTROLS = [
     }
   },
   {
+    id: 'transition-slide-speed',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.slideSpeed',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.slideSpeed = isNaN(value) ? 1.05 : Math.min(2.0, Math.max(0.7, value));
+    }
+  },
+  {
+    id: 'transition-slide-speed-value',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.slideSpeed',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.slideSpeed = isNaN(value) ? 1.05 : Math.min(2.0, Math.max(0.7, value));
+    }
+  },
+  {
+    id: 'transition-slide-speed-reset',
+    tipo: 'button',
+    handler: () => {
+      state.exportOptions.slideSpeed = 1.05;
+      const input = document.getElementById('transition-slide-speed');
+      if (input) input.value = '1.05';
+    }
+  },
+  {
     id: 'badge-enabled',
     tipo: 'checkbox',
     rutaConfig: 'config.extras.badge.enabled',
@@ -3569,10 +3596,36 @@ window.__TEST_STATE__ = state;
 window.__TEST_RENDER__ = { renderImages, renderAudio, renderScript, renderTimeline, renderAll, updateExportButton, setExportStatus, renderFocusEditor, updateFocusBoxPreview, renderOutputChips, setFocusScale, applyAutoScale, resetFocus, updateSubtitlePreview, syncSubtitleControls, refreshFontList, refreshKeywordList, refreshPresets, applyPresetByName, snapshotSubtitleStyle, refreshPreviewScenes, selectSuggestedKeywords, addSearchTerm, refreshVoiceLanguages, refreshVoiceSelect, syncVoiceControls, handleGenerateVoice, handleVoiceClean, cleanScriptForVoice, refreshModelsList, handleDownloadModels, handleImportModel, handleSyncScenes, handleGenerateFullVideo, handleProbeGpu, renderCapabilities };
 window.__TEST_EXPORT__ = { handleExport, handleOpenOutputFolder, toggleOutputFormat, buildExportImages, frameGeometry, buildProjectData, loadProject, handleSaveProject, handleOpenProject, handlePreview };
 
+function syncSlideSpeed() {
+  const rangeInput = document.getElementById('transition-slide-speed');
+  const numberInput = document.getElementById('transition-slide-speed-value');
+  const resetBtn = document.getElementById('transition-slide-speed-reset');
+  
+  if (rangeInput && numberInput) {
+    const updateValue = (value) => {
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue) && numValue >= -30 && numValue <= 100) {
+        rangeInput.value = numValue;
+        numberInput.value = numValue;
+        state.exportOptions.slideSpeed = 1 + numValue / 100;
+      }
+    };
+    
+    rangeInput.addEventListener('input', (e) => updateValue(e.target.value));
+    numberInput.addEventListener('input', (e) => updateValue(e.target.value));
+    
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => updateValue(5));
+    }
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setupDropZoneImages();
 
   CONTROLS.forEach(setupControl);
+
+  syncSlideSpeed();
 
   renderAll();
   renderOutputChips();
