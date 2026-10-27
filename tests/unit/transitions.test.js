@@ -12,8 +12,7 @@ const {
   resolveInputDurations,
   validateOffsets,
   xfadeNameFor,
-  isSlidingTransition,
-  SLIDING_TRANSITION_IDS
+  isSlidingTransition
 } = require('../../app/core/ffmpeg-helpers.js');
 const { parseRenderPayload } = require('../../app/core/project-schema.js');
 const { resolveOutputConfig } = require('../../app/core/output-formats.js');

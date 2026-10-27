@@ -377,21 +377,21 @@ function buildRotateScaleFilter(scene, w, h, options, focus) {
 
 function buildZoomFilterV3(scene, w, h, options, focus, method = 'upscale-crop-downscale') {
   switch (method) {
-    case 'perspective':
-      return buildPerspectiveFilter(scene, w, h, options, focus);
-    case 'rotate-scale':
-      return buildRotateScaleFilter(scene, w, h, options, focus);
-    case 'upscale-crop-downscale-2x-bilinear-lanczos':
-      return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 2, 'bilinear', 'lanczos');
-    case 'upscale-crop-downscale-4x-lanczos-lanczos':
-      return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 4, 'lanczos', 'lanczos');
-    case 'upscale-crop-downscale-4x-bilinear-lanczos':
-      return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 4, 'bilinear', 'lanczos');
-    case 'upscale-crop-downscale-3x-lanczos-lanczos':
-      return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 3, 'lanczos', 'lanczos');
-    case 'upscale-crop-downscale':
-    default:
-      return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 2, 'bilinear', 'lanczos');
+  case 'perspective':
+    return buildPerspectiveFilter(scene, w, h, options, focus);
+  case 'rotate-scale':
+    return buildRotateScaleFilter(scene, w, h, options, focus);
+  case 'upscale-crop-downscale-2x-bilinear-lanczos':
+    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 2, 'bilinear', 'lanczos');
+  case 'upscale-crop-downscale-4x-lanczos-lanczos':
+    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 4, 'lanczos', 'lanczos');
+  case 'upscale-crop-downscale-4x-bilinear-lanczos':
+    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 4, 'bilinear', 'lanczos');
+  case 'upscale-crop-downscale-3x-lanczos-lanczos':
+    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 3, 'lanczos', 'lanczos');
+  case 'upscale-crop-downscale':
+  default:
+    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 2, 'bilinear', 'lanczos');
   }
 }
 

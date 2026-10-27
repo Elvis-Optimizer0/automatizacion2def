@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { spawn } = require('child_process');
 const ffmpegStatic = require('ffmpeg-static');
 const ffprobeStatic = require('ffprobe-static');
@@ -85,7 +84,7 @@ function getFfmpegPath() {
   return ffmpegStatic;
 }
 
-function runFfmpeg(args, timeout = 120000) {
+function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
     const proc = spawn(getFfmpegPath(), args, { windowsHide: true });
     let stderr = '';
@@ -99,7 +98,7 @@ function runFfmpeg(args, timeout = 120000) {
 }
 
 async function probeVideo(videoPath) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const proc = spawn(ffprobeStatic.path, [
       '-v', 'error',
       '-select_streams', 'v:0',
@@ -138,14 +137,14 @@ async function probeVideo(videoPath) {
       
       resolve({ repeatedFrames, maxDeviation, fps: actualFps, frames: frames.length });
     });
-    proc.on('error', err => resolve({ repeatedFrames: -1, maxDeviation: -1, fps: 0, frames: 0 }));
+    proc.on('error', () => resolve({ repeatedFrames: -1, maxDeviation: -1, fps: 0, frames: 0 }));
   });
 }
 
 async function measureJitter(videoPath, format, effectId) {
   const { w, h } = getFormatDims(format);
   
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'zoom-measure-'));
     const framesDir = path.join(tempDir, 'frames');
     fs.mkdirSync(framesDir, { recursive: true });
@@ -202,7 +201,7 @@ async function measureJitter(videoPath, format, effectId) {
           const img = await loadImageAsArray(framePath);
           if (!img) continue;
           
-          const measured = measureFrameTransform(img, w, h, expected.scale, expected.cx, expected.cy);
+          const measured = measureFrameTransform(img, w, h);
           if (!measured) continue;
           
           const scaleDev = Math.abs(measured.scale - expected.scale);
@@ -252,7 +251,7 @@ function loadImageAsArray(filePath) {
   });
 }
 
-function measureFrameTransform(img, w, h, expectedScale, expectedCx, expectedCy) {
+function measureFrameTransform(img, w, h) {
   const { data, width, height, channels } = img;
   if (width !== w || height !== h) return null;
   
@@ -314,10 +313,10 @@ async function renderOne(effect, imagePath, format, state, method) {
     const zoomFilter = ZOOM_V3.buildZoomFilterV3(scene, w, h, options, focus, method);
     
     let filterGraph;
-    if (method === 'perspective' || method === 'rotate-scale') {
+    if (zoomFilter) {
       filterGraph = `[0:v]${zoomFilter},setsar=1,format=yuv420p[vout]`;
     } else {
-      filterGraph = `[0:v]${zoomFilter},setsar=1,format=yuv420p[vout]`;
+      filterGraph = '[0:v]setsar=1,format=yuv420p[vout]';
     }
     
     const args = [
@@ -398,7 +397,7 @@ async function verifyApprovedUnchanged(state, catalog, format, method) {
       console.error(`\n⚠️  SPEC HASH CHANGED for ${t.id} (${t.displayName})!`);
       console.error(`  Old: ${entry.specHash}`);
       console.error(`  New: ${currentHash}`);
-      console.error(`  Reverting render...`);
+      console.error('  Reverting render...');
       entry.status = 'corregir';
       entry.note = 'specHash changed after approval';
       saveState(state);
@@ -412,7 +411,7 @@ async function verifyApprovedUnchanged(state, catalog, format, method) {
       console.error(`\n⚠️  FRAME TIMING CHANGED for ${t.id} (${t.displayName})!`);
       console.error(`  Old repeatedFrames: ${entry.repeatedFrames}, New: ${probe.repeatedFrames}`);
       console.error(`  Old maxDeviation: ${entry.frameTimingDeviation}, New: ${probe.maxDeviation}`);
-      console.error(`  Reverting render...`);
+      console.error('  Reverting render...');
       entry.status = 'corregir';
       entry.note = 'frame timing changed after approval';
       saveState(state);
@@ -511,10 +510,10 @@ function generateIndexHtml(state, catalog, format, method) {
   <div class="summary">
     <strong>Resumen:</strong>
     ${catalog.map(t => {
-      const key = `${t.id}:${format}:${method}`;
-      const s = state[key];
-      return `<div>${t.id} (${t.displayName}): ${s.status} — ${s.renderSeconds || '—'}s — maxDev: ${s.maxDeviationPx ?? '—'} — meanDev: ${s.meanDeviationPx ?? '—'} — stutters: ${s.stutters ?? '—'} — nonMono: ${s.nonMonotone ?? '—'}</div>`;
-    }).join('')}
+    const key = `${t.id}:${format}:${method}`;
+    const s = state[key];
+    return `<div>${t.id} (${t.displayName}): ${s.status} — ${s.renderSeconds || '—'}s — maxDev: ${s.maxDeviationPx ?? '—'} — meanDev: ${s.meanDeviationPx ?? '—'} — stutters: ${s.stutters ?? '—'} — nonMono: ${s.nonMonotone ?? '—'}</div>`;
+  }).join('')}
     <div class="legend">
       <span><span class="dot approved"></span> Aprobada</span>
       <span><span class="dot fix"></span> Corregir</span>
@@ -556,7 +555,6 @@ async function generateGridImage() {
   const w = 3840;
   const h = 2160;
   const cellSize = 120;
-  const markerSize = 20;
   
   const filter = `
     color=c=black:s=${w}x${h}:d=1,
@@ -617,7 +615,7 @@ async function main() {
   
   await generateGridImage();
   
-  const catalog = ZOOM_V3.getZoomCatalog().filter(t => t.id !== 'none');
+  const catalog = ZOOM_V3.getZoomCatalog();
   
   if (list) {
     console.log('\nAvailable zoom effects:');

@@ -2,8 +2,6 @@ const { test, expect } = require('@playwright/test');
 const {
   TRANSITION_CATALOG,
   TRANSITION_IDS,
-  TRANSITION_MAP,
-  TRANSITION_DEFAULTS,
   getTransitionCatalog,
   getMotionSpec,
   num,
@@ -13,7 +11,6 @@ const {
   seededRandom,
   transitionDurationFor,
   resolveInputDurations,
-  buildXfadeFilter,
   transitionBoundaries,
   calculateTotalDuration,
   normalizeScenesToDuration,

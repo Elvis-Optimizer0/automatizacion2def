@@ -1,10 +1,6 @@
 const {
   assertOutputConfig,
-  DEFAULT_FOCUS,
-  DEFAULT_SCALE,
-  SCALE_MIN,
-  SCALE_MAX,
-  BACKGROUND_MODES
+  DEFAULT_FOCUS
 } = require('./output-formats.js');
 
 const {
@@ -26,10 +22,6 @@ const {
   resolveTransitionType,
   resolveInputDurations,
   seededRandom,
-  buildSceneFilter,
-  buildCustomTransitionFilter,
-  buildSlidingTransitionSegment,
-  buildXfadeFilter,
   calculateTotalDuration,
   normalizeScenesToDuration,
   isSlidingTransition,
@@ -56,19 +48,7 @@ const DEFAULT_ZOOM_SEED = 12345;
 
 const TRANSITION_TYPES = TRANSITION_IDS;
 const TRANSITION_MODES = ['fixed', 'alternate', 'random'];
-const RANDOM_TRANSITION_TYPES = TRANSITION_IDS.filter((t) => t !== 'cut');
-const TRANSITION_OPPOSITE = {
-  slideLeft: 'slideRight',
-  slideRight: 'slideLeft',
-  slideUp: 'slideDown',
-  slideDown: 'slideUp',
-  curtainLeft: 'curtainRight',
-  curtainRight: 'curtainLeft',
-  fade: 'dissolve',
-  dissolve: 'fade',
-  fadeblack: 'fade',
-  circle: 'fade'
-};
+
 const XFADE_TRANSITIONS = [
   'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight',
   'wipeup', 'wipedown', 'slideleft', 'slideright', 'slideup', 'slidedown',

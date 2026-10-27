@@ -9,7 +9,7 @@ const { listFontsInDir, importFontFromPath, getBundledFontsDir, getUserFontsDir,
 const { detectKeywords } = require('./core/keywords.js');
 const { readPresets, addPreset, renamePreset, deletePreset } = require('./core/presets.js');
 const { listVoices: listVoiceCatalog, SUPPORTED_LANGUAGES, getSamplePhrase, synthesizeVoice, checkVoiceEngine, isTestMode: isVoiceTestMode } = require('./core/voice.js');
-const { KNOWN_MODELS, MODEL_CATALOG, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID, verifyModelFile, E_MODEL_DOWNLOAD_FAILED, E_MODEL_CANCELLED, E_DOWNLOAD_REDIRECT, E_DOWNLOAD_HTTP, E_DOWNLOAD_HASH, E_DOWNLOAD_SIZE, E_DOWNLOAD_NETWORK, E_DOWNLOAD_TIMEOUT } = require('./core/models.js');
+const { KNOWN_MODELS, MODEL_CATALOG, getModelsDir, listModels, listModelsAsync, importModel, downloadModel, normalizeImportPath, normalizeModelId, E_MODEL_IMPORT_FAILED, E_MODEL_PATH_INVALID, E_MODEL_DOWNLOAD_FAILED, E_MODEL_CANCELLED, E_DOWNLOAD_REDIRECT, E_DOWNLOAD_HTTP, E_DOWNLOAD_HASH, E_DOWNLOAD_SIZE, E_DOWNLOAD_NETWORK, E_DOWNLOAD_TIMEOUT } = require('./core/models.js');
 const { alignScenes } = require('./core/alignment.js');
 const { getCapabilities, resolveAcceleration } = require('./core/capabilities.js');
 

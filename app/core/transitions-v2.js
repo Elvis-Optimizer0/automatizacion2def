@@ -212,7 +212,6 @@ function buildCustomTransitionFilter(transitionId, w, h, transDur, offset, slide
  */
 function buildSlidingTransitionSegment(transitionType, w, h, transDur, offset, slideSpeed, durA, durB, sceneAIndex, sceneBIndex, currentLabel, nextLabel) {
   const effectiveSlideDur = num(transDur / slideSpeed);
-  const holdDur = num(transDur - effectiveSlideDur);
   
   const spec = MOTION_SPECS[transitionType];
   const direction = spec.params.direction;
@@ -248,7 +247,6 @@ function buildSlidingTransitionSegment(transitionType, w, h, transDur, offset, s
   const overlayLabel = `ov${sceneAIndex}`;
   const concat1Label = `c1_${sceneAIndex}`;
   const remBLabel = `rb${sceneAIndex}`;
-  const concat2Label = nextLabel;
   
   const parts = [];
   
@@ -389,10 +387,6 @@ async function renderTransitionClip(transitionId, imageA, imageB, outputPath, op
   const transDur = catalogEntry.isCut ? num(1/FPS) : num(Math.min(transitionDuration, sceneDuration / 2));
   const totalDuration = num(sceneDuration * 2 + transDur);
 
-  const sceneA = { duration: sceneDuration };
-  const sceneB = { duration: sceneDuration };
-  const scenes = [sceneA, sceneB];
-
   const inputDurations = [
     num(sceneDuration + transDur),
     num(sceneDuration)
@@ -452,7 +446,7 @@ async function renderTransitionClip(transitionId, imageA, imageB, outputPath, op
   return { outputPath, duration: totalDuration, transitionDuration: transDur };
 }
 
-async function runFfmpeg(args, expectedDuration) {
+async function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
     const proc = spawn(getFfmpegPath(), args, { windowsHide: true });
     let stderr = '';
@@ -466,7 +460,7 @@ async function runFfmpeg(args, expectedDuration) {
 }
 
 function transitionBoundaries(timeline, options = {}) {
-  const { transitionType = 'fade', transitionMode = 'fixed', transitionSeed, transitionDuration = 1.0 } = options;
+  const { transitionDuration = 1.0 } = options;
   const boundaries = [];
   let accumulated = 0;
   const boundaryTypes = resolveBoundaryTypes(timeline, options);

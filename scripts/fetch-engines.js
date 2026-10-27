@@ -192,16 +192,6 @@ function extractZip(zipPath, targetDir) {
   run('tar', ['-xf', zipPath, '-C', targetDir]);
 }
 
-function listZipEntries(zipPath) {
-  const result = spawnSync('tar', ['-tf', zipPath], {
-    encoding: 'utf8',
-    windowsHide: true
-  });
-  if (result.error) throw new Error(`no se pudo listar ${zipPath}: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(`no se pudo listar ${zipPath}: tar terminó con código ${result.status}`);
-  return String(result.stdout || '').split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
-}
-
 function moveContents(fromDir, toDir, fileSystem = fs) {
   ensureDir(toDir, fileSystem);
   for (const entry of fileSystem.readdirSync(fromDir)) {
