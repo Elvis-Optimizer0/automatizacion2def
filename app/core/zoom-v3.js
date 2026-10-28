@@ -1,4 +1,5 @@
 const { seededRandom } = require('./transitions-v2.js');
+const crypto = require('crypto');
 
 const FPS = 30;
 const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
@@ -14,16 +15,14 @@ const ZOOM_OPPOSITE = {
 };
 const DEFAULT_ZOOM_SEED = 12345;
 
-const EASING = {
+const MIN_DURATION_SEC = 0.5;
+const MAX_DURATION_SEC = 120.0;
+
+const EASING_FUNCTIONS = {
   linear: p => p,
-  easeInQuad: p => p * p,
-  easeOutQuad: p => 1 - (1 - p) * (1 - p),
-  easeInOutQuad: p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2,
-  easeInCubic: p => p * p * p,
-  easeOutCubic: p => 1 - Math.pow(1 - p, 3),
-  easeInOutCubic: p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
-  smoothstep: p => 3 * p * p - 2 * p * p * p,
-  smootherstep: p => 6 * p * p * p * p * p - 15 * p * p * p * p + 10 * p * p * p
+  smooth: p => 3 * p * p - 2 * p * p * p,
+  in: p => p * p,
+  out: p => 1 - (1 - p) * (1 - p)
 };
 
 function clamp01(value) {
@@ -39,119 +38,197 @@ function num(value, decimals = 6) {
   return Number(Number(value).toFixed(decimals));
 }
 
-const ZOOM_MOTION_SPECS = {
+/**
+ * Validate a motion spec. Throws on invalid parameters.
+ */
+function validateMotionSpec(spec) {
+  const { type, start, end, easing, speed, durationSec } = spec;
+
+  const VALID_MOTION_TYPES = ['static', 'linear', 'oscillate'];
+  if (!VALID_MOTION_TYPES.includes(type)) {
+    throw new Error(`Unknown motion type: ${type}`);
+  }
+
+  if (type !== 'static' && (!start || !end)) {
+    throw new Error(`Motion spec for '${type}' requires start and end keyframes`);
+  }
+
+  if (durationSec == null || typeof durationSec !== 'number') {
+    throw new Error('durationSec is required for motion spec');
+  }
+  if (!Number.isFinite(durationSec) || durationSec < MIN_DURATION_SEC || durationSec > MAX_DURATION_SEC) {
+    throw new Error(`durationSec must be between ${MIN_DURATION_SEC} and ${MAX_DURATION_SEC}, got ${durationSec}`);
+  }
+
+  if (speed == null || typeof speed !== 'number' || !Number.isFinite(speed) || speed <= 0) {
+    throw new Error(`speed must be a positive number, got ${speed}`);
+  }
+
+  if (easing && !EASING_FUNCTIONS[easing]) {
+    throw new Error(`Unknown easing: ${easing}`);
+  }
+
+  // Non-static, non-oscillate effects must have non-zero amplitude
+  if (type !== 'static' && type !== 'oscillate') {
+    const scaleChange = Math.abs((end.scale || 1) - (start.scale || 1));
+    const cxChange = Math.abs((end.cx || 0.5) - (start.cx || 0.5));
+    const cyChange = Math.abs((end.cy || 0.5) - (start.cy || 0.5));
+    if (scaleChange < 1e-6 && cxChange < 1e-6 && cyChange < 1e-6) {
+      throw new Error(`Motion spec '${type}' has zero amplitude - start and end are identical`);
+    }
+  }
+}
+
+/**
+ * Keyframe motion presets for each catalog effect.
+ * start/end are normalized {cx, cy, scale} in source-image space.
+ */
+const ZOOM_PRESETS = {
   none: {
     displayName: 'Sin zoom',
-    defaultIntensity: 0,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => ({
-      scale: startScale,
-      cx: 0.5,
-      cy: 0.5
-    })
+    type: 'static',
+    start: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    end: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    easing: 'linear',
+    speed: 1.0,
+    durationSec: 6.0
   },
   kenburns: {
     displayName: 'Ken Burns',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const scale = startScale + intensity * eased;
-      const cx = 0.5;
-      const cy = 0.5;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    end: { cx: 0.5, cy: 0.5, scale: 1.15 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   },
   zoomIn: {
     displayName: 'Acercar',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const scale = startScale + intensity * eased;
-      const cx = 0.5;
-      const cy = 0.5;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    end: { cx: 0.5, cy: 0.5, scale: 1.15 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   },
   zoomOut: {
     displayName: 'Alejar',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const maxZoom = startScale + intensity;
-      const scale = maxZoom - intensity * eased;
-      const cx = 0.5;
-      const cy = 0.5;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 0.5, cy: 0.5, scale: 1.15 },
+    end: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   },
   pulse: {
     displayName: 'Pulso',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const around = startScale + intensity / 2;
-      const scale = around - (intensity / 2) * Math.cos(2 * Math.PI * p);
-      const cx = 0.5;
-      const cy = 0.5;
-      return { scale, cx, cy };
-    }
+    type: 'oscillate',
+    start: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    end: { cx: 0.5, cy: 0.5, scale: 1.0 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0,
+    amplitude: 0.15,
+    period: 1.0
   },
   panLeft: {
     displayName: 'Paneo Izquierda',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const maxZoom = startScale + intensity;
-      const scale = maxZoom;
-      const cx = 1 - eased;
-      const cy = 0.5;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 1.0, cy: 0.5, scale: 1.2 },
+    end: { cx: 0.0, cy: 0.5, scale: 1.2 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   },
   panRight: {
     displayName: 'Paneo Derecha',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const maxZoom = startScale + intensity;
-      const scale = maxZoom;
-      const cx = eased;
-      const cy = 0.5;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 0.0, cy: 0.5, scale: 1.2 },
+    end: { cx: 1.0, cy: 0.5, scale: 1.2 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   },
   panUp: {
     displayName: 'Paneo Arriba',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const maxZoom = startScale + intensity;
-      const scale = maxZoom;
-      const cx = 0.5;
-      const cy = 1 - eased;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 0.5, cy: 1.0, scale: 1.2 },
+    end: { cx: 0.5, cy: 0.0, scale: 1.2 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   },
   panDown: {
     displayName: 'Paneo Abajo',
-    defaultIntensity: 0.15,
-    defaultStartScale: 1.0,
-    motion: (p, intensity, startScale) => {
-      const eased = smoothstep(p);
-      const maxZoom = startScale + intensity;
-      const scale = maxZoom;
-      const cx = 0.5;
-      const cy = eased;
-      return { scale, cx, cy };
-    }
+    type: 'linear',
+    start: { cx: 0.5, cy: 0.0, scale: 1.2 },
+    end: { cx: 0.5, cy: 1.0, scale: 1.2 },
+    easing: 'smooth',
+    speed: 1.0,
+    durationSec: 6.0
   }
 };
+
+/**
+ * Compute per-frame motion parameters for a keyframe motion spec.
+ * Returns array of {scale, cx, cy} for each frame index 0..totalFrames-1.
+ *
+ * p_eff = ease(min(1, (t / durationSec) * speed))
+ * Movement finishes at durationSec / speed and holds.
+ */
+function generateMotionSequence(motionSpec, totalFrames) {
+  validateMotionSpec(motionSpec);
+
+  const { type, start, end, easing = 'smooth', speed = 1.0, durationSec } = motionSpec;
+  const easeFn = EASING_FUNCTIONS[easing];
+
+  const sequence = [];
+  const holdStartTime = durationSec / speed;
+
+  for (let i = 0; i < totalFrames; i++) {
+    const t = i / FPS;
+    let p;
+
+    if (t >= holdStartTime) {
+      // Movement finished, hold at end
+      p = 1;
+    } else {
+      p = (t / durationSec) * speed;
+      p = Math.min(1, p);
+    }
+
+    let result;
+    if (type === 'static' || type === 'none') {
+      result = { scale: start.scale, cx: start.cx, cy: start.cy };
+    } else if (type === 'linear') {
+      p = easeFn(p);
+      result = {
+        scale: start.scale + (end.scale - start.scale) * p,
+        cx: start.cx + (end.cx - start.cx) * p,
+        cy: start.cy + (end.cy - start.cy) * p
+      };
+    } else if (type === 'oscillate') {
+      const amplitude = motionSpec.amplitude ?? 0.15;
+      const period = motionSpec.period ?? 1.0;
+      // Oscillate for the full duration, then hold at final value
+      const tEffective = Math.min(t, holdStartTime);
+      result = {
+        scale: start.scale + amplitude * Math.sin(2 * Math.PI * tEffective / period),
+        cx: start.cx,
+        cy: start.cy
+      };
+    } else {
+      throw new Error(`Unknown motion type: ${type}`);
+    }
+
+    sequence.push({
+      scale: num(result.scale, 6),
+      cx: num(result.cx, 6),
+      cy: num(result.cy, 6)
+    });
+  }
+  return sequence;
+}
 
 function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
   const base = ZOOM_TYPES.includes(baseType) ? baseType : 'kenburns';
@@ -184,24 +261,34 @@ function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
 }
 
 function getMotionSpec(type) {
-  const spec = ZOOM_MOTION_SPECS[type];
-  if (!spec) return ZOOM_MOTION_SPECS.kenburns;
-  return { ...spec };
+  const preset = ZOOM_PRESETS[type];
+  if (!preset) return { ...ZOOM_PRESETS.kenburns };
+  return { ...preset };
 }
 
 function getZoomCatalog() {
   return ZOOM_TYPES.map(id => {
-    const spec = ZOOM_MOTION_SPECS[id];
+    const preset = ZOOM_PRESETS[id];
     return {
       id,
-      displayName: spec.displayName,
-      defaultIntensity: spec.defaultIntensity,
-      defaultStartScale: spec.defaultStartScale
+      displayName: preset.displayName,
+      type: preset.type,
+      easing: preset.easing,
+      speed: preset.speed,
+      durationSec: preset.durationSec,
+      amplitude: preset.amplitude,
+      period: preset.period,
+      start: { ...preset.start },
+      end: { ...preset.end }
     };
   });
 }
 
-function buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, upscale = 2, upFlags = 'bilinear', downFlags = 'lanczos') {
+/**
+ * Build an ffmpeg upscale-crop-downscale filter string for a single frame's
+ * motion parameters. Used for filter-graph preview path (not the lab render path).
+ */
+function buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, upscale = 4, upFlags = 'lanczos', downFlags = 'lanczos') {
   const type = ZOOM_TYPES.includes(options.zoomType) ? options.zoomType : 'kenburns';
   if (type === 'none') return '';
 
@@ -391,37 +478,17 @@ function buildZoomFilterV3(scene, w, h, options, focus, method = 'upscale-crop-d
     return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 3, 'lanczos', 'lanczos');
   case 'upscale-crop-downscale':
   default:
-    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 2, 'bilinear', 'lanczos');
+    return buildUpscaleCropDownscaleFilter(scene, w, h, options, focus, 4, 'lanczos', 'lanczos');
   }
-}
-
-/**
- * Generate per-frame motion parameters for an effect.
- * Returns array of {scale, cx, cy} for each frame index 0..totalFrames-1.
- * cx, cy are normalized [0,1] center of the crop window in source-image space.
- */
-function generateMotionSequence(type, intensity, startScale, totalFrames, _duration) {
-  const spec = ZOOM_MOTION_SPECS[type];
-  if (!spec) throw new Error(`Unknown zoom type: ${type}`);
-  if (intensity == null || intensity === 0) {
-    if (type !== 'none') throw new Error(`Effect '${type}' requires intensity > 0`);
-  }
-  const sequence = [];
-  for (let i = 0; i < totalFrames; i++) {
-    const p = totalFrames > 1 ? i / (totalFrames - 1) : 0;
-    const m = spec.motion(p, intensity, startScale);
-    sequence.push({
-      scale: num(m.scale, 6),
-      cx: num(m.cx, 6),
-      cy: num(m.cy, 6)
-    });
-  }
-  return sequence;
 }
 
 function hashSpec(type, intensity, startScale, method) {
-  const crypto = require('crypto');
   const str = JSON.stringify({ type, intensity, startScale, method });
+  return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
+}
+
+function hashMotionSpec(motionSpec) {
+  const str = JSON.stringify(motionSpec);
   return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
 }
 
@@ -436,19 +503,21 @@ module.exports = {
   DEFAULT_ZOOM_SEED,
   RANDOM_ZOOM_TYPES,
   ZOOM_OPPOSITE,
-  ZOOM_MOTION_SPECS,
-  EASING,
+  ZOOM_PRESETS,
+  EASING_FUNCTIONS,
   smoothstep,
   clamp01,
   num,
   resolveZoomType,
   getMotionSpec,
   getZoomCatalog,
+  generateMotionSequence,
+  validateMotionSpec,
   buildZoomFilterV3,
   buildUpscaleCropDownscaleFilter,
   buildPerspectiveFilter,
   buildRotateScaleFilter,
-  generateMotionSequence,
   hashSpec,
+  hashMotionSpec,
   sanitizeFileName
 };

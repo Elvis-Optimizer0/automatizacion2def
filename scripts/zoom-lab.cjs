@@ -57,7 +57,9 @@ function initState(catalog, format) {
     catalog.forEach((t, idx) => {
       const key = `${t.id}:${format}`;
       if (!state[key]) {
-        const specHash = ZOOM_V3.hashSpec(t.id, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultStartScale, 'frame-render');
+        const preset = ZOOM_V3.getMotionSpec(t.id);
+        const motionSpec = { ...preset, durationSec: SCENE_DURATION };
+        const specHash = ZOOM_V3.hashMotionSpec(motionSpec);
         state[key] = {
           status: 'pendiente',
           note: '',
@@ -65,9 +67,11 @@ function initState(catalog, format) {
           renderSeconds: null,
           maxDeviationPx: null,
           meanDeviationPx: null,
+          accelRms: null,
           stutters: null,
           nonMonotone: null,
           motionPresent: null,
+          firstLastSsim: null,
           format,
           fileName: `${String(idx + 1).padStart(2, '0')}-${t.id}-${ZOOM_V3.sanitizeFileName(t.displayName)}.mp4`
         };
@@ -148,7 +152,6 @@ async function measureMotionOnEncoded(videoPath, format, effectId) {
   try {
     await runFfmpeg([
       '-i', videoPath,
-      '-vsync', 'passthrough',
       path.join(framesDir, 'frame_%04d.png')
     ]);
   } catch {
@@ -165,15 +168,14 @@ async function measureMotionOnEncoded(videoPath, format, effectId) {
     return { motionPresent: false, maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 };
   }
 
-  const spec = ZOOM_V3.ZOOM_MOTION_SPECS[effectId];
-  if (!spec) {
+  const preset = ZOOM_V3.getMotionSpec(effectId);
+  if (!preset) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     return { motionPresent: false, maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 };
   }
 
-  const intensity = spec.defaultIntensity;
-  const startScale = spec.defaultStartScale;
-  const sequence = ZOOM_V3.generateMotionSequence(effectId, intensity, startScale, TOTAL_FRAMES, SCENE_DURATION);
+  const motionSpec = { ...preset, durationSec: SCENE_DURATION };
+  const sequence = ZOOM_V3.generateMotionSequence(motionSpec, TOTAL_FRAMES);
 
   // Motion present: compare first vs last frame
   let motionPresent = false;
@@ -217,6 +219,15 @@ async function measureMotionOnEncoded(videoPath, format, effectId) {
   const firstScale = sequence[0].scale;
   const lastScale = sequence[TOTAL_FRAMES - 1].scale;
   const expectedTotalChange = Math.abs(lastScale - firstScale);
+
+  // Acceleration RMS: second derivative of scale over frames
+  const accels = [];
+  for (let i = 1; i < sequence.length - 1; i++) {
+    const accel = sequence[i + 1].scale - 2 * sequence[i].scale + sequence[i - 1].scale;
+    accels.push(accel * accel);
+  }
+  const accelRms = accels.length > 0 ? Math.sqrt(accels.reduce((a, b) => a + b, 0) / accels.length) : 0;
+
   const maxDeviationPx = expectedTotalChange * Math.max(w, h) / 2; // rough pixel deviation estimate
 
   fs.rmSync(tempDir, { recursive: true, force: true });
@@ -225,49 +236,105 @@ async function measureMotionOnEncoded(videoPath, format, effectId) {
     motionPresent,
     maxDeviationPx: Number(maxDeviationPx.toFixed(4)),
     meanDeviationPx: Number((maxDeviationPx / 2).toFixed(4)),
+    accelRms: Number(accelRms.toFixed(6)),
     stutterCount,
     nonMonotoneCount,
     firstLastSsim: Number(firstLastSsim.toFixed(4))
   };
 }
 
-async function renderOne(effect, imagePath, format, state) {
+async function renderOne(effect, imagePath, format, state, options = {}) {
   const { w, h } = getFormatDims(format);
   const key = `${effect.id}:${format}`;
   const outputPath = path.join(OUTPUT_DIR, state[key].fileName);
-  console.log(`\n[${effect.id}] Rendering ${effect.displayName} (${w}x${h}) frame-based...`);
+  const speed = options.speed || 1.0;
+  console.log(`\n[${effect.id}] Rendering ${effect.displayName} (${w}x${h}) frame-based speed=${speed}...`);
   const start = Date.now();
 
   try {
-    const intensity = ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultIntensity;
-    const startScale = ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultStartScale;
-    const sequence = ZOOM_V3.generateMotionSequence(effect.id, intensity, startScale, TOTAL_FRAMES, SCENE_DURATION);
+    // Build motion spec from preset + overrides
+    const preset = ZOOM_V3.getMotionSpec(effect.id);
+    const motionSpec = {
+      type: preset.type,
+      start: { ...preset.start },
+      end: { ...preset.end },
+      easing: options.easing || preset.easing,
+      speed,
+      durationSec: options.durationSec || SCENE_DURATION,
+      ...(preset.amplitude !== undefined ? { amplitude: preset.amplitude } : {}),
+      ...(preset.period !== undefined ? { period: preset.period } : {})
+    };
 
-    // Validate: non-none effects must have intensity > 0
-    if (effect.id !== 'none' && (!intensity || intensity <= 0)) {
-      throw new Error(`Effect '${effect.id}' has intensity <= 0, refusing to produce static clip`);
+    // Apply start/end overrides if provided
+    if (options.start) {
+      const [cx, cy, scale] = options.start.split(',').map(Number);
+      motionSpec.start = { cx, cy, scale: scale || motionSpec.start.scale };
     }
+    if (options.end) {
+      const [cx, cy, scale] = options.end.split(',').map(Number);
+      motionSpec.end = { cx, cy, scale: scale || motionSpec.end.scale };
+    }
+
+    ZOOM_V3.validateMotionSpec(motionSpec);
+
+    const sequence = ZOOM_V3.generateMotionSequence(motionSpec, TOTAL_FRAMES);
 
     const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'zoom-frames-'));
     const framesDir = path.join(tempDir, 'frames');
     fs.mkdirSync(framesDir, { recursive: true });
 
-    const src = sharp(imagePath);
-    const srcMeta = await src.metadata();
+    // Pre-upscale source 4x for sub-pixel precision (error <= 0.25px at output)
+    const UPSCALE = 4;
+    const srcMeta = await sharp(imagePath).metadata();
     const srcW = srcMeta.width;
     const srcH = srcMeta.height;
+    const upW = srcW * UPSCALE;
+    const upH = srcH * UPSCALE;
+    const upscaledPath = path.join(tempDir, 'upscaled.png');
 
-    // Generate each frame with sharp: crop + resize
+    await sharp(imagePath)
+      .resize(upW, upH, { kernel: sharp.kernel.lanczos3 })
+      .png()
+      .toFile(upscaledPath);
+
+    // Compute padding needed for scale < 1.0 (zoom out beyond source)
+    const minScale = Math.min(...sequence.map(m => m.scale));
+    const padW = minScale < 1.0 ? Math.ceil(upW * (1 / minScale - 1) / 2) : 0;
+    const padH = minScale < 1.0 ? Math.ceil(upH * (1 / minScale - 1) / 2) : 0;
+    const paddedPath = padW > 0 || padH > 0 ? path.join(tempDir, 'padded.png') : upscaledPath;
+
+    if (padW > 0 || padH > 0) {
+      await sharp(upscaledPath)
+        .extend({
+          top: padH,
+          bottom: padH,
+          left: padW,
+          right: padW,
+          background: { r: 0, g: 0, b: 0 }
+        })
+        .png()
+        .toFile(paddedPath);
+    }
+
+    const padOffsetX = padW;
+    const padOffsetY = padH;
+    const paddedW = upW + 2 * padW;
+    const paddedH = upH + 2 * padH;
+
+    // Generate each frame: crop at 4x (sub-pixel at output), downscale to output
     for (let i = 0; i < TOTAL_FRAMES; i++) {
       const m = sequence[i];
-      const cropW = Math.round(srcW / m.scale);
-      const cropH = Math.round(srcH / m.scale);
-      const cropX = Math.round(Math.max(0, Math.min(srcW - cropW, m.cx * srcW - cropW / 2)));
-      const cropY = Math.round(Math.max(0, Math.min(srcH - cropH, m.cy * srcH - cropH / 2)));
+      // Crop window centered at (cx, cy) in the upscaled image, offset by padding
+      const centerX = m.cx * upW + padOffsetX;
+      const centerY = m.cy * upH + padOffsetY;
+      const cropW = Math.round(upW / m.scale);
+      const cropH = Math.round(upH / m.scale);
+      const cropX = Math.round(Math.max(0, Math.min(paddedW - cropW, centerX - cropW / 2)));
+      const cropY = Math.round(Math.max(0, Math.min(paddedH - cropH, centerY - cropH / 2)));
 
-      await sharp(imagePath)
+      await sharp(paddedPath)
         .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
-        .resize(w, h)
+        .resize(w, h, { kernel: sharp.kernel.lanczos3 })
         .png()
         .toFile(path.join(framesDir, `frame_${String(i).padStart(4, '0')}.png`));
     }
@@ -299,7 +366,7 @@ async function renderOne(effect, imagePath, format, state) {
     // Also probe for codec info
     const probe = await probeVideo(outputPath);
 
-    const specHash = ZOOM_V3.hashSpec(effect.id, intensity, startScale, 'frame-render');
+    const specHash = ZOOM_V3.hashMotionSpec(motionSpec);
 
     state[key] = {
       ...state[key],
@@ -307,9 +374,11 @@ async function renderOne(effect, imagePath, format, state) {
       renderSeconds: Number(renderSeconds.toFixed(2)),
       maxDeviationPx: metrics.maxDeviationPx,
       meanDeviationPx: metrics.meanDeviationPx,
+      accelRms: metrics.accelRms,
       stutters: metrics.stutterCount,
       nonMonotone: metrics.nonMonotoneCount,
       motionPresent: metrics.motionPresent,
+      firstLastSsim: metrics.firstLastSsim,
       probeOk: probe.ok,
       probeCodec: probe.codec_name,
       probePixFmt: probe.pix_fmt,
@@ -347,7 +416,9 @@ async function verifyApprovedUnchanged(state, catalog, format) {
   for (const t of approved) {
     const key = `${t.id}:${format}`;
     const entry = state[key];
-    const currentHash = ZOOM_V3.hashSpec(t.id, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultStartScale, 'frame-render');
+    const preset = ZOOM_V3.getMotionSpec(t.id);
+    const motionSpec = { ...preset, durationSec: SCENE_DURATION };
+    const currentHash = ZOOM_V3.hashMotionSpec(motionSpec);
     if (currentHash !== entry.specHash) {
       console.error(`\n⚠️  SPEC HASH CHANGED for ${t.id} (${t.displayName})!`);
       entry.status = 'corregir';
@@ -493,21 +564,21 @@ function generateIndexHtml(state, catalog, format) {
 }
 
 function printTable(state, catalog, format) {
-  console.log('\n┌──┬─────────────────┬──────────────────────┬────────────┬──────────┬────────────┬────────────┬──────────┬──────────┐');
-  console.log('│ #│ ID              │ Display Name         │ Status     │ Render s │ Max Dev px │ Mean Dev px│ Stutters │ Motion   │');
-  console.log('├──┼─────────────────┼──────────────────────┼────────────┼──────────┼────────────┼────────────┼──────────┼──────────┤');
+  console.log('\n┌──┬─────────────────┬──────────────────────┬────────────┬──────────┬────────────┬────────────┬──────────┬──────────┬──────────┐');
+  console.log('│ #│ ID              │ Display Name         │ Status     │ Render s │ Max Dev px │ Accel RMS  │ Stutters │ Motion   │');
+  console.log('├──┼─────────────────┼──────────────────────┼────────────┼──────────┼────────────┼────────────┼──────────┼──────────┼──────────┤');
   catalog.forEach((t, idx) => {
     const key = `${t.id}:${format}`;
     const s = state[key];
     const status = s.status === 'aprobada' ? '✅ aprobada' : (s.status === 'corregir' ? '❌ corregir' : '⏳ pendiente');
     const render = s.renderSeconds ? s.renderSeconds.toFixed(2) : '—';
     const maxDev = s.maxDeviationPx != null ? s.maxDeviationPx.toFixed(4) : '—';
-    const meanDev = s.meanDeviationPx != null ? s.meanDeviationPx.toFixed(4) : '—';
+    const accelRms = s.accelRms != null ? s.accelRms.toFixed(4) : '—';
     const stutters = s.stutters != null ? s.stutters : '—';
     const motion = s.motionPresent != null ? (s.motionPresent ? '✅ sí' : '❌ no') : '—';
-    console.log(`│${String(idx+1).padStart(2)}│ ${t.id.padEnd(15)} │ ${t.displayName.padEnd(20)} │ ${status.padEnd(10)} │ ${render.padStart(8)} │ ${maxDev.padStart(10)} │ ${meanDev.padStart(10)} │ ${String(stutters).padStart(8)} │ ${motion.padStart(8)} │`);
+    console.log(`│${String(idx+1).padStart(2)}│ ${t.id.padEnd(15)} │ ${t.displayName.padEnd(20)} │ ${status.padEnd(10)} │ ${render.padStart(8)} │ ${maxDev.padStart(10)} │ ${accelRms.padStart(10)} │ ${String(stutters).padStart(8)} │ ${motion.padStart(8)} │`);
   });
-  console.log('└──┴─────────────────┴──────────────────────┴────────────┴──────────┴────────────┴────────────┴──────────┴──────────┘');
+  console.log('└──┴─────────────────┴──────────────────────┴────────────┴──────────┴────────────┴────────────┴──────────┴──────────┴──────────┘');
 }
 
 async function main() {
@@ -518,9 +589,20 @@ async function main() {
   const list = args.includes('--list');
   const imageArg = args.find(a => a.startsWith('--image='))?.split('=')[1];
   const imageIndex = imageArg ? parseInt(imageArg, 10) - 1 : 0;
+  const speedArg = args.find(a => a.startsWith('--speed='))?.split('=')[1];
+  const speed = speedArg ? parseFloat(speedArg) : 1.0;
+  const startArg = args.find(a => a.startsWith('--start='))?.split('=')[1];
+  const endArg = args.find(a => a.startsWith('--end='))?.split('=')[1];
+  const easingArg = args.find(a => a.startsWith('--easing='))?.split('=')[1];
+  const durationArg = args.find(a => a.startsWith('--duration='))?.split('=')[1];
+  const durationSec = durationArg ? parseFloat(durationArg) : null;
 
   if (!['16:9', '9:16'].includes(format)) {
     console.error('Invalid format. Use 16:9 or 9:16');
+    process.exit(1);
+  }
+  if (speed <= 0) {
+    console.error('Invalid speed. Use a positive value (e.g., 0.5, 1.0, 2.0)');
     process.exit(1);
   }
   const subdir = args.find(a => a.startsWith('--subdir='))?.split('=')[1];
@@ -536,7 +618,7 @@ async function main() {
   if (list) {
     console.log('\nAvailable zoom effects:');
     catalog.forEach((t, i) => {
-      console.log(`  ${String(i+1).padStart(2)}. ${t.id.padEnd(12)} ${t.displayName} (intensity: ${t.defaultIntensity}, startScale: ${t.defaultStartScale})`);
+      console.log(`  ${String(i+1).padStart(2)}. ${t.id.padEnd(12)} ${t.displayName} (type: ${t.type}, easing: ${t.easing}, speed: ${t.speed}, duration: ${t.durationSec}s)`);
     });
     console.log(`\nTotal: ${catalog.length} effects\n`);
     return;
@@ -548,6 +630,7 @@ async function main() {
   console.log(`📁 Output dir: ${OUTPUT_DIR}`);
   console.log(`📐 Format: ${format} (${getFormatDims(format).w}x${getFormatDims(format).h})`);
   console.log(`🎬 Scene duration: ${SCENE_DURATION}s`);
+  console.log(`⚡ Speed: ${speed}x`);
   console.log(`🖼️  Total frames: ${TOTAL_FRAMES} @ ${FPS} fps`);
 
   const state = initState(catalog, format);
@@ -572,8 +655,13 @@ async function main() {
 
   console.log(`\n🎬 Rendering ${toRender.length} effect(s)...`);
 
+  const renderOptions = { speed, durationSec };
+  if (startArg) renderOptions.start = startArg;
+  if (endArg) renderOptions.end = endArg;
+  if (easingArg) renderOptions.easing = easingArg;
+
   for (const effect of toRender) {
-    await renderOne(effect, imagePath, format, state);
+    await renderOne(effect, imagePath, format, state, renderOptions);
   }
 
   const allOk = await verifyApprovedUnchanged(state, catalog, format);
