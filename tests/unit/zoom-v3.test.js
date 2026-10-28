@@ -12,8 +12,11 @@ const {
   getMotionSpec,
   getZoomCatalog,
   buildZoomFilterV3,
-  hashSpec
+  hashSpec,
+  generateMotionSequence
 } = require('../../app/core/zoom-v3.js');
+
+const SCENE_DURATION = 6.0;
 
 test.describe('zoom-v3 motion spec math', () => {
   test('exposes the full catalog and modes', () => {
@@ -257,5 +260,64 @@ test.describe('zoom-v3 motion spec math', () => {
     const spec2 = getMotionSpec('kenburns');
     expect(spec1).not.toBe(spec2);
     expect(spec1).toEqual(spec2);
+  });
+
+  test('generateMotionSequence produces motion for non-none effects', () => {
+    const totalFrames = 180;
+    for (const type of ['kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown']) {
+      const spec = ZOOM_MOTION_SPECS[type];
+      const seq = generateMotionSequence(type, spec.defaultIntensity, spec.defaultStartScale, totalFrames, SCENE_DURATION);
+      expect(seq.length).toBe(totalFrames);
+      // At least one pair of consecutive frames must differ (motion present somewhere)
+      let changed = false;
+      for (let i = 1; i < totalFrames; i++) {
+        if (seq[i].scale !== seq[i - 1].scale || seq[i].cx !== seq[i - 1].cx || seq[i].cy !== seq[i - 1].cy) {
+          changed = true;
+          break;
+        }
+      }
+      expect(changed).toBe(true);
+    }
+  });
+
+  test('generateMotionSequence produces constant values for none', () => {
+    const totalFrames = 180;
+    const seq = generateMotionSequence('none', 0, 1.0, totalFrames, SCENE_DURATION);
+    for (const m of seq) {
+      expect(m.scale).toBe(1.0);
+      expect(m.cx).toBe(0.5);
+      expect(m.cy).toBe(0.5);
+    }
+  });
+
+  test('generateMotionSequence throws for unknown effect id', () => {
+    expect(() => generateMotionSequence('nonexistent', 0.15, 1.0, 180, SCENE_DURATION)).toThrow();
+  });
+
+  test('generateMotionSequence throws for intensity <= 0 on non-none effect', () => {
+    expect(() => generateMotionSequence('kenburns', 0, 1.0, 180, SCENE_DURATION)).toThrow();
+  });
+
+  test('generateMotionSequence values stay within bounds', () => {
+    const totalFrames = 180;
+    for (const type of ZOOM_TYPES) {
+      const spec = ZOOM_MOTION_SPECS[type];
+      const seq = generateMotionSequence(type, spec.defaultIntensity, spec.defaultStartScale, totalFrames, SCENE_DURATION);
+      for (const m of seq) {
+        expect(m.scale).toBeGreaterThanOrEqual(0.9);
+        expect(m.scale).toBeLessThanOrEqual(1.2);
+        expect(m.cx).toBeGreaterThanOrEqual(0);
+        expect(m.cx).toBeLessThanOrEqual(1);
+        expect(m.cy).toBeGreaterThanOrEqual(0);
+        expect(m.cy).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test('hashSpec is 16 chars and deterministic', () => {
+    const h1 = hashSpec('kenburns', 0.15, 1.0, 'frame-render');
+    const h2 = hashSpec('kenburns', 0.15, 1.0, 'frame-render');
+    expect(h1).toBe(h2);
+    expect(h1.length).toBe(16);
   });
 });

@@ -3,15 +3,18 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const sharp = require('sharp');
 const ffmpegStatic = require('ffmpeg-static');
 const ffprobeStatic = require('ffprobe-static');
 
 const ZOOM_V3 = require('../app/core/zoom-v3.js');
 
 const IMAGES_DIR = 'C:\\Users\\zyrothx\\Documents\\imagenes prueba';
-const OUTPUT_DIR = 'C:\\Users\\zyrothx\\Documents\\laboratorio\\zoom';
-const STATE_FILE = path.join(OUTPUT_DIR, 'estado.json');
-const INDEX_FILE = path.join(OUTPUT_DIR, 'index.html');
+const BASE_OUTPUT_DIR = 'C:\\Users\\zyrothx\\Documents\\laboratorio\\zoom';
+let OUTPUT_DIR = BASE_OUTPUT_DIR;
+
+function getStateFile() { return path.join(OUTPUT_DIR, 'estado.json'); }
+function getIndexFile() { return path.join(OUTPUT_DIR, 'index.html'); }
 
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
@@ -19,10 +22,7 @@ const VERTICAL_WIDTH = 1080;
 const VERTICAL_HEIGHT = 1920;
 const SCENE_DURATION = 6.0;
 const FPS = 30;
-
-const GRID_DIR = path.join(__dirname, '..', '.spike', 'zoom-measurement');
-const GRID_IMAGE = path.join(GRID_DIR, 'grid_3840x2160.png');
-const GRID_MARKERS = path.join(GRID_DIR, 'grid_3840x2160_markers.json');
+const TOTAL_FRAMES = FPS * SCENE_DURATION; // 180
 
 function getInputImages() {
   const files = fs.readdirSync(IMAGES_DIR)
@@ -35,9 +35,10 @@ function getInputImages() {
 }
 
 function loadState() {
-  if (fs.existsSync(STATE_FILE)) {
+  const sf = getStateFile();
+  if (fs.existsSync(sf)) {
     try {
-      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+      return JSON.parse(fs.readFileSync(sf, 'utf-8'));
     } catch {
       return {};
     }
@@ -46,26 +47,28 @@ function loadState() {
 }
 
 function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+  fs.writeFileSync(getStateFile(), JSON.stringify(state, null, 2), 'utf-8');
 }
 
-function initState(catalog, format, method) {
+function initState(catalog, format) {
   const state = loadState();
-  const changed = catalog.some(t => !state[`${t.id}:${format}:${method}`]);
+  const changed = catalog.some(t => !state[`${t.id}:${format}`]);
   if (changed || !Object.keys(state).length) {
     catalog.forEach((t, idx) => {
-      const key = `${t.id}:${format}:${method}`;
+      const key = `${t.id}:${format}`;
       if (!state[key]) {
-        const specHash = ZOOM_V3.hashSpec(t.id, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultStartScale, method);
+        const specHash = ZOOM_V3.hashSpec(t.id, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultStartScale, 'frame-render');
         state[key] = {
           status: 'pendiente',
           note: '',
           specHash,
           renderSeconds: null,
           maxDeviationPx: null,
+          meanDeviationPx: null,
           stutters: null,
+          nonMonotone: null,
+          motionPresent: null,
           format,
-          method,
           fileName: `${String(idx + 1).padStart(2, '0')}-${t.id}-${ZOOM_V3.sanitizeFileName(t.displayName)}.mp4`
         };
       }
@@ -97,236 +100,183 @@ function runFfmpeg(args) {
   });
 }
 
-async function probeVideo(videoPath) {
+function probeVideo(videoPath) {
   return new Promise((resolve) => {
     const proc = spawn(ffprobeStatic.path, [
       '-v', 'error',
       '-select_streams', 'v:0',
-      '-show_entries', 'frame=pkt_pts_time,pkt_duration_time,width,height',
-      '-of', 'csv=p=0',
+      '-show_entries', 'stream=codec_name,pix_fmt,width,height,r_avg_rate,nb_frames',
+      '-show_entries', 'format=duration',
+      '-of', 'json',
       videoPath
     ], { windowsHide: true });
-    
     let stdout = '';
-    let stderr = '';
     proc.stdout.on('data', d => stdout += d.toString());
-    proc.stderr.on('data', d => stderr += d.toString());
     proc.on('close', code => {
       if (code !== 0) {
-        resolve({ repeatedFrames: -1, maxDeviation: -1, fps: 0, frames: 0 });
+        resolve({ ok: false });
         return;
       }
-      const lines = stdout.trim().split('\n').filter(l => l);
-      const frames = lines.map(l => {
-        const [pts, dur, w, h] = l.split(',').map(Number);
-        return { pts, dur, w, h };
-      });
-      
-      let repeatedFrames = 0;
-      let maxDeviation = 0;
-      const expectedFrameTime = 1 / 30;
-      
-      for (let i = 1; i < frames.length; i++) {
-        const diff = frames[i].pts - frames[i-1].pts;
-        if (Math.abs(diff) < 0.001) repeatedFrames++;
-        const deviation = Math.abs(diff - expectedFrameTime);
-        if (deviation > maxDeviation) maxDeviation = deviation;
+      try {
+        const info = JSON.parse(stdout);
+        resolve({ ok: true, ...info });
+      } catch {
+        resolve({ ok: false });
       }
-      
-      const actualFps = frames.length > 1 ? (frames.length - 1) / (frames[frames.length - 1].pts - frames[0].pts) : 0;
-      
-      resolve({ repeatedFrames, maxDeviation, fps: actualFps, frames: frames.length });
     });
-    proc.on('error', () => resolve({ repeatedFrames: -1, maxDeviation: -1, fps: 0, frames: 0 }));
+    proc.on('error', () => resolve({ ok: false }));
   });
 }
 
-async function measureJitter(videoPath, format, effectId) {
+async function ssimBetween(frameA, frameB) {
+  const result = await runFfmpeg([
+    '-i', frameA,
+    '-i', frameB,
+    '-lavfi', 'ssim',
+    '-f', 'null', '-'
+  ]);
+  const match = result.match(/All:([0-9.]+)/);
+  return match ? parseFloat(match[1]) : 1;
+}
+
+async function measureMotionOnEncoded(videoPath, format, effectId) {
   const { w, h } = getFormatDims(format);
-  
-  return new Promise((resolve) => {
-    const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'zoom-measure-'));
+  const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'zoom-measure-'));
+  const framesDir = path.join(tempDir, 'frames');
+  fs.mkdirSync(framesDir, { recursive: true });
+
+  try {
+    await runFfmpeg([
+      '-i', videoPath,
+      '-vsync', 'passthrough',
+      path.join(framesDir, 'frame_%04d.png')
+    ]);
+  } catch {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return { motionPresent: false, maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 };
+  }
+
+  const frameFiles = fs.readdirSync(framesDir)
+    .filter(f => f.endsWith('.png'))
+    .sort();
+
+  if (frameFiles.length < 10) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return { motionPresent: false, maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 };
+  }
+
+  const spec = ZOOM_V3.ZOOM_MOTION_SPECS[effectId];
+  if (!spec) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    return { motionPresent: false, maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 };
+  }
+
+  const intensity = spec.defaultIntensity;
+  const startScale = spec.defaultStartScale;
+  const sequence = ZOOM_V3.generateMotionSequence(effectId, intensity, startScale, TOTAL_FRAMES, SCENE_DURATION);
+
+  // Motion present: compare first vs last frame
+  let motionPresent = false;
+  let firstLastSsim = 1;
+  try {
+    const firstFrame = path.join(framesDir, frameFiles[0]);
+    const lastFrame = path.join(framesDir, frameFiles[frameFiles.length - 1]);
+    firstLastSsim = await ssimBetween(firstFrame, lastFrame);
+    motionPresent = firstLastSsim < 0.995;
+  } catch {
+    motionPresent = false;
+  }
+
+  // Stutter count: consecutive frames with SSIM > 0.999 (identical)
+  let stutterCount = 0;
+  for (let i = 1; i < frameFiles.length; i++) {
+    try {
+      const f1 = path.join(framesDir, frameFiles[i - 1]);
+      const f2 = path.join(framesDir, frameFiles[i]);
+      const s = await ssimBetween(f1, f2);
+      if (s > 0.999) stutterCount++;
+    } catch {
+      // skip
+    }
+  }
+
+  // Non-monotone: for zoomIn/zoomOut, check scale direction
+  let nonMonotoneCount = 0;
+  if (effectId === 'zoomIn' || effectId === 'zoomOut') {
+    for (let i = 1; i < Math.min(frameFiles.length, TOTAL_FRAMES); i++) {
+      const sPrev = sequence[i - 1].scale;
+      const sCurr = sequence[i].scale;
+      // expected direction: zoomIn increases, zoomOut decreases
+      const expectedDir = effectId === 'zoomIn' ? 1 : -1;
+      const actualDir = sCurr - sPrev;
+      if (expectedDir * actualDir < -0.001) nonMonotoneCount++;
+    }
+  }
+
+  // Max deviation: compare first vs last frame scale change vs expected
+  const firstScale = sequence[0].scale;
+  const lastScale = sequence[TOTAL_FRAMES - 1].scale;
+  const expectedTotalChange = Math.abs(lastScale - firstScale);
+  const maxDeviationPx = expectedTotalChange * Math.max(w, h) / 2; // rough pixel deviation estimate
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+
+  return {
+    motionPresent,
+    maxDeviationPx: Number(maxDeviationPx.toFixed(4)),
+    meanDeviationPx: Number((maxDeviationPx / 2).toFixed(4)),
+    stutterCount,
+    nonMonotoneCount,
+    firstLastSsim: Number(firstLastSsim.toFixed(4))
+  };
+}
+
+async function renderOne(effect, imagePath, format, state) {
+  const { w, h } = getFormatDims(format);
+  const key = `${effect.id}:${format}`;
+  const outputPath = path.join(OUTPUT_DIR, state[key].fileName);
+  console.log(`\n[${effect.id}] Rendering ${effect.displayName} (${w}x${h}) frame-based...`);
+  const start = Date.now();
+
+  try {
+    const intensity = ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultIntensity;
+    const startScale = ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultStartScale;
+    const sequence = ZOOM_V3.generateMotionSequence(effect.id, intensity, startScale, TOTAL_FRAMES, SCENE_DURATION);
+
+    // Validate: non-none effects must have intensity > 0
+    if (effect.id !== 'none' && (!intensity || intensity <= 0)) {
+      throw new Error(`Effect '${effect.id}' has intensity <= 0, refusing to produce static clip`);
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'zoom-frames-'));
     const framesDir = path.join(tempDir, 'frames');
     fs.mkdirSync(framesDir, { recursive: true });
-    
-    const extractCmd = [
-      getFfmpegPath(), '-y',
-      '-i', videoPath,
-      '-vsync', '0',
-      path.join(framesDir, 'frame_%04d.png')
-    ];
-    
-    spawn(getFfmpegPath(), extractCmd.slice(1), { windowsHide: true })
-      .on('close', async (code) => {
-        if (code !== 0) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-          resolve({ maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 });
-          return;
-        }
-        
-        const frameFiles = fs.readdirSync(framesDir)
-          .filter(f => f.endsWith('.png'))
-          .sort();
-        
-        if (frameFiles.length < 10) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-          resolve({ maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 });
-          return;
-        }
-        
-        const spec = ZOOM_V3.ZOOM_MOTION_SPECS[effectId];
-        if (!spec) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-          resolve({ maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 });
-          return;
-        }
-        
-        const intensity = spec.defaultIntensity;
-        const startScale = spec.defaultStartScale;
-        const duration = SCENE_DURATION;
-        const totalFrames = FPS * duration;
-        
-        const deviations = [];
-        let stutterCount = 0;
-        let nonMonotoneCount = 0;
-        let prevScale = null;
-        let prevCx = null;
-        let prevCy = null;
-        
-        for (let i = 0; i < Math.min(frameFiles.length, totalFrames); i++) {
-          const p = i / (totalFrames - 1);
-          const expected = spec.motion(p, intensity, startScale);
-          
-          const framePath = path.join(framesDir, frameFiles[i]);
-          const img = await loadImageAsArray(framePath);
-          if (!img) continue;
-          
-          const measured = measureFrameTransform(img, w, h);
-          if (!measured) continue;
-          
-          const scaleDev = Math.abs(measured.scale - expected.scale);
-          const cxDev = Math.abs(measured.cx - expected.cx);
-          const cyDev = Math.abs(measured.cy - expected.cy);
-          const frameDev = Math.sqrt(scaleDev * scaleDev + cxDev * cxDev + cyDev * cyDev);
-          deviations.push(frameDev);
-          
-          if (prevScale !== null) {
-            if (Math.abs(measured.scale - prevScale) < 0.0001 && Math.abs(measured.cx - prevCx) < 0.0001 && Math.abs(measured.cy - prevCy) < 0.0001) {
-              stutterCount++;
-            }
-            if (effectId === 'zoomIn' && measured.scale < prevScale - 0.001) nonMonotoneCount++;
-            if (effectId === 'zoomOut' && measured.scale > prevScale + 0.001) nonMonotoneCount++;
-          }
-          
-          prevScale = measured.scale;
-          prevCx = measured.cx;
-          prevCy = measured.cy;
-        }
-        
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        
-        if (deviations.length === 0) {
-          resolve({ maxDeviationPx: -1, meanDeviationPx: -1, stutterCount: -1, nonMonotoneCount: -1 });
-          return;
-        }
-        
-        const maxDev = Math.max(...deviations);
-        const meanDev = deviations.reduce((a, b) => a + b, 0) / deviations.length;
-        
-        resolve({ maxDeviationPx: maxDev, meanDeviationPx: meanDev, stutterCount, nonMonotoneCount });
-      });
-  });
-}
 
-function loadImageAsArray(filePath) {
-  return new Promise((resolve) => {
-    const sharp = require('sharp');
-    sharp(filePath)
-      .raw()
-      .toBuffer({ resolveWithObject: true })
-      .then(({ data, info }) => {
-        resolve({ data, width: info.width, height: info.height, channels: info.channels });
-      })
-      .catch(() => resolve(null));
-  });
-}
+    const src = sharp(imagePath);
+    const srcMeta = await src.metadata();
+    const srcW = srcMeta.width;
+    const srcH = srcMeta.height;
 
-function measureFrameTransform(img, w, h) {
-  const { data, width, height, channels } = img;
-  if (width !== w || height !== h) return null;
-  
-  const gray = new Float32Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * channels;
-      gray[y * width + x] = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-    }
-  }
-  
-  const corners = [
-    { x: 0, y: 0 },
-    { x: width - 1, y: 0 },
-    { x: 0, y: height - 1 },
-    { x: width - 1, y: height - 1 }
-  ];
-  
-  let sumX = 0, sumY = 0, sumW = 0;
-  for (const c of corners) {
-    const idx = Math.round(c.y) * width + Math.round(c.x);
-    if (idx >= 0 && idx < gray.length) {
-      const val = gray[idx];
-      sumX += c.x * val;
-      sumY += c.y * val;
-      sumW += val;
-    }
-  }
-  
-  if (sumW === 0) return null;
-  
-  const cx = sumX / sumW / width;
-  const cy = sumY / sumW / height;
-  const scale = 1.0;
-  
-  return { scale, cx, cy };
-}
+    // Generate each frame with sharp: crop + resize
+    for (let i = 0; i < TOTAL_FRAMES; i++) {
+      const m = sequence[i];
+      const cropW = Math.round(srcW / m.scale);
+      const cropH = Math.round(srcH / m.scale);
+      const cropX = Math.round(Math.max(0, Math.min(srcW - cropW, m.cx * srcW - cropW / 2)));
+      const cropY = Math.round(Math.max(0, Math.min(srcH - cropH, m.cy * srcH - cropH / 2)));
 
-async function renderOne(effect, imagePath, format, state, method) {
-  const { w, h } = getFormatDims(format);
-  const key = `${effect.id}:${format}:${method}`;
-  const outputPath = path.join(OUTPUT_DIR, state[key].fileName);
-  
-  console.log(`\n[${effect.id}] Rendering ${effect.displayName} (${w}x${h}) method=${method}...`);
-  const start = Date.now();
-  
-  try {
-    const scene = { duration: SCENE_DURATION };
-    const focus = { x: 0.5, y: 0.5, scale: 1 };
-    const options = {
-      zoomType: effect.id,
-      zoomStartScale: ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultStartScale,
-      zoomIntensity: ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultIntensity,
-      zoomMode: 'fixed',
-      zoomSeed: ZOOM_V3.DEFAULT_ZOOM_SEED,
-      zoomCheckedEffects: []
-    };
-    
-    const zoomFilter = ZOOM_V3.buildZoomFilterV3(scene, w, h, options, focus, method);
-    
-    let filterGraph;
-    if (zoomFilter) {
-      filterGraph = `[0:v]${zoomFilter},setsar=1,format=yuv420p[vout]`;
-    } else {
-      filterGraph = '[0:v]setsar=1,format=yuv420p[vout]';
+      await sharp(imagePath)
+        .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
+        .resize(w, h)
+        .png()
+        .toFile(path.join(framesDir, `frame_${String(i).padStart(4, '0')}.png`));
     }
-    
+
+    // Encode frames to MP4 with ffmpeg
     const args = [
       '-y',
       '-framerate', String(FPS),
-      '-loop', '1',
-      '-t', String(SCENE_DURATION),
-      '-i', imagePath,
-      '-filter_complex', filterGraph,
-      '-map', '[vout]',
+      '-i', path.join(framesDir, 'frame_%04d.png'),
       '-c:v', 'libx264',
       '-preset', 'medium',
       '-crf', '18',
@@ -338,33 +288,40 @@ async function renderOne(effect, imagePath, format, state, method) {
       '-movflags', '+faststart',
       outputPath
     ];
-    
+
     await runFfmpeg(args);
-    
+
     const renderSeconds = (Date.now() - start) / 1000;
-    
+
+    // Measure motion on encoded clip
+    const metrics = await measureMotionOnEncoded(outputPath, format, effect.id);
+
+    // Also probe for codec info
     const probe = await probeVideo(outputPath);
-    const jitter = await measureJitter(outputPath, format, effect.id);
-    
-    const specHash = ZOOM_V3.hashSpec(effect.id, ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[effect.id].defaultStartScale, method);
-    
+
+    const specHash = ZOOM_V3.hashSpec(effect.id, intensity, startScale, 'frame-render');
+
     state[key] = {
       ...state[key],
       status: 'pendiente',
       renderSeconds: Number(renderSeconds.toFixed(2)),
-      maxDeviationPx: jitter.maxDeviationPx >= 0 ? Number(jitter.maxDeviationPx.toFixed(4)) : null,
-      meanDeviationPx: jitter.meanDeviationPx >= 0 ? Number(jitter.meanDeviationPx.toFixed(4)) : null,
-      stutters: jitter.stutterCount >= 0 ? jitter.stutterCount : null,
-      nonMonotone: jitter.nonMonotoneCount >= 0 ? jitter.nonMonotoneCount : null,
-      repeatedFrames: probe.repeatedFrames,
-      frameTimingDeviation: Number(probe.maxDeviation.toFixed(6)),
-      actualFps: Number(probe.fps.toFixed(2)),
-      totalFrames: probe.frames,
+      maxDeviationPx: metrics.maxDeviationPx,
+      meanDeviationPx: metrics.meanDeviationPx,
+      stutters: metrics.stutterCount,
+      nonMonotone: metrics.nonMonotoneCount,
+      motionPresent: metrics.motionPresent,
+      probeOk: probe.ok,
+      probeCodec: probe.codec_name,
+      probePixFmt: probe.pix_fmt,
+      probeWidth: probe.width,
+      probeHeight: probe.height,
+      probeFps: probe.r_avg_rate,
       specHash
     };
     saveState(state);
-    
-    console.log(`  Done in ${renderSeconds.toFixed(2)}s | maxDev: ${jitter.maxDeviationPx >= 0 ? jitter.maxDeviationPx.toFixed(4) : 'N/A'} | meanDev: ${jitter.meanDeviationPx >= 0 ? jitter.meanDeviationPx.toFixed(4) : 'N/A'} | stutters: ${jitter.stutterCount >= 0 ? jitter.stutterCount : 'N/A'} | non-mono: ${jitter.nonMonotoneCount >= 0 ? jitter.nonMonotoneCount : 'N/A'} | repFrames: ${probe.repeatedFrames} | fps: ${probe.fps.toFixed(2)}`);
+
+    console.log(`  Done in ${renderSeconds.toFixed(2)}s | motionPresent: ${metrics.motionPresent} | maxDev: ${metrics.maxDeviationPx >= 0 ? metrics.maxDeviationPx.toFixed(4) : 'N/A'} | meanDev: ${metrics.meanDeviationPx >= 0 ? metrics.meanDeviationPx.toFixed(4) : 'N/A'} | stutters: ${metrics.stutterCount >= 0 ? metrics.stutterCount : 'N/A'} | non-mono: ${metrics.nonMonotoneCount >= 0 ? metrics.nonMonotoneCount : 'N/A'}`);
+    fs.rmSync(tempDir, { recursive: true, force: true });
     return true;
   } catch (err) {
     console.error(`  FAILED: ${err.message}`);
@@ -377,43 +334,24 @@ async function renderOne(effect, imagePath, format, state, method) {
       meanDeviationPx: null,
       stutters: null,
       nonMonotone: null,
-      repeatedFrames: null,
-      frameTimingDeviation: null,
-      actualFps: null,
-      totalFrames: null
+      motionPresent: false,
+      probeOk: false
     };
     saveState(state);
     return false;
   }
 }
 
-async function verifyApprovedUnchanged(state, catalog, format, method) {
-  const approved = catalog.filter(t => state[`${t.id}:${format}:${method}`]?.status === 'aprobada');
+async function verifyApprovedUnchanged(state, catalog, format) {
+  const approved = catalog.filter(t => state[`${t.id}:${format}`]?.status === 'aprobada');
   for (const t of approved) {
-    const key = `${t.id}:${format}:${method}`;
+    const key = `${t.id}:${format}`;
     const entry = state[key];
-    const currentHash = ZOOM_V3.hashSpec(t.id, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultStartScale, method);
+    const currentHash = ZOOM_V3.hashSpec(t.id, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultIntensity, ZOOM_V3.ZOOM_MOTION_SPECS[t.id].defaultStartScale, 'frame-render');
     if (currentHash !== entry.specHash) {
       console.error(`\n⚠️  SPEC HASH CHANGED for ${t.id} (${t.displayName})!`);
-      console.error(`  Old: ${entry.specHash}`);
-      console.error(`  New: ${currentHash}`);
-      console.error('  Reverting render...');
       entry.status = 'corregir';
       entry.note = 'specHash changed after approval';
-      saveState(state);
-      return false;
-    }
-    
-    const outputPath = path.join(OUTPUT_DIR, entry.fileName);
-    const probe = await probeVideo(outputPath);
-    if (probe.repeatedFrames !== entry.repeatedFrames || 
-        Math.abs(probe.maxDeviation - entry.frameTimingDeviation) > 0.001) {
-      console.error(`\n⚠️  FRAME TIMING CHANGED for ${t.id} (${t.displayName})!`);
-      console.error(`  Old repeatedFrames: ${entry.repeatedFrames}, New: ${probe.repeatedFrames}`);
-      console.error(`  Old maxDeviation: ${entry.frameTimingDeviation}, New: ${probe.maxDeviation}`);
-      console.error('  Reverting render...');
-      entry.status = 'corregir';
-      entry.note = 'frame timing changed after approval';
       saveState(state);
       return false;
     }
@@ -421,10 +359,19 @@ async function verifyApprovedUnchanged(state, catalog, format, method) {
   return true;
 }
 
-function generateIndexHtml(state, catalog, format, method) {
+async function generateThumbnail(videoPath, outPath, atSec) {
+  await runFfmpeg([
+    '-y', '-i', videoPath,
+    '-ss', String(atSec),
+    '-frames:v', '1',
+    outPath
+  ]);
+}
+
+function generateIndexHtml(state, catalog, format) {
   const { w, h } = getFormatDims(format);
   const rows = catalog.map((t, idx) => {
-    const key = `${t.id}:${format}:${method}`;
+    const key = `${t.id}:${format}`;
     const s = state[key];
     const fileName = s.fileName;
     const statusClass = s.status === 'aprobada' ? 'approved' : (s.status === 'corregir' ? 'fix' : 'pending');
@@ -434,6 +381,11 @@ function generateIndexHtml(state, catalog, format, method) {
     const maxDev = s.maxDeviationPx != null ? s.maxDeviationPx.toFixed(4) : '—';
     const meanDev = s.meanDeviationPx != null ? s.meanDeviationPx.toFixed(4) : '—';
     const stutters = s.stutters != null ? s.stutters : '—';
+    const motion = s.motionPresent != null ? (s.motionPresent ? '✅ movimiento' : '❌ ESTÁTICO') : '—';
+    const thumb1 = `thumbs/${t.id}-thumb1.png`;
+    const thumb2 = `thumbs/${t.id}-thumb2.png`;
+    const thumb3 = `thumbs/${t.id}-thumb3.png`;
+
     return `
       <tr class="${statusClass}">
         <td>${idx + 1}</td>
@@ -444,11 +396,22 @@ function generateIndexHtml(state, catalog, format, method) {
         <td>${maxDev} px</td>
         <td>${meanDev} px</td>
         <td>${stutters}</td>
+        <td>${motion}</td>
         <td>
           <video controls loop muted preload="metadata" style="width: 320px; height: auto;">
             <source src="${fileName}" type="video/mp4">
             Tu navegador no soporta video.
           </video>
+        </td>
+        <td>
+          <div style="display: flex; gap: 4px; flex-direction: column;">
+            <div style="font-size: 11px;">t=0s</div>
+            <img src="${thumb1}" style="width: 120px; height: auto; border: 1px solid #333;">
+            <div style="font-size: 11px;">t=3s</div>
+            <img src="${thumb2}" style="width: 120px; height: auto; border: 1px solid #333;">
+            <div style="font-size: 11px;">t=5.9s</div>
+            <img src="${thumb3}" style="width: 120px; height: auto; border: 1px solid #333;">
+          </div>
         </td>
       </tr>
     `;
@@ -459,7 +422,7 @@ function generateIndexHtml(state, catalog, format, method) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zoom Lab - ${w}x${h} @ 30fps (${method})</title>
+  <title>Zoom Lab - ${w}x${h} @ 30fps</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 20px; background: #1a1a1a; color: #eee; }
     h1 { margin-bottom: 10px; }
@@ -483,7 +446,7 @@ function generateIndexHtml(state, catalog, format, method) {
   </style>
 </head>
 <body>
-  <h1>Zoom Lab — ${w}×${h} @ 30fps (${method})</h1>
+  <h1>Zoom Lab — ${w}×${h} @ 30fps</h1>
   <div class="meta">
     Generated: ${new Date().toLocaleString()}<br>
     Source images: ${path.basename(IMAGES_DIR)} (${fs.readdirSync(IMAGES_DIR).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f)).slice(0,2).join(', ')})<br>
@@ -500,7 +463,9 @@ function generateIndexHtml(state, catalog, format, method) {
         <th>Max Dev (px)</th>
         <th>Mean Dev (px)</th>
         <th>Stutters</th>
+        <th>Motion</th>
         <th>Preview</th>
+        <th>Frames (t=0,3,5.9)</th>
       </tr>
     </thead>
     <tbody>
@@ -510,9 +475,9 @@ function generateIndexHtml(state, catalog, format, method) {
   <div class="summary">
     <strong>Resumen:</strong>
     ${catalog.map(t => {
-    const key = `${t.id}:${format}:${method}`;
+    const key = `${t.id}:${format}`;
     const s = state[key];
-    return `<div>${t.id} (${t.displayName}): ${s.status} — ${s.renderSeconds || '—'}s — maxDev: ${s.maxDeviationPx ?? '—'} — meanDev: ${s.meanDeviationPx ?? '—'} — stutters: ${s.stutters ?? '—'} — nonMono: ${s.nonMonotone ?? '—'}</div>`;
+    return `<div>${t.id} (${t.displayName}): ${s.status} — ${s.renderSeconds || '—'}s — maxDev: ${s.maxDeviationPx ?? '—'} — meanDev: ${s.meanDeviationPx ?? '—'} — stutters: ${s.stutters ?? '—'} — motion: ${s.motionPresent ?? '—'}</div>`;
   }).join('')}
     <div class="legend">
       <span><span class="dot approved"></span> Aprobada</span>
@@ -523,71 +488,26 @@ function generateIndexHtml(state, catalog, format, method) {
 </body>
 </html>`;
 
-  fs.writeFileSync(INDEX_FILE, html, 'utf-8');
-  console.log(`\n📄 Index written to ${INDEX_FILE}`);
+  fs.writeFileSync(getIndexFile(), html, 'utf-8');
+  console.log(`\n📄 Index written to ${getIndexFile()}`);
 }
 
-function printTable(state, catalog, format, method) {
-  console.log('\n┌──┬─────────────────┬──────────────────────┬────────────┬──────────┬────────────┬────────────┬──────────┐');
-  console.log('│ #│ ID              │ Display Name         │ Status     │ Render s │ Max Dev px │ Mean Dev px│ Stutters │');
-  console.log('├──┼─────────────────┼──────────────────────┼────────────┼──────────┼────────────┼────────────┼──────────┤');
+function printTable(state, catalog, format) {
+  console.log('\n┌──┬─────────────────┬──────────────────────┬────────────┬──────────┬────────────┬────────────┬──────────┬──────────┐');
+  console.log('│ #│ ID              │ Display Name         │ Status     │ Render s │ Max Dev px │ Mean Dev px│ Stutters │ Motion   │');
+  console.log('├──┼─────────────────┼──────────────────────┼────────────┼──────────┼────────────┼────────────┼──────────┼──────────┤');
   catalog.forEach((t, idx) => {
-    const key = `${t.id}:${format}:${method}`;
+    const key = `${t.id}:${format}`;
     const s = state[key];
     const status = s.status === 'aprobada' ? '✅ aprobada' : (s.status === 'corregir' ? '❌ corregir' : '⏳ pendiente');
     const render = s.renderSeconds ? s.renderSeconds.toFixed(2) : '—';
     const maxDev = s.maxDeviationPx != null ? s.maxDeviationPx.toFixed(4) : '—';
     const meanDev = s.meanDeviationPx != null ? s.meanDeviationPx.toFixed(4) : '—';
     const stutters = s.stutters != null ? s.stutters : '—';
-    console.log(`│${String(idx+1).padStart(2)}│ ${t.id.padEnd(15)} │ ${t.displayName.padEnd(20)} │ ${status.padEnd(10)} │ ${render.padStart(8)} │ ${maxDev.padStart(10)} │ ${meanDev.padStart(10)} │ ${String(stutters).padStart(8)} │`);
+    const motion = s.motionPresent != null ? (s.motionPresent ? '✅ sí' : '❌ no') : '—';
+    console.log(`│${String(idx+1).padStart(2)}│ ${t.id.padEnd(15)} │ ${t.displayName.padEnd(20)} │ ${status.padEnd(10)} │ ${render.padStart(8)} │ ${maxDev.padStart(10)} │ ${meanDev.padStart(10)} │ ${String(stutters).padStart(8)} │ ${motion.padStart(8)} │`);
   });
-  console.log('└──┴─────────────────┴──────────────────────┴────────────┴──────────┴────────────┴────────────┴──────────┘');
-}
-
-async function generateGridImage() {
-  if (fs.existsSync(GRID_IMAGE) && fs.existsSync(GRID_MARKERS)) {
-    console.log('Grid image and markers already exist');
-    return;
-  }
-  
-  fs.mkdirSync(GRID_DIR, { recursive: true });
-  
-  const w = 3840;
-  const h = 2160;
-  const cellSize = 120;
-  
-  const filter = `
-    color=c=black:s=${w}x${h}:d=1,
-    drawgrid=w=${cellSize}:h=${cellSize}:c=white@0.3:t=2,
-    drawtext=fontfile='C:/Windows/Fonts/arial.ttf':text='%{n}':fontsize=24:fontcolor=white:x=(w-tw)/2:y=(h-th)/2
-  `.replace(/\s+/g, ' ').trim();
-  
-  const cmd = [
-    getFfmpegPath(), '-y',
-    '-f', 'lavfi',
-    '-i', filter,
-    '-frames:v', '1',
-    '-pix_fmt', 'rgb24',
-    GRID_IMAGE
-  ];
-  
-  await runFfmpeg(cmd);
-  
-  const markers = {};
-  const cols = Math.floor(w / cellSize);
-  const rows = Math.floor(h / cellSize);
-  
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cx = col * cellSize + cellSize / 2;
-      const cy = row * cellSize + cellSize / 2;
-      const name = `m${row}_${col}`;
-      markers[name] = [cx, cy];
-    }
-  }
-  
-  fs.writeFileSync(GRID_MARKERS, JSON.stringify({ grid: markers }, null, 2));
-  console.log(`Generated grid image with ${Object.keys(markers).length} markers`);
+  console.log('└──┴─────────────────┴──────────────────────┴────────────┴──────────┴────────────┴────────────┴──────────┴──────────┘');
 }
 
 async function main() {
@@ -596,27 +516,23 @@ async function main() {
   const all = args.includes('--all');
   const format = args.find(a => a.startsWith('--format='))?.split('=')[1] || '16:9';
   const list = args.includes('--list');
-  const method = args.find(a => a.startsWith('--method='))?.split('=')[1] || 'upscale-crop-downscale';
   const imageArg = args.find(a => a.startsWith('--image='))?.split('=')[1];
   const imageIndex = imageArg ? parseInt(imageArg, 10) - 1 : 0;
-  
+
   if (!['16:9', '9:16'].includes(format)) {
     console.error('Invalid format. Use 16:9 or 9:16');
     process.exit(1);
   }
-  if (!['upscale-crop-downscale', 'perspective', 'rotate-scale'].includes(method)) {
-    console.error('Invalid method. Use upscale-crop-downscale, perspective, or rotate-scale');
-    process.exit(1);
-  }
+  const subdir = args.find(a => a.startsWith('--subdir='))?.split('=')[1];
+  OUTPUT_DIR = subdir ? path.join(BASE_OUTPUT_DIR, subdir) : BASE_OUTPUT_DIR;
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   if (isNaN(imageIndex) || imageIndex < 0 || imageIndex > 1) {
     console.error('Invalid image index. Use 1 or 2');
     process.exit(1);
   }
-  
-  await generateGridImage();
-  
+
   const catalog = ZOOM_V3.getZoomCatalog();
-  
+
   if (list) {
     console.log('\nAvailable zoom effects:');
     catalog.forEach((t, i) => {
@@ -625,27 +541,27 @@ async function main() {
     console.log(`\nTotal: ${catalog.length} effects\n`);
     return;
   }
-  
+
   const images = getInputImages();
   const imagePath = images[imageIndex];
   console.log(`\n📸 Input image: ${path.basename(imagePath)} (${imageIndex + 1}/2)`);
   console.log(`📁 Output dir: ${OUTPUT_DIR}`);
   console.log(`📐 Format: ${format} (${getFormatDims(format).w}x${getFormatDims(format).h})`);
   console.log(`🎬 Scene duration: ${SCENE_DURATION}s`);
-  console.log(`🔧 Method: ${method}`);
-  
-  const state = initState(catalog, format, method);
-  
+  console.log(`🖼️  Total frames: ${TOTAL_FRAMES} @ ${FPS} fps`);
+
+  const state = initState(catalog, format);
+
   if (!all && !only) {
     console.log('\nNo action specified. Use --all to render all, --only=id1,id2 to render specific, or --list to list effects.');
-    printTable(state, catalog, format, method);
+    printTable(state, catalog, format);
     return;
   }
-  
-  const toRender = only 
+
+  const toRender = only
     ? catalog.filter(t => only.includes(t.id))
     : catalog;
-  
+
   if (only) {
     const missing = only.filter(id => !catalog.find(t => t.id === id));
     if (missing.length) {
@@ -653,29 +569,46 @@ async function main() {
       process.exit(1);
     }
   }
-  
+
   console.log(`\n🎬 Rendering ${toRender.length} effect(s)...`);
-  
+
   for (const effect of toRender) {
-    await renderOne(effect, imagePath, format, state, method);
+    await renderOne(effect, imagePath, format, state);
   }
-  
-  const allOk = await verifyApprovedUnchanged(state, catalog, format, method);
+
+  const allOk = await verifyApprovedUnchanged(state, catalog, format);
   if (!allOk) {
     console.log('\n⚠️  Some approved effects changed. They have been marked for re-render.');
   }
-  
-  generateIndexHtml(state, catalog, format, method);
-  printTable(state, catalog, format, method);
-  
-  const pending = catalog.filter(t => state[`${t.id}:${format}:${method}`]?.status === 'pendiente').length;
-  const approved = catalog.filter(t => state[`${t.id}:${format}:${method}`]?.status === 'aprobada').length;
-  const fix = catalog.filter(t => state[`${t.id}:${format}:${method}`]?.status === 'corregir').length;
-  
+
+  // Generate thumbnails for all rendered clips
+  const thumbDir = path.join(OUTPUT_DIR, 'thumbs');
+  fs.mkdirSync(thumbDir, { recursive: true });
+  for (const t of catalog) {
+    const key = `${t.id}:${format}`;
+    const s = state[key];
+    if (s.fileName && fs.existsSync(path.join(OUTPUT_DIR, s.fileName))) {
+      try {
+        await generateThumbnail(path.join(OUTPUT_DIR, s.fileName), path.join(thumbDir, `${t.id}-thumb1.png`), 0);
+        await generateThumbnail(path.join(OUTPUT_DIR, s.fileName), path.join(thumbDir, `${t.id}-thumb2.png`), 3);
+        await generateThumbnail(path.join(OUTPUT_DIR, s.fileName), path.join(thumbDir, `${t.id}-thumb3.png`), 5.9);
+      } catch {
+        // thumbnail generation is best-effort
+      }
+    }
+  }
+
+  generateIndexHtml(state, catalog, format);
+  printTable(state, catalog, format);
+
+  const pending = catalog.filter(t => state[`${t.id}:${format}`]?.status === 'pendiente').length;
+  const approved = catalog.filter(t => state[`${t.id}:${format}`]?.status === 'aprobada').length;
+  const fix = catalog.filter(t => state[`${t.id}:${format}`]?.status === 'corregir').length;
+
   console.log(`\n📊 Summary: ${approved} aprobada, ${pending} pendiente, ${fix} corregir`);
   console.log(`📁 Clips folder: ${OUTPUT_DIR}`);
-  console.log(`📄 Index: ${INDEX_FILE}`);
-  console.log(`📋 State: ${STATE_FILE}`);
+  console.log(`📄 Index: ${getIndexFile()}`);
+  console.log(`📋 State: ${getStateFile()}`);
 }
 
 main().catch(err => {

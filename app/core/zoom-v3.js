@@ -395,6 +395,30 @@ function buildZoomFilterV3(scene, w, h, options, focus, method = 'upscale-crop-d
   }
 }
 
+/**
+ * Generate per-frame motion parameters for an effect.
+ * Returns array of {scale, cx, cy} for each frame index 0..totalFrames-1.
+ * cx, cy are normalized [0,1] center of the crop window in source-image space.
+ */
+function generateMotionSequence(type, intensity, startScale, totalFrames, _duration) {
+  const spec = ZOOM_MOTION_SPECS[type];
+  if (!spec) throw new Error(`Unknown zoom type: ${type}`);
+  if (intensity == null || intensity === 0) {
+    if (type !== 'none') throw new Error(`Effect '${type}' requires intensity > 0`);
+  }
+  const sequence = [];
+  for (let i = 0; i < totalFrames; i++) {
+    const p = totalFrames > 1 ? i / (totalFrames - 1) : 0;
+    const m = spec.motion(p, intensity, startScale);
+    sequence.push({
+      scale: num(m.scale, 6),
+      cx: num(m.cx, 6),
+      cy: num(m.cy, 6)
+    });
+  }
+  return sequence;
+}
+
 function hashSpec(type, intensity, startScale, method) {
   const crypto = require('crypto');
   const str = JSON.stringify({ type, intensity, startScale, method });
@@ -424,6 +448,7 @@ module.exports = {
   buildUpscaleCropDownscaleFilter,
   buildPerspectiveFilter,
   buildRotateScaleFilter,
+  generateMotionSequence,
   hashSpec,
   sanitizeFileName
 };
