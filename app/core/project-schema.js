@@ -143,6 +143,8 @@ const renderOptionsSchema = z.object({
   zoomSeed: z.number().int().default(DEFAULT_ZOOM_SEED),
   zoomStartScale: z.number().min(1).max(4).default(1.0),
   zoomIntensity: z.number().min(0).max(1).default(0.15),
+  zoomSpeed: z.number().min(0.25).max(3.0).default(1.0),
+  zoomDurationSec: z.number().min(0.5).max(120).default(6.0),
   transitionType: z.enum(TRANSITION_TYPES).default('fade'),
   transitionMode: z.enum(TRANSITION_MODES).default('fixed'),
   transitionSeed: z.number().int().default(DEFAULT_TRANSITION_SEED),
@@ -153,7 +155,17 @@ const renderOptionsSchema = z.object({
 const sceneZoomSchema = z.object({
   type: z.enum(ZOOM_TYPES).optional(),
   startScale: z.number().min(1).max(4).optional(),
-  intensity: z.number().min(0).max(1).optional()
+  intensity: z.number().min(0).max(1).optional(),
+  start: z.object({
+    cx: z.number().min(0).max(1).default(0.5),
+    cy: z.number().min(0).max(1).default(0.5),
+    scale: z.number().min(0.1).max(10).default(1.0)
+  }).optional(),
+  end: z.object({
+    cx: z.number().min(0).max(1).default(0.5),
+    cy: z.number().min(0).max(1).default(0.5),
+    scale: z.number().min(0.1).max(10).default(1.0)
+  }).optional()
 }).optional();
 
 const sceneTransitionSchema = z.object({
@@ -282,6 +294,16 @@ function migrateProject(raw) {
   // Migration for slideSpeed (FASE 4): default to DEFAULT_SLIDE_SPEED for old projects
   if (typeof migrated.renderOptions.slideSpeed !== 'number') {
     migrated.renderOptions.slideSpeed = DEFAULT_SLIDE_SPEED;
+  }
+
+  // Migration for zoomSpeed (FASE 5): default to 1.0 for old projects
+  if (typeof migrated.renderOptions.zoomSpeed !== 'number') {
+    migrated.renderOptions.zoomSpeed = 1.0;
+  }
+
+  // Migration for zoomDurationSec (FASE 5): default to 6.0 for old projects
+  if (typeof migrated.renderOptions.zoomDurationSec !== 'number') {
+    migrated.renderOptions.zoomDurationSec = 6.0;
   }
 
   return migrated;

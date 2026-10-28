@@ -496,6 +496,91 @@ function sanitizeFileName(str) {
   return str.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+/**
+ * Build an ffmpeg upscale-crop-downscale filter string from a keyframe motion spec.
+ * This is the single source of truth for zoom filter generation used by both
+ * export and preview paths.
+ *
+ * @param {Object} scene - { duration: number }
+ * @param {number} w - output width
+ * @param {number} h - output height
+ * @param {Object} motionSpec - { type, start, end, easing, speed, durationSec, amplitude?, period? }
+ * @param {Object} focus - { x: number, y: number, scale: number }
+ * @param {number} upscale - upscale factor (default 4)
+ * @param {string} upFlags - upscale filter flags (default 'lanczos')
+ * @param {string} downFlags - downscale filter flags (default 'lanczos')
+ * @returns {string} ffmpeg filter string or '' for none/static
+ */
+function buildZoomFilterFromSpec(scene, w, h, motionSpec, focus, upscale = 4, upFlags = 'lanczos', downFlags = 'lanczos') {
+  validateMotionSpec(motionSpec);
+
+  const { type, start, end, easing = 'smooth', speed = 1.0, durationSec } = motionSpec;
+
+  if (type === 'static' || type === 'none') return '';
+
+  const UPSCALE = upscale;
+  const uw = w * UPSCALE;
+  const uh = h * UPSCALE;
+
+  const holdStartTime = durationSec / speed;
+
+  const easeFn = EASING_FUNCTIONS[easing];
+
+  // Build the progress expression: p = min(1, (t/durationSec) * speed)
+  const pExpr = `min(1,(t/${num(durationSec)})*${num(speed)})`;
+
+  let zExpr, cxExpr, cyExpr;
+
+  if (type === 'linear') {
+    // scale(t) = start.scale + (end.scale - start.scale) * ease(p)
+    // cx(t) = start.cx + (end.cx - start.cx) * ease(p)
+    // cy(t) = start.cy + (end.cy - start.cy) * ease(p)
+    const easeApplied = applyEasing(easeFn, pExpr);
+    zExpr = `${num(start.scale)}+(${num(end.scale) - num(start.scale)})*(${easeApplied})`;
+    cxExpr = `${num(start.cx)}+(${num(end.cx) - num(start.cx)})*(${easeApplied})`;
+    cyExpr = `${num(start.cy)}+(${num(end.cy) - num(start.cy)})*(${easeApplied})`;
+  } else if (type === 'oscillate') {
+    const amplitude = motionSpec.amplitude ?? 0.15;
+    const period = motionSpec.period ?? 1.0;
+    // scale(t) = start.scale + amplitude * sin(2π * t_eff / period)
+    // where t_eff = min(t, holdStartTime)
+    const tEff = `min(t,${num(holdStartTime)})`;
+    zExpr = `${num(start.scale)}+(${num(amplitude)})*sin(2*PI*${tEff}/${num(period)})`;
+    cxExpr = `${num(start.cx)}`;
+    cyExpr = `${num(start.cy)}`;
+  } else {
+    throw new Error(`Unknown motion type: ${type}`);
+  }
+
+  const cropW = `iw/${zExpr}`;
+  const cropH = `ih/${zExpr}`;
+  const cropX = `max(0,min(iw-${cropW},${cxExpr}-${cropW}/2))`;
+  const cropY = `max(0,min(ih-${cropH},${cyExpr}-${cropH}/2))`;
+
+  return `scale=${uw}:${uh}:flags=${upFlags},crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=${downFlags}`;
+}
+
+/**
+ * Apply an easing function to a progress expression string.
+ * Replaces 'p' in the easing expression with the given expression.
+ */
+function applyEasing(easeFn, pExpr) {
+  const p = `(${pExpr})`;
+  if (easeFn === EASING_FUNCTIONS.linear) {
+    return p;
+  }
+  if (easeFn === EASING_FUNCTIONS.smooth) {
+    return `3*${p}*${p}-2*${p}*${p}*${p}`;
+  }
+  if (easeFn === EASING_FUNCTIONS.in) {
+    return `${p}*${p}`;
+  }
+  if (easeFn === EASING_FUNCTIONS.out) {
+    return `1-(1-${p})*(1-${p})`;
+  }
+  return p;
+}
+
 module.exports = {
   FPS,
   ZOOM_TYPES,
@@ -517,6 +602,8 @@ module.exports = {
   buildUpscaleCropDownscaleFilter,
   buildPerspectiveFilter,
   buildRotateScaleFilter,
+  buildZoomFilterFromSpec,
+  applyEasing,
   hashSpec,
   hashMotionSpec,
   sanitizeFileName

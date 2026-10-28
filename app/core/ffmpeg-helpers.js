@@ -27,6 +27,9 @@ const {
   isSlidingTransition,
   DEFAULT_SLIDE_SPEED
 } = require('./transitions-v2.js');
+const {
+  buildZoomFilterFromSpec
+} = require('./zoom-v3.js');
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
@@ -99,69 +102,111 @@ function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
   return base;
 }
 
-function buildZoomFilterV2(scene, w, h, options, focus) {
-  const type = ZOOM_TYPES.includes(options.zoomType) ? options.zoomType : 'kenburns';
-  if (type === 'none') return '';
+function buildMotionSpecFromOptions(scene, w, h, options, focus) {
+  const {
+    zoomType = 'kenburns',
+    zoomMode = 'fixed',
+    zoomSeed = DEFAULT_ZOOM_SEED,
+    zoomStartScale = 1.0,
+    zoomIntensity = 0.15,
+    zoomSpeed = 1.0,
+    zoomDurationSec = null,
+    zoomCheckedEffects = []
+  } = options;
 
-  const start = num(options.zoomStartScale != null ? options.zoomStartScale : 1.0);
-  const intensity = num(options.zoomIntensity != null ? options.zoomIntensity : 0.15);
-  const duration = num(scene.duration);
-  const maxZoom = num(start + intensity);
-  const around = num(start + intensity / 2);
+  const sceneZoom = scene.zoom && typeof scene.zoom === 'object' ? scene.zoom : {};
+
+  // Resolve the zoom type (respects per-scene type override)
+  const baseType = sceneZoom.type || zoomType;
+  const type = resolveZoomType(baseType, zoomMode, scene.number || 0, zoomSeed, zoomCheckedEffects);
+
+  // Build start/end keyframes
   const fx = num(clamp01(focus.x));
   const fy = num(clamp01(focus.y));
+  const startScale = num(sceneZoom.startScale != null ? sceneZoom.startScale : zoomStartScale);
+  const intensity = num(sceneZoom.intensity != null ? sceneZoom.intensity : zoomIntensity);
+  const maxZoom = num(startScale + intensity);
 
-  const UPSCALE = 2;
-  const uw = w * UPSCALE;
-  const uh = h * UPSCALE;
+  let start, end;
 
-  const ease = `t/${duration}`;
-  const smooth = `3*${ease}*${ease}-2*${ease}*${ease}*${ease}`;
-
-  let zExpr;
-  if (type === 'zoomOut') {
-    zExpr = `${maxZoom}-${intensity}*${smooth}`;
-  } else if (type === 'pulse') {
-    zExpr = `${around}-${num(intensity / 2)}*cos(2*PI*t/${duration})`;
-  } else if (type === 'kenburns') {
-    zExpr = `${start}+${intensity}*${smooth}`;
+  // Handle 'none' type explicitly - no motion
+  if (type === 'none') {
+    start = { cx: fx, cy: fy, scale: startScale };
+    end = { cx: fx, cy: fy, scale: startScale };
+  } else if (sceneZoom.start && sceneZoom.end) {
+    // Custom keyframes override everything
+    start = {
+      cx: num(sceneZoom.start.cx),
+      cy: num(sceneZoom.start.cy),
+      scale: num(sceneZoom.start.scale)
+    };
+    end = {
+      cx: num(sceneZoom.end.cx),
+      cy: num(sceneZoom.end.cy),
+      scale: num(sceneZoom.end.scale)
+    };
+  } else if (options.zoomStart && options.zoomEnd) {
+    // Global custom keyframes from UI
+    start = {
+      cx: num(options.zoomStart.cx),
+      cy: num(options.zoomStart.cy),
+      scale: num(sceneZoom.startScale != null ? sceneZoom.startScale : zoomStartScale)
+    };
+    end = {
+      cx: num(options.zoomEnd.cx),
+      cy: num(options.zoomEnd.cy),
+      scale: num(options.zoomEnd.scale || maxZoom)
+    };
   } else {
-    zExpr = type === 'zoomIn' ? `${start}+${intensity}*${smooth}` : `${maxZoom}`;
+    // Compute from type
+    switch (type) {
+    case 'kenburns':
+    case 'zoomIn':
+      start = { cx: fx, cy: fy, scale: startScale };
+      end = { cx: fx, cy: fy, scale: maxZoom };
+      break;
+    case 'zoomOut':
+      start = { cx: fx, cy: fy, scale: maxZoom };
+      end = { cx: fx, cy: fy, scale: startScale };
+      break;
+    case 'panLeft':
+      start = { cx: 1.0, cy: 0.5, scale: maxZoom };
+      end = { cx: 0.0, cy: 0.5, scale: maxZoom };
+      break;
+    case 'panRight':
+      start = { cx: 0.0, cy: 0.5, scale: maxZoom };
+      end = { cx: 1.0, cy: 0.5, scale: maxZoom };
+      break;
+    case 'panUp':
+      start = { cx: 0.5, cy: 1.0, scale: maxZoom };
+      end = { cx: 0.5, cy: 0.0, scale: maxZoom };
+      break;
+    case 'panDown':
+      start = { cx: 0.5, cy: 0.0, scale: maxZoom };
+      end = { cx: 0.5, cy: 1.0, scale: maxZoom };
+      break;
+    default:
+      start = { cx: fx, cy: fy, scale: startScale };
+      end = { cx: fx, cy: fy, scale: maxZoom };
+    }
   }
-  zExpr = `min(max(${zExpr},${start}),${maxZoom})`;
 
-  const ufx = fx * uw;
-  const ufy = fy * uh;
-  const ucenter_x = uw / 2;
-  const ucenter_y = uh / 2;
+  const durationSec = zoomDurationSec != null ? num(zoomDurationSec) : num(scene.duration);
 
-  let cxExpr, cyExpr;
-  if (type === 'kenburns') {
-    cxExpr = `${ucenter_x}+(${ufx}-${ucenter_x})*${smooth}`;
-    cyExpr = `${ucenter_y}+(${ufy}-${ucenter_y})*${smooth}`;
-  } else if (type === 'panLeft') {
-    cxExpr = `${uw}-${w}/${maxZoom}/2+(${w}/${maxZoom}/2-${uw}+${w}/${maxZoom}/2)*${smooth}`;
-    cyExpr = `${ucenter_y}`;
-  } else if (type === 'panRight') {
-    cxExpr = `${w}/${maxZoom}/2+(${uw}-${w}/${maxZoom}/2-${w}/${maxZoom}/2)*${smooth}`;
-    cyExpr = `${ucenter_y}`;
-  } else if (type === 'panUp') {
-    cxExpr = `${ucenter_x}`;
-    cyExpr = `${uh}-${h}/${maxZoom}/2+(${h}/${maxZoom}/2-${uh}+${h}/${maxZoom}/2)*${smooth}`;
-  } else if (type === 'panDown') {
-    cxExpr = `${ucenter_x}`;
-    cyExpr = `${h}/${maxZoom}/2+(${uh}-${h}/${maxZoom}/2-${h}/${maxZoom}/2)*${smooth}`;
-  } else {
-    cxExpr = `${ufx}`;
-    cyExpr = `${ufy}`;
-  }
+  return {
+    type: type === 'pulse' ? 'oscillate' : type === 'none' ? 'static' : 'linear',
+    start,
+    end,
+    easing: 'smooth',
+    speed: num(zoomSpeed),
+    durationSec,
+    ...(type === 'pulse' ? { amplitude: num(intensity / 2), period: num(durationSec) } : {})
+  };
+}
 
-  const cropW = `iw/${zExpr}`;
-  const cropH = `ih/${zExpr}`;
-  const cropX = `max(0,min(iw-${cropW},${cxExpr}-${cropW}/2))`;
-  const cropY = `max(0,min(ih-${cropH},${cyExpr}-${cropH}/2))`;
-
-  return `scale=${uw}:${uh}:flags=bilinear,crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=lanczos`;
+function buildZoomFilterV2(scene, w, h, options, focus) {
+  const motionSpec = buildMotionSpecFromOptions(scene, w, h, options, focus);
+  return buildZoomFilterFromSpec(scene, w, h, motionSpec, focus);
 }
 
 function buildZoomFilter(scene, w, h, options, focus) {

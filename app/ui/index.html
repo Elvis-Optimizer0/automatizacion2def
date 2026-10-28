@@ -367,6 +367,61 @@
             <label for="zoom-intensity">Intensidad</label>
             <input type="number" id="zoom-intensity" class="export-input" min="0" max="0.5" step="0.01" value="0.15">
           </div>
+          <div class="export-control-row">
+            <label for="zoom-speed">Velocidad del zoom</label>
+            <input type="range" id="zoom-speed" class="zoom-speed-slider" min="25" max="300" step="1" value="100">
+            <input type="number" id="zoom-speed-value" class="zoom-speed-input" min="25" max="300" step="1" value="100">
+            <button id="zoom-speed-reset" class="export-btn-small">Restablecer</button>
+          </div>
+          <div class="export-control-row">
+            <label for="zoom-duration">Duración del zoom (s)</label>
+            <input type="number" id="zoom-duration" class="export-input" min="0.5" max="120" step="0.5" value="6.0">
+          </div>
+          <div class="export-control-row">
+            <label for="zoom-preset">Preset de inicio/fin</label>
+            <select id="zoom-preset" class="export-select">
+              <option value="kenburns">Ken Burns</option>
+              <option value="zoomIn">Acercar</option>
+              <option value="zoomOut">Alejar</option>
+              <option value="panLeft">Paneo izquierda</option>
+              <option value="panRight">Paneo derecha</option>
+              <option value="panUp">Paneo arriba</option>
+              <option value="panDown">Paneo abajo</option>
+              <option value="pulse">Pulso</option>
+              <option value="none">Sin zoom</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
+          <div class="export-control-row" id="zoom-start-controls" style="display:none;">
+            <label>Inicio</label>
+            <div class="export-control-row">
+              <label for="zoom-start-cx">CX</label>
+              <input type="number" id="zoom-start-cx" class="export-input" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="export-control-row">
+              <label for="zoom-start-cy">CY</label>
+              <input type="number" id="zoom-start-cy" class="export-input" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="export-control-row">
+              <label for="zoom-start-scale">Escala</label>
+              <input type="number" id="zoom-start-scale" class="export-input" min="0.1" max="10" step="0.01" value="1.0">
+            </div>
+          </div>
+          <div class="export-control-row" id="zoom-end-controls" style="display:none;">
+            <label>Fin</label>
+            <div class="export-control-row">
+              <label for="zoom-end-cx">CX</label>
+              <input type="number" id="zoom-end-cx" class="export-input" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="export-control-row">
+              <label for="zoom-end-cy">CY</label>
+              <input type="number" id="zoom-end-cy" class="export-input" min="0" max="1" step="0.01" value="0.5">
+            </div>
+            <div class="export-control-row">
+              <label for="zoom-end-scale">Escala</label>
+              <input type="number" id="zoom-end-scale" class="export-input" min="0.1" max="10" step="0.01" value="1.0">
+            </div>
+          </div>
         </fieldset>
 
         <fieldset class="export-fieldset">

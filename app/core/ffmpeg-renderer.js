@@ -267,6 +267,8 @@ function buildFfmpegArgs(options) {
     zoomSeed: renderOptions.zoomSeed,
     zoomStartScale: renderOptions.zoomStartScale,
     zoomIntensity: renderOptions.zoomIntensity,
+    zoomSpeed: renderOptions.zoomSpeed,
+    zoomDurationSec: renderOptions.zoomDurationSec,
     transitionType,
     transitionMode,
     transitionSeed,
@@ -337,7 +339,7 @@ function runFfmpeg(ffmpegPath, args, totalDuration, onProgress, errorPrefix = E_
 }
 
 async function renderPreview(options = {}) {
-  const { imagePath, text = '', duration = 5, format = '16:9', subtitles, outputPath, userFontsDir, zoomEnabled = true, zoomType = 'kenburns', zoomMode = 'fixed', zoomSeed = 12345, zoomStartScale = 1.0, zoomIntensity = 0.15, focus = { x: 0.5, y: 0.5, scale: 1 } } = options;
+  const { imagePath, text = '', duration = 5, format = '16:9', subtitles, outputPath, userFontsDir, zoomEnabled = true, zoomType = 'kenburns', zoomMode = 'fixed', zoomSeed = 12345, zoomStartScale = 1.0, zoomIntensity = 0.15, zoomSpeed = 1.0, zoomDurationSec = null, focus = { x: 0.5, y: 0.5, scale: 1 } } = options;
 
   verifyBinaries();
 
@@ -370,6 +372,8 @@ async function renderPreview(options = {}) {
         zoomIntensity,
         zoomMode,
         zoomSeed,
+        zoomSpeed,
+        zoomDurationSec: zoomDurationSec || previewDuration,
         zoomCheckedEffects: []
       }, focus);
       if (zoomFilter) {

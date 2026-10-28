@@ -150,12 +150,11 @@ test.describe('focus in zoom', () => {
     // New structure uses crop filter with continuous time and smoothstep
     expect(filter).not.toContain('zoompan=');
     expect(filter).toContain('crop=w=\'');
-    // Focus point 0.2, 0.8 in upscaled coords for 9:16 (1080x1920 target, 2x upscale = 2160x3840)
-    // upscale: 1080*2=2160, 1920*2=3840
-    // focus: 0.2*2160=432, 0.8*3840=3072
-    expect(filter).toContain('432');
-    expect(filter).toContain('3072');
-    expect(filter).toContain('3*t/5*t/5-2*t/5*t/5*t/5'); // smoothstep for duration=5
+    // Focus point 0.2, 0.8 in normalized coordinates
+    expect(filter).toContain('0.2');
+    expect(filter).toContain('0.8');
+    // Smoothstep easing applied to progress expression
+    expect(filter).toContain('3*(min(1,(t/5)*1))*(min(1,(t/5)*1))-2*(min(1,(t/5)*1))*(min(1,(t/5)*1))*(min(1,(t/5)*1))');
   });
 });
 

@@ -157,6 +157,17 @@ const SCALE_MIN = 0.3;
 const SCALE_MAX = 3.0;
 const ZOOM_TYPES = ['none', 'kenburns', 'zoomIn', 'zoomOut', 'pulse', 'panLeft', 'panRight', 'panUp', 'panDown'];
 const ZOOM_MODES = ['fixed', 'alternate', 'random', 'checked'];
+const ZOOM_PRESETS = {
+  none: { displayName: 'Sin zoom', type: 'static', start: { cx: 0.5, cy: 0.5, scale: 1.0 }, end: { cx: 0.5, cy: 0.5, scale: 1.0 }, easing: 'linear', speed: 1.0, durationSec: 6.0 },
+  kenburns: { displayName: 'Ken Burns', type: 'linear', start: { cx: 0.5, cy: 0.5, scale: 1.0 }, end: { cx: 0.5, cy: 0.5, scale: 1.15 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 },
+  zoomIn: { displayName: 'Acercar', type: 'linear', start: { cx: 0.5, cy: 0.5, scale: 1.0 }, end: { cx: 0.5, cy: 0.5, scale: 1.15 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 },
+  zoomOut: { displayName: 'Alejar', type: 'linear', start: { cx: 0.5, cy: 0.5, scale: 1.15 }, end: { cx: 0.5, cy: 0.5, scale: 1.0 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 },
+  pulse: { displayName: 'Pulso', type: 'oscillate', start: { cx: 0.5, cy: 0.5, scale: 1.0 }, end: { cx: 0.5, cy: 0.5, scale: 1.0 }, easing: 'smooth', speed: 1.0, durationSec: 6.0, amplitude: 0.15, period: 1.0 },
+  panLeft: { displayName: 'Paneo Izquierda', type: 'linear', start: { cx: 1.0, cy: 0.5, scale: 1.2 }, end: { cx: 0.0, cy: 0.5, scale: 1.2 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 },
+  panRight: { displayName: 'Paneo Derecha', type: 'linear', start: { cx: 0.0, cy: 0.5, scale: 1.2 }, end: { cx: 1.0, cy: 0.5, scale: 1.2 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 },
+  panUp: { displayName: 'Paneo Arriba', type: 'linear', start: { cx: 0.5, cy: 1.0, scale: 1.2 }, end: { cx: 0.5, cy: 0.0, scale: 1.2 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 },
+  panDown: { displayName: 'Paneo Abajo', type: 'linear', start: { cx: 0.5, cy: 0.0, scale: 1.2 }, end: { cx: 0.5, cy: 1.0, scale: 1.2 }, easing: 'smooth', speed: 1.0, durationSec: 6.0 }
+};
 const TRANSITION_TYPES = ['cut', 'fade', 'fadeblack', 'dissolve', 'slideLeft', 'slideRight', 'slideUp', 'slideDown', 'curtainLeft', 'curtainRight', 'circle'];
 const TRANSITION_MODES = ['fixed', 'alternate', 'random'];
 const FORMAT_FOCUS_KEY = {
@@ -2652,6 +2663,128 @@ const CONTROLS = [
     handler: (e) => {
       const value = parseFloat(e.target.value);
       state.exportOptions.zoomIntensity = isNaN(value) ? 0 : value;
+    }
+  },
+  {
+    id: 'zoom-speed',
+    tipo: 'range',
+    rutaConfig: 'exportOptions.zoomSpeed',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.exportOptions.zoomSpeed = isNaN(value) ? 1.0 : value / 100;
+      const input = document.getElementById('zoom-speed-value');
+      if (input) input.value = value;
+    }
+  },
+  {
+    id: 'zoom-speed-value',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.zoomSpeed',
+    handler: (e) => {
+      const value = parseInt(e.target.value, 10);
+      state.exportOptions.zoomSpeed = isNaN(value) ? 1.0 : value / 100;
+      const slider = document.getElementById('zoom-speed');
+      if (slider) slider.value = value;
+    }
+  },
+  {
+    id: 'zoom-speed-reset',
+    tipo: 'button',
+    handler: () => {
+      const slider = document.getElementById('zoom-speed');
+      const input = document.getElementById('zoom-speed-value');
+      if (slider) slider.value = '100';
+      if (input) input.value = '100';
+      state.exportOptions.zoomSpeed = 1.0;
+    }
+  },
+  {
+    id: 'zoom-duration',
+    tipo: 'input',
+    rutaConfig: 'exportOptions.zoomDurationSec',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomDurationSec = isNaN(value) ? 6.0 : Math.min(120, Math.max(0.5, value));
+    }
+  },
+  {
+    id: 'zoom-preset',
+    tipo: 'select',
+    rutaConfig: 'exportOptions.zoomPreset',
+    handler: (e) => {
+      const presetId = e.target.value;
+      state.exportOptions.zoomPreset = presetId;
+      const preset = ZOOM_PRESETS[presetId];
+      if (preset && presetId !== 'custom') {
+        const startInput = document.getElementById('zoom-start-cx');
+        const startCyInput = document.getElementById('zoom-start-cy');
+        const startScaleInput = document.getElementById('zoom-start-scale');
+        const endInput = document.getElementById('zoom-end-cx');
+        const endCyInput = document.getElementById('zoom-end-cy');
+        const endScaleInput = document.getElementById('zoom-end-scale');
+        if (startInput) startInput.value = preset.start.cx.toFixed(2);
+        if (startCyInput) startCyInput.value = preset.start.cy.toFixed(2);
+        if (startScaleInput) startScaleInput.value = preset.start.scale.toFixed(2);
+        if (endInput) endInput.value = preset.end.cx.toFixed(2);
+        if (endCyInput) endCyInput.value = preset.end.cy.toFixed(2);
+        if (endScaleInput) endScaleInput.value = preset.end.scale.toFixed(2);
+        state.exportOptions.zoomStart = { ...preset.start };
+        state.exportOptions.zoomEnd = { ...preset.end };
+      }
+    }
+  },
+  {
+    id: 'zoom-start-cx',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomStart = state.exportOptions.zoomStart || {};
+      state.exportOptions.zoomStart.cx = isNaN(value) ? 0.5 : Math.min(1, Math.max(0, value));
+    }
+  },
+  {
+    id: 'zoom-start-cy',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomStart = state.exportOptions.zoomStart || {};
+      state.exportOptions.zoomStart.cy = isNaN(value) ? 0.5 : Math.min(1, Math.max(0, value));
+    }
+  },
+  {
+    id: 'zoom-start-scale',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomStart = state.exportOptions.zoomStart || {};
+      state.exportOptions.zoomStart.scale = isNaN(value) ? 1.0 : Math.min(10, Math.max(0.1, value));
+    }
+  },
+  {
+    id: 'zoom-end-cx',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomEnd = state.exportOptions.zoomEnd || {};
+      state.exportOptions.zoomEnd.cx = isNaN(value) ? 0.5 : Math.min(1, Math.max(0, value));
+    }
+  },
+  {
+    id: 'zoom-end-cy',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomEnd = state.exportOptions.zoomEnd || {};
+      state.exportOptions.zoomEnd.cy = isNaN(value) ? 0.5 : Math.min(1, Math.max(0, value));
+    }
+  },
+  {
+    id: 'zoom-end-scale',
+    tipo: 'input',
+    handler: (e) => {
+      const value = parseFloat(e.target.value);
+      state.exportOptions.zoomEnd = state.exportOptions.zoomEnd || {};
+      state.exportOptions.zoomEnd.scale = isNaN(value) ? 1.0 : Math.min(10, Math.max(0.1, value));
     }
   },
   {

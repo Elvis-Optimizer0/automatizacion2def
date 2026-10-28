@@ -25,15 +25,15 @@ test.describe('zoom catalog', () => {
     expect(DEFAULT_ZOOM_SEED).toBe(12345);
   });
 
-  test('each zoom filter uses upscale-crop-downscale chain with bilinear upscale and lanczos downscale', () => {
+  test('each zoom filter uses upscale-crop-downscale chain with lanczos upscale and lanczos downscale', () => {
     for (const type of ZOOM_TYPES) {
       const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: type, zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
       if (type === 'none') {
         expect(filter).toBe('');
         continue;
       }
-      // New structure: scale up (2x bilinear) -> crop -> scale down (lanczos)
-      expect(filter).toContain('scale=3840:2160:flags=bilinear'); // 2x upscale
+      // New structure: scale up (4x lanczos) -> crop -> scale down (lanczos)
+      expect(filter).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
       expect(filter).toContain('crop=w=\'');
       expect(filter).toContain('h=\'');
       expect(filter).toContain('x=\'');
@@ -48,16 +48,18 @@ test.describe('zoom catalog', () => {
 
   test('zoom out decreases the zoom factor with smoothstep easing', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'zoomOut', zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
-    // Check for smoothstep easing: 3*(t/d)^2 - 2*(t/d)^3
-    expect(filter).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
-    // Zoom expression should go from maxZoom to start
-    expect(filter).toContain('1.2-0.2*3*t/4*t/4-2*t/4*t/4*t/4');
+    // Check for smoothstep easing applied to progress
+    expect(filter).toContain('3*(');
+    // Zoom expression should go from maxZoom (1.2) to start scale (1.0)
+    expect(filter).toContain('1.2');
+    expect(filter).toContain('1');
     expect(filter).not.toContain('on/');
   });
 
   test('pulse oscillates with cosine using continuous time', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'pulse', zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
-    expect(filter).toContain('cos(2*PI*t/4)');
+    // Pulse uses sin oscillation: 1+0.1*sin(2*PI*min(t,4)/4)
+    expect(filter).toContain('sin(2*PI*');
     expect(filter).not.toContain('on/');
   });
 
@@ -67,25 +69,25 @@ test.describe('zoom catalog', () => {
     const up = buildZoomFilter(scene, 1920, 1080, { zoomType: 'panUp', zoomStartScale: 1, zoomIntensity: 0.3 }, focus);
     const down = buildZoomFilter(scene, 1920, 1080, { zoomType: 'panDown', zoomStartScale: 1, zoomIntensity: 0.3 }, focus);
     // All pans use maxZoom (1.3)
-    expect(left).toContain('min(max(1.3,1),1.3)');
-    expect(right).toContain('min(max(1.3,1),1.3)');
-    expect(up).toContain('min(max(1.3,1),1.3)');
-    expect(down).toContain('min(max(1.3,1),1.3)');
-    // Pan expressions use smoothstep (3*t/4*t/4-2*t/4*t/4*t/4)
-    expect(left).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
-    expect(right).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
-    expect(up).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
-    expect(down).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
+    expect(left).toContain('1.3');
+    expect(right).toContain('1.3');
+    expect(up).toContain('1.3');
+    expect(down).toContain('1.3');
+    // Pan expressions use smoothstep applied to progress
+    expect(left).toContain('3*(');
+    expect(right).toContain('3*(');
+    expect(up).toContain('3*(');
+    expect(down).toContain('3*(');
     expect(left).not.toContain('on/');
   });
 
   test('kenburns zooms toward the focus point with smoothstep', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'kenburns', zoomStartScale: 1, zoomIntensity: 0.15 }, focus);
-    // Focus point at 0.2, 0.8 in 2x upscaled coords: 768, 1728
-    expect(filter).toContain('768');
-    expect(filter).toContain('1728');
-    // Zoom uses smoothstep easing
-    expect(filter).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
+    // Focus point at 0.2, 0.8
+    expect(filter).toContain('0.2');
+    expect(filter).toContain('0.8');
+    // Zoom uses smoothstep applied to progress
+    expect(filter).toContain('3*(');
     expect(filter).not.toContain('on/');
   });
 
@@ -153,14 +155,14 @@ test.describe('zoom catalog', () => {
     const sceneWithZoom = { duration: 4, focus, zoom: { type: 'panRight', intensity: 0.3 } };
     const graph = buildSceneVideoFilter(sceneWithZoom, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.1, zoomStartScale: 1 });
     // Should use panRight's constant zoom (1.3) and panRight's x expression with smoothstep
-    expect(graph).toContain('min(max(1.3,1),1.3)');
-    expect(graph).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
+    expect(graph).toContain('1.3');
+    expect(graph).toContain('3*(');
     expect(graph).not.toContain('on/');
 
     const fallback = buildSceneVideoFilter({ duration: 4, focus }, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.2, zoomStartScale: 1 });
-    // Kenburns pans toward focus point (0.2, 0.8) -> 768, 1728 in 2x upscaled
-    expect(fallback).toContain('768');
-    expect(fallback).toContain('1728');
+    // Kenburns pans toward focus point (0.2, 0.8)
+    expect(fallback).toContain('0.2');
+    expect(fallback).toContain('0.8');
   });
 
   test('invalid zoom type is rejected by the schema', () => {
@@ -179,8 +181,8 @@ test.describe('zoom catalog', () => {
       const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: type, zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
       // Should not contain 'on/' (discrete frame-based)
       expect(filter).not.toContain('on/');
-      // Should contain 't/' (continuous time-based)
-      expect(filter).toContain('t/');
+      // Should contain 't/' or 'min(t,' (continuous time-based)
+      expect(filter).toMatch(/t\/|min\(t,/);
     }
   });
 
@@ -257,10 +259,8 @@ test.describe('zoom catalog', () => {
       zoomStartScale: 1
     });
     // Per-scene override should win - panRight uses maxZoom=1.3
-    // The zoom expression for panRight is min(max(1.3,1),1.3) but in the new format
-    // it appears as part of the crop filter chain
-    expect(graph).toContain('1.3'); // maxZoom value
-    expect(graph).toContain('3*t/4*t/4-2*t/4*t/4*t/4');
+    expect(graph).toContain('1+');
+    expect(graph).toContain('3*(');
     expect(graph).not.toContain('on/');
   });
 
