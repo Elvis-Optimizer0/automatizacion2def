@@ -576,6 +576,7 @@ module.exports = {
     const transDur = transitionDurationFor(scenes, i + 1, transitionType, transitionDuration);
     return num(base + transDur);
   },
+  buildMotionSpecFromOptions,
   buildZoomFilter,
   buildSceneVideoFilter,
   buildVideoFilterGraph,
