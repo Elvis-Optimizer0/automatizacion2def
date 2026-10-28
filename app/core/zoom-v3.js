@@ -521,20 +521,18 @@ function buildZoomFilterFromSpec(scene, w, h, motionSpec, focus, upscale = 4, up
   const UPSCALE = upscale;
   const uw = w * UPSCALE;
   const uh = h * UPSCALE;
-
-  const holdStartTime = durationSec / speed;
+  const totalFrames = Math.max(1, Math.round(num(durationSec) * FPS));
 
   const easeFn = EASING_FUNCTIONS[easing];
 
-  // Build the progress expression: p = min(1, (t/durationSec) * speed)
-  const pExpr = `min(1,(t/${num(durationSec)})*${num(speed)})`;
+  // Progress expressed with the zoompan frame counter `on` (this ffmpeg build
+  // cannot evaluate time-varying crop w/h at filter-init; `t` fails there but
+  // `on` works per-frame).
+  const pExpr = `min(1,(${num(speed)}*on)/${num(totalFrames)})`;
 
   let zExpr, cxExpr, cyExpr;
 
   if (type === 'linear') {
-    // scale(t) = start.scale + (end.scale - start.scale) * ease(p)
-    // cx(t) = start.cx + (end.cx - start.cx) * ease(p)
-    // cy(t) = start.cy + (end.cy - start.cy) * ease(p)
     const easeApplied = applyEasing(easeFn, pExpr);
     zExpr = `${num(start.scale)}+(${num(end.scale) - num(start.scale)})*(${easeApplied})`;
     cxExpr = `${num(start.cx)}+(${num(end.cx) - num(start.cx)})*(${easeApplied})`;
@@ -542,22 +540,20 @@ function buildZoomFilterFromSpec(scene, w, h, motionSpec, focus, upscale = 4, up
   } else if (type === 'oscillate') {
     const amplitude = motionSpec.amplitude ?? 0.15;
     const period = motionSpec.period ?? 1.0;
-    // scale(t) = start.scale + amplitude * sin(2π * t_eff / period)
-    // where t_eff = min(t, holdStartTime)
-    const tEff = `min(t,${num(holdStartTime)})`;
-    zExpr = `${num(start.scale)}+(${num(amplitude)})*sin(2*PI*${tEff}/${num(period)})`;
+    const framesPerPeriod = num(period * FPS);
+    zExpr = `${num(start.scale)}+(${num(amplitude)})*sin(2*PI*on/${num(framesPerPeriod)})`;
     cxExpr = `${num(start.cx)}`;
     cyExpr = `${num(start.cy)}`;
   } else {
     throw new Error(`Unknown motion type: ${type}`);
   }
 
-  const cropW = `iw/${zExpr}`;
-  const cropH = `ih/${zExpr}`;
-  const cropX = `max(0,min(iw-${cropW},${cxExpr}-${cropW}/2))`;
-  const cropY = `max(0,min(ih-${cropH},${cyExpr}-${cropH}/2))`;
+  // Center the crop at (cx, cy) in normalized source space. zoompan clamps
+  // x/y to the valid range internally.
+  const xExpr = `${cxExpr}*iw-(iw/zoom)/2`;
+  const yExpr = `${cyExpr}*ih-(ih/zoom)/2`;
 
-  return `scale=${uw}:${uh}:flags=${upFlags},crop=w='${cropW}':h='${cropH}':x='${cropX}':y='${cropY}',scale=${w}:${h}:flags=${downFlags}`;
+  return `scale=${uw}:${uh}:flags=${upFlags},zoompan=z='${zExpr}':x='${xExpr}':y='${yExpr}':d=${num(totalFrames)}:s='${uw}x${uh}':fps=${FPS},scale=${w}:${h}:flags=${downFlags}`;
 }
 
 /**

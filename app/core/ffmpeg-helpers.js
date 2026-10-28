@@ -233,13 +233,13 @@ function buildSceneVideoFilter(scene, index, options = {}) {
   if (fitMode === 'blur') {
     const radius = Math.max(2, Math.round(Math.min(w, h) / 20));
     parts.push(`[${index}:v]split=2[bg${index}][fg${index}]`);
-    parts.push(`[bg${index}]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=luma_radius=${radius}:luma_power=2[bgf${index}]`);
-    parts.push(`[fg${index}]scale=${w}:${h}:force_original_aspect_ratio=decrease[fgs${index}]`);
+    parts.push(`[bg${index}]scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos,crop=${w}:${h},boxblur=luma_radius=${radius}:luma_power=2[bgf${index}]`);
+    parts.push(`[fg${index}]scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos[fgs${index}]`);
     parts.push(`[bgf${index}][fgs${index}]overlay=(W-w)/2:(H-h)/2[base${index}]`);
     baseLabel = `base${index}`;
   } else if (fitMode === 'frame') {
     const widthExpr = `${w}:-2`;
-    parts.push(`[${index}:v]scale=${widthExpr}[scaled${index}]`);
+    parts.push(`[${index}:v]scale=${widthExpr}:flags=lanczos[scaled${index}]`);
     parts.push(`[scaled${index}]pad=${w}:${h}:0:oh/2-ih/2:color=${frameColor}[base${index}]`);
     baseLabel = `base${index}`;
   } else if (scale < 1) {
@@ -248,11 +248,11 @@ function buildSceneVideoFilter(scene, index, options = {}) {
     if (backgroundMode === 'blur') {
       const radius = Math.max(2, Math.round(Math.min(w, h) / 20));
       parts.push(`[${index}:v]split=2[zbg${index}][zfg${index}]`);
-      parts.push(`[zbg${index}]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=luma_radius=${radius}:luma_power=2[zbase${index}]`);
-      parts.push(`[zfg${index}]scale=${sw}:${sh}:force_original_aspect_ratio=increase[zscaled${index}]`);
+      parts.push(`[zbg${index}]scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos,crop=${w}:${h},boxblur=luma_radius=${radius}:luma_power=2[zbase${index}]`);
+      parts.push(`[zfg${index}]scale=${sw}:${sh}:force_original_aspect_ratio=increase:flags=lanczos[zscaled${index}]`);
       parts.push(`[zbase${index}][zscaled${index}]overlay=x='(W-w)*${fx}':y='(H-h)*${fy}'[base${index}]`);
     } else {
-      parts.push(`[${index}:v]scale=${sw}:${sh}:force_original_aspect_ratio=increase[zscaled${index}]`);
+      parts.push(`[${index}:v]scale=${sw}:${sh}:force_original_aspect_ratio=increase:flags=lanczos[zscaled${index}]`);
       parts.push(`[zscaled${index}]pad=w='max(${w},iw)':h='max(${h},ih)':x='max(0,(max(${w},iw)-iw)*${fx})':y='max(0,(max(${h},ih)-ih)*${fy})':color=${backgroundColor}[zpad${index}]`);
       parts.push(`[zpad${index}]crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
     }
@@ -260,7 +260,7 @@ function buildSceneVideoFilter(scene, index, options = {}) {
   } else {
     const sw = num(w * scale);
     const sh = num(h * scale);
-    parts.push(`[${index}:v]scale=${sw}:${sh}:force_original_aspect_ratio=increase,crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
+    parts.push(`[${index}:v]scale=${sw}:${sh}:force_original_aspect_ratio=increase:flags=lanczos,crop=${w}:${h}:(iw-ow)*${fx}:(ih-oh)*${fy}[base${index}]`);
     baseLabel = `base${index}`;
   }
 
