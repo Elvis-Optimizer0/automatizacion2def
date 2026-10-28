@@ -244,7 +244,7 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
       expect.arrayContaining([
         'openImages', 'openAudio', 'openMusic', 'openScript',
         'getAudioDuration', 'getPathForFile',
-        'saveVideo', 'openFolder', 'renderVideo', 'renderPreview', 'verifyBinaries', 'detectCodecs', 'onRenderProgress',
+        'saveVideo', 'openFolder', 'renderVideo', 'renderPreview', 'verifyBinaries', 'onRenderProgress',
         'saveProject', 'openProject', 'listFonts', 'importFont', 'detectKeywords',
         'listPresets', 'addPreset', 'renamePreset', 'deletePreset',
         'listVoices', 'generateVoice', 'generateVoiceSample', 'cancelVoice', 'onVoiceProgress',
@@ -252,7 +252,7 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
         'alignScenes', 'getCapabilities'
       ])
     );
-    expect(apiKeys.length).toBe(35);
+    expect(apiKeys.length).toBe(34);
 
     const preloadPath = path.join(__dirname, '..', '..', 'app', 'preload.js');
     const preloadCode = fs.readFileSync(preloadPath, 'utf-8');
@@ -262,6 +262,6 @@ test.describe.serial('Video Maker - Phase 2 Full E2E', () => {
     const mainCode = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'main.js'), 'utf-8');
     const handleMatches = mainCode.match(/ipcMain\.handle\(/g);
     const handleCount = handleMatches ? handleMatches.length : 0;
-    expect(handleCount).toBe(31);
+    expect(handleCount).toBe(30);
   });
 });

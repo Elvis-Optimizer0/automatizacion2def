@@ -500,7 +500,7 @@ function sanitizeFileName(str) {
 }
 
 /**
- * Build an ffmpeg upscale-crop-downscale filter string from a keyframe motion spec.
+ * Build an ffmpeg zoompan filter string from a keyframe motion spec.
  * This is the single source of truth for zoom filter generation used by both
  * export and preview paths.
  *
@@ -509,21 +509,15 @@ function sanitizeFileName(str) {
  * @param {number} h - output height
  * @param {Object} motionSpec - { type, start, end, easing, speed, durationSec, amplitude?, period? }
  * @param {Object} focus - { x: number, y: number, scale: number }
- * @param {number} upscale - upscale factor (default 4)
- * @param {string} upFlags - upscale filter flags (default 'lanczos')
- * @param {string} downFlags - downscale filter flags (default 'lanczos')
  * @returns {string} ffmpeg filter string or '' for none/static
  */
-function buildZoomFilterFromSpec(scene, w, h, motionSpec, focus, upscale = 4, upFlags = 'lanczos', downFlags = 'lanczos') {
+function buildZoomFilterFromSpec(scene, w, h, motionSpec, _focus) {
   validateMotionSpec(motionSpec);
 
   const { type, start, end, easing = 'smooth', speed = 1.0, durationSec } = motionSpec;
 
   if (type === 'static' || type === 'none') return '';
 
-  const UPSCALE = upscale;
-  const uw = w * UPSCALE;
-  const uh = h * UPSCALE;
   const totalFrames = Math.max(1, Math.round(num(durationSec) * FPS));
 
   const easeFn = EASING_FUNCTIONS[easing];
@@ -556,7 +550,7 @@ function buildZoomFilterFromSpec(scene, w, h, motionSpec, focus, upscale = 4, up
   const xExpr = `${cxExpr}*iw-(iw/zoom)/2`;
   const yExpr = `${cyExpr}*ih-(ih/zoom)/2`;
 
-  return `scale=${uw}:${uh}:flags=${upFlags},zoompan=z='${zExpr}':x='${xExpr}':y='${yExpr}':d=${num(totalFrames)}:s='${uw}x${uh}':fps=${FPS},scale=${w}:${h}:flags=${downFlags}`;
+  return `zoompan=z='${zExpr}':x='${xExpr}':y='${yExpr}':d=${num(totalFrames)}:s='${w}x${h}':fps=${FPS},setsar=1,format=yuv420p`;
 }
 
 /**

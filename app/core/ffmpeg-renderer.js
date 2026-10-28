@@ -255,6 +255,7 @@ function buildFfmpegArgs(options) {
     '-ac', '2',
     '-movflags', '+faststart',
     '-shortest',
+    '-t', String(totalDuration),
     outputPath
   );
 
