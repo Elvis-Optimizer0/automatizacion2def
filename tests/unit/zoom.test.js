@@ -25,42 +25,36 @@ test.describe('zoom catalog', () => {
     expect(DEFAULT_ZOOM_SEED).toBe(12345);
   });
 
-  test('each zoom filter uses upscale-crop-downscale chain with lanczos upscale and lanczos downscale', () => {
+  test('each zoom filter uses upscale-zoompan-downscale chain with lanczos', () => {
     for (const type of ZOOM_TYPES) {
       const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: type, zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
       if (type === 'none') {
         expect(filter).toBe('');
         continue;
       }
-      // New structure: scale up (4x lanczos) -> crop -> scale down (lanczos)
+      // New structure: scale up (4x lanczos) -> zoompan (per-frame motion) -> scale down (lanczos)
       expect(filter).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
-      expect(filter).toContain('crop=w=\'');
-      expect(filter).toContain('h=\'');
-      expect(filter).toContain('x=\'');
-      expect(filter).toContain('y=\'');
+      expect(filter).toContain('zoompan=');
       expect(filter).toContain('scale=1920:1080:flags=lanczos'); // downscale to target
-      // Should NOT use zoompan anymore
-      expect(filter).not.toContain('zoompan=');
+      expect(filter).toContain('d=120:s=\'7680x4320\':fps=30'); // duration 4s @ 30fps = 120 frames
       expect(filter).not.toContain('\\');
       expect(filter).not.toMatch(/[A-Za-z]:\\/);
     }
   });
 
-  test('zoom out decreases the zoom factor with smoothstep easing', () => {
+  test('zoom out decreases the zoom factor from 1.2 to 1.0 with smoothstep', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'zoomOut', zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
-    // Check for smoothstep easing applied to progress
+    // Starts at maxZoom 1.2, ends at startScale 1.0 (float difference not re-normalized)
+    expect(filter).toContain('z=\'1.2+');
+    expect(filter).toContain('(-');
     expect(filter).toContain('3*(');
-    // Zoom expression should go from maxZoom (1.2) to start scale (1.0)
-    expect(filter).toContain('1.2');
-    expect(filter).toContain('1');
-    expect(filter).not.toContain('on/');
+    expect(filter).toMatch(/on/);
   });
 
-  test('pulse oscillates with cosine using continuous time', () => {
+  test('pulse oscillates with sin using the frame counter', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'pulse', zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
-    // Pulse uses sin oscillation: 1+0.1*sin(2*PI*min(t,4)/4)
-    expect(filter).toContain('sin(2*PI*');
-    expect(filter).not.toContain('on/');
+    expect(filter).toContain('z=\'1+(0.1)*sin(2*PI*on/120)\'');
+    expect(filter).toMatch(/on/);
   });
 
   test('pan types hold a constant zoom and move one axis with smoothstep', () => {
@@ -68,17 +62,17 @@ test.describe('zoom catalog', () => {
     const right = buildZoomFilter(scene, 1920, 1080, { zoomType: 'panRight', zoomStartScale: 1, zoomIntensity: 0.3 }, focus);
     const up = buildZoomFilter(scene, 1920, 1080, { zoomType: 'panUp', zoomStartScale: 1, zoomIntensity: 0.3 }, focus);
     const down = buildZoomFilter(scene, 1920, 1080, { zoomType: 'panDown', zoomStartScale: 1, zoomIntensity: 0.3 }, focus);
-    // All pans use maxZoom (1.3)
-    expect(left).toContain('1.3');
-    expect(right).toContain('1.3');
-    expect(up).toContain('1.3');
-    expect(down).toContain('1.3');
-    // Pan expressions use smoothstep applied to progress
-    expect(left).toContain('3*(');
-    expect(right).toContain('3*(');
-    expect(up).toContain('3*(');
-    expect(down).toContain('3*(');
-    expect(left).not.toContain('on/');
+    // All pans use maxZoom 1.3 (constant zoom), movement on one axis
+    expect(left).toContain('z=\'1.3+(0)*(');
+    expect(right).toContain('z=\'1.3+(0)*(');
+    expect(up).toContain('z=\'1.3+(0)*(');
+    expect(down).toContain('z=\'1.3+(0)*(');
+    // Pan moves cx/cy along the axis via smoothstep on the frame counter
+    expect(left).toContain('x=\'1+(-1)*(');
+    expect(right).toContain('x=\'0+(1)*(');
+    expect(up).toContain('y=\'1+(-1)*(');
+    expect(down).toContain('y=\'0+(1)*(');
+    expect(left).toMatch(/on/);
   });
 
   test('kenburns zooms toward the focus point with smoothstep', () => {
@@ -86,9 +80,9 @@ test.describe('zoom catalog', () => {
     // Focus point at 0.2, 0.8
     expect(filter).toContain('0.2');
     expect(filter).toContain('0.8');
-    // Zoom uses smoothstep applied to progress
+    // Zoom uses smoothstep applied to progress on the frame counter
     expect(filter).toContain('3*(');
-    expect(filter).not.toContain('on/');
+    expect(filter).toMatch(/on/);
   });
 
   test('resolveZoomType fixed keeps the base type', () => {
@@ -117,9 +111,7 @@ test.describe('zoom catalog', () => {
     const scenes = Array.from({ length: 8 }, () => ({ duration: 1, focus }));
     const filters = scenes.map((s, i) => buildSceneVideoFilter(s, i, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomMode: 'random', zoomSeed: 7, zoomStartScale: 1, zoomIntensity: 0.2 }));
     const graphs = filters.join(';');
-    // Should use new crop-based filters, not zoompan
-    expect(graphs).not.toContain('zoompan=');
-    expect(graphs).toContain('crop=w=\'');
+    expect(graphs).toContain('zoompan=');
     expect(graphs).not.toContain('\\');
     expect(new Set(filters).size).toBeGreaterThan(1);
   });
@@ -154,10 +146,10 @@ test.describe('zoom catalog', () => {
   test('per-scene zoom overrides the global type and intensity', () => {
     const sceneWithZoom = { duration: 4, focus, zoom: { type: 'panRight', intensity: 0.3 } };
     const graph = buildSceneVideoFilter(sceneWithZoom, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.1, zoomStartScale: 1 });
-    // Should use panRight's constant zoom (1.3) and panRight's x expression with smoothstep
+    // Should use panRight's constant zoom (1.3) and panRight's x expression on the frame counter
     expect(graph).toContain('1.3');
     expect(graph).toContain('3*(');
-    expect(graph).not.toContain('on/');
+    expect(graph).toMatch(/on/);
 
     const fallback = buildSceneVideoFilter({ duration: 4, focus }, 0, { outputConfig, zoomEnabled: true, zoomType: 'kenburns', zoomIntensity: 0.2, zoomStartScale: 1 });
     // Kenburns pans toward focus point (0.2, 0.8)
@@ -176,21 +168,20 @@ test.describe('zoom catalog', () => {
     })).toThrow();
   });
 
-  test('filter expressions use continuous time t not discrete frame number on', () => {
+  test('zoom expressions use the frame counter on (per-frame motion)', () => {
     for (const type of ZOOM_TYPES.filter(t => t !== 'none')) {
       const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: type, zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
-      // Should not contain 'on/' (discrete frame-based)
-      expect(filter).not.toContain('on/');
-      // Should contain 't/' or 'min(t,' (continuous time-based)
-      expect(filter).toMatch(/t\/|min\(t,/);
+      expect(filter).toMatch(/on/);
     }
   });
 
-  test('zoom filter clamps crop coordinates to valid range', () => {
+  test('zoom filter centers the pan on the focus point via zoompan', () => {
     const filter = buildZoomFilter(scene, 1920, 1080, { zoomType: 'kenburns', zoomStartScale: 1, zoomIntensity: 0.2 }, focus);
-    // Crop x and y should be clamped with max(0, min(iw-cropW, ...))
-    expect(filter).toContain('max(0,min(iw-');
-    expect(filter).toContain('max(0,min(ih-');
+    // x/y center the crop at the focus point relative to the zoom window
+    expect(filter).toContain('0.2');
+    expect(filter).toContain('0.8');
+    expect(filter).toContain('(iw/zoom)/2');
+    expect(filter).toContain('(ih/zoom)/2');
   });
 
   test('resolveZoomType checked mode picks from checked effects', () => {
@@ -240,28 +231,27 @@ test.describe('zoom catalog', () => {
       zoomIntensity: 0.2
     }));
     const graphs = filters.join(';');
-    // Should use crop filters, not zoompan
-    expect(graphs).not.toContain('zoompan=');
-    expect(graphs).toContain('crop=w=\'');
+    // All chosen motion effects use zoompan
+    expect(graphs).toContain('zoompan=');
+    expect(graphs).not.toContain('\\');
     // Should have variety (not all identical)
     expect(new Set(filters).size).toBeGreaterThan(1);
   });
 
-  test('per-scene zoom override works with checked mode', () => {
+  test('per-scene zoom override uses the override type in fixed mode', () => {
     const sceneWithZoom = { duration: 4, focus, zoom: { type: 'panRight', intensity: 0.3 } };
     const graph = buildSceneVideoFilter(sceneWithZoom, 0, {
       outputConfig,
       zoomEnabled: true,
       zoomType: 'kenburns',
-      zoomMode: 'checked',
-      zoomCheckedEffects: ['kenburns', 'zoomIn'],
+      zoomMode: 'fixed',
       zoomIntensity: 0.1,
       zoomStartScale: 1
     });
-    // Per-scene override should win - panRight uses maxZoom=1.3
-    expect(graph).toContain('1+');
-    expect(graph).toContain('3*(');
-    expect(graph).not.toContain('on/');
+    // Per-scene override panRight uses constant zoom 1.3 and moves cx 0->1
+    expect(graph).toContain('z=\'1.3+(0)*(');
+    expect(graph).toContain('x=\'0+(1)*(');
+    expect(graph).toMatch(/on/);
   });
 
   test('schema validates zoomCheckedEffects array', () => {

@@ -139,7 +139,7 @@ test.describe('fit modes', () => {
 });
 
 test.describe('focus in zoom', () => {
-  test('crop filter pans toward the focus point', () => {
+  test('zoom filter pans toward the focus point via zoompan', () => {
     const filter = buildSceneVideoFilter(focusScene({ x: 0.2, y: 0.8 }), 0, {
       outputConfig: resolveOutputConfig('9:16'),
       fitMode: 'cover',
@@ -147,14 +147,16 @@ test.describe('focus in zoom', () => {
       zoomStartScale: 1.0,
       zoomIntensity: 0.15
     });
-    // New structure uses crop filter with continuous time and smoothstep
-    expect(filter).not.toContain('zoompan=');
-    expect(filter).toContain('crop=w=\'');
+    // New structure uses zoompan for per-frame motion on the frame counter
+    expect(filter).toContain('zoompan=');
     // Focus point 0.2, 0.8 in normalized coordinates
     expect(filter).toContain('0.2');
     expect(filter).toContain('0.8');
-    // Smoothstep easing applied to progress expression
-    expect(filter).toContain('3*(min(1,(t/5)*1))*(min(1,(t/5)*1))-2*(min(1,(t/5)*1))*(min(1,(t/5)*1))*(min(1,(t/5)*1))');
+    // Smoothstep easing applied to progress on the frame counter
+    expect(filter).toContain('3*(');
+    expect(filter).toMatch(/on/);
+    expect(filter).toContain('scale=4320:7680:flags=lanczos'); // 4x upscale of 9:16 output
+    expect(filter).toContain('scale=1080:1920:flags=lanczos'); // downscale to target
   });
 });
 
@@ -253,7 +255,7 @@ test.describe('manual framing (scale + background)', () => {
       fitMode: 'cover',
       zoomEnabled: false
     });
-    const phase4 = '[0:v]scale=1920:1080:force_original_aspect_ratio=increase,'
+    const phase4 = '[0:v]scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,'
       + 'crop=1920:1080:(iw-ow)*0.5:(ih-oh)*0.5[base0];[base0]setsar=1,format=yuv420p[v0]';
     expect(withScale).toBe(phase4);
     expect(withoutScale).toBe(phase4);
@@ -327,13 +329,10 @@ test.describe('manual framing (scale + background)', () => {
     });
     expect(graph).toContain('pad=');
     expect(graph).toContain('color=#112233');
-    // New structure uses crop filter instead of zoompan
-    expect(graph).not.toContain('zoompan=');
-    expect(graph).toContain('crop=w=\'');
-    const padIndex = graph.indexOf('pad=');
-    const cropIndex = graph.indexOf('crop=w=\'');
-    expect(padIndex).toBeGreaterThan(-1);
-    expect(cropIndex).toBeGreaterThan(padIndex);
+    // New structure uses zoompan for per-frame motion instead of crop w/h
+    expect(graph).toContain('zoompan=');
+    expect(graph).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
+    expect(graph).toContain('scale=1920:1080:flags=lanczos'); // downscale
     expect(graph).not.toMatch(/\[1:v\]/);
   });
 
@@ -344,12 +343,10 @@ test.describe('manual framing (scale + background)', () => {
       zoomType: 'kenburns'
     });
     expect(graph).toContain('crop=1920:1080:(iw-ow)*0.2:(ih-oh)*0.8');
-    // New structure uses crop filter for zoom instead of zoompan
-    expect(graph).not.toContain('zoompan=');
-    expect(graph).toContain('crop=w=\''); // the zoom crop
-    const cropIndex = graph.indexOf('crop=1920:1080');
-    const zoomCropIndex = graph.lastIndexOf('crop=w=\'');
-    expect(zoomCropIndex).toBeGreaterThan(cropIndex);
+    // New structure uses zoompan for zoom motion instead of crop w/h
+    expect(graph).toContain('zoompan=');
+    expect(graph).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
+    expect(graph).toContain('scale=1920:1080:flags=lanczos'); // downscale
     expect(graph).not.toMatch(/\[1:v\]/);
   });
 
