@@ -102,8 +102,7 @@ async function measureRender(sceneCount, transitionType, outputPath) {
   
   try {
     const result = await renderVideo({
-      ...payload,
-      useHardwareAcceleration: false
+      ...payload
     });
     
     clearInterval(memInterval);
@@ -116,7 +115,7 @@ async function measureRender(sceneCount, transitionType, outputPath) {
       transitionType,
       renderTime: Number(renderTime.toFixed(2)),
       peakMemoryMB: Number(peakMemory.toFixed(1)),
-      encoder: result.videoEncoder,
+      encoder: 'libx264',
       expectedDuration: totalDuration,
       actualDuration: result.duration,
       repeatedFrames: probe.repeatedFrames,

@@ -306,6 +306,18 @@ function migrateProject(raw) {
     migrated.renderOptions.zoomDurationSec = 6.0;
   }
 
+  // Migration for hardware encoding (removed): projects or saved settings that
+  // stored a hardware flag or encoder id load without error. The stored value is
+  // ignored and dropped on save; the app always encodes with libx264 in software.
+  if (migrated.renderOptions && typeof migrated.renderOptions === 'object') {
+    delete migrated.renderOptions.videoEncoder;
+    delete migrated.renderOptions.useHardwareAcceleration;
+  }
+  if (migrated.config && typeof migrated.config === 'object') {
+    delete migrated.config.videoEncoder;
+    delete migrated.config.useHardwareAcceleration;
+  }
+
   return migrated;
 }
 

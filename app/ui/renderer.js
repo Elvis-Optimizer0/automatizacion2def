@@ -252,7 +252,6 @@ const state = {
     outputFolder: null,
     status: ''
   },
-  hwAccel: { enabled: true, available: false },
   capabilities: null,
   pipeline: { running: false, stage: '' }
 };
@@ -2143,33 +2142,6 @@ function buildExportImages() {
   });
 }
 
-async function detectCodecs() {
-  const info = document.getElementById('hwaccel-info');
-  const checkbox = document.getElementById('hwaccel-checkbox');
-
-  if (!window.api || typeof window.api.detectCodecs !== 'function') {
-    if (info) info.textContent = 'No se pudo detectar la aceleración por hardware.';
-    return;
-  }
-
-  try {
-    const codecs = await window.api.detectCodecs();
-    state.hwAccel.available = !!(codecs && codecs.h264_amf);
-    if (state.hwAccel.available) {
-      if (info) info.textContent = 'h264_amf disponible: se usará para acelerar la exportación.';
-    } else {
-      state.hwAccel.enabled = false;
-      if (checkbox) {
-        checkbox.checked = false;
-        checkbox.disabled = true;
-      }
-      if (info) info.textContent = 'h264_amf no está disponible en este equipo; se usará libx264.';
-    }
-  } catch (err) {
-    if (info) info.textContent = `No se pudo detectar la aceleración por hardware: ${err.message}`;
-  }
-}
-
 function renderCapabilities(capabilities) {
   const info = document.getElementById('gpu-info');
   const checkbox = document.getElementById('directml-checkbox');
@@ -2269,13 +2241,8 @@ async function handleExport() {
       audioDuration: state.audioDuration,
       outputIds: state.config.outputs.slice(),
       config: { ...state.config },
-      renderOptions: { ...state.exportOptions },
-      useHardwareAcceleration: state.hwAccel.enabled
+      renderOptions: { ...state.exportOptions }
     });
-
-    if (result.hwFallback) {
-      showToast('La aceleración por hardware no está disponible; se usó libx264', 'warning');
-    }
 
     const outputs = result.outputs && result.outputs.length ? result.outputs : [{ id: '16:9', outputPath: result.outputPath }];
     state.export.outputPath = result.outputPath;
@@ -3433,13 +3400,6 @@ const CONTROLS = [
     handler: handlePreview
   },
   {
-    id: 'hwaccel-checkbox',
-    tipo: 'checkbox',
-    handler: (e) => {
-      state.hwAccel.enabled = e.target.checked;
-    }
-  },
-  {
     id: 'directml-checkbox',
     tipo: 'checkbox',
     handler: (e) => {
@@ -3773,7 +3733,6 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshVoiceLanguages();
   syncVoiceControls();
   refreshModelsList();
-  detectCodecs();
   handleProbeGpu();
 
   console.log('Video Maker v0.7.6 - Renderer loaded');

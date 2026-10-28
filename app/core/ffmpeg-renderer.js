@@ -32,48 +32,6 @@ function getFfmpegPath() {
   return fixAsarPath(ffmpegStatic);
 }
 
-let encoderCache = null;
-
-function listEncoders() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(getFfmpegPath(), ['-hide_banner', '-encoders'], { windowsHide: true });
-    let output = '';
-    proc.stdout.on('data', data => { output += data.toString(); });
-    proc.stderr.on('data', data => { output += data.toString(); });
-    proc.on('close', () => resolve(output));
-    proc.on('error', reject);
-  });
-}
-
-function probeEncoder(name) {
-  return new Promise((resolve) => {
-    const proc = spawn(getFfmpegPath(), [
-      '-hide_banner', '-loglevel', 'error',
-      '-f', 'lavfi', '-i', 'color=c=black:s=256x144:d=0.1',
-      '-c:v', name, '-f', 'null', '-'
-    ], { windowsHide: true });
-    proc.on('close', code => resolve(code === 0));
-    proc.on('error', () => resolve(false));
-  });
-}
-
-async function detectEncoders(force = false) {
-  if (encoderCache && !force) return encoderCache;
-  let output = '';
-  try {
-    output = await listEncoders();
-  } catch {
-    output = '';
-  }
-  const listed = /\bh264_amf\b/.test(output);
-  const h264Amf = listed ? await probeEncoder('h264_amf') : false;
-  encoderCache = {
-    h264_amf: h264Amf,
-    libx264: /\blibx264\b/.test(output)
-  };
-  return encoderCache;
-}
-
 function parseLeadingSilence(output) {
   const text = String(output == null ? '' : output);
   const startMatch = text.match(/silence_start:\s*(-?\d+(?:\.\d+)?)/);
@@ -201,7 +159,6 @@ function buildFfmpegArgs(options) {
   const backgroundMode = config.backgroundMode || 'color';
   const backgroundColor = config.backgroundColor || '#000000';
   const musicVolume = config.musicVolume != null ? config.musicVolume : 0.3;
-  const videoEncoder = options.videoEncoder === 'h264_amf' ? 'h264_amf' : 'libx264';
   const transitionType = renderOptions.transitionType || 'fade';
   const transitionMode = renderOptions.transitionMode || 'fixed';
   const transitionSeed = renderOptions.transitionSeed;
@@ -276,19 +233,26 @@ function buildFfmpegArgs(options) {
     slideSpeed
   });
 
-  const encoderArgs = videoEncoder === 'h264_amf'
-    ? ['-c:v', 'h264_amf', '-quality', 'balanced', '-qp_i', '23', '-qp_p', '23']
-    : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '23'];
-
   args.push(
     '-filter_complex', filterGraph,
     '-map', '[vout]',
     '-map', '[aout]',
-    ...encoderArgs,
+    '-c:v', 'libx264',
+    '-preset', 'medium',
+    '-crf', '17',
+    '-profile:v', 'high',
+    '-level', '4.2',
+    '-g', '60',
+    '-keyint_min', '30',
+    '-bf', '2',
+    '-maxrate', '16M',
+    '-bufsize', '32M',
     '-pix_fmt', 'yuv420p',
     '-r', String(FPS),
     '-c:a', 'aac',
     '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
     '-movflags', '+faststart',
     '-shortest',
     outputPath
@@ -453,12 +417,6 @@ async function renderVideo(options) {
 
   verifyBinaries();
 
-  const encoders = await detectEncoders();
-  const wantHw = options.useHardwareAcceleration !== false;
-  const useAmf = wantHw && encoders.h264_amf;
-  const videoEncoder = useAmf ? 'h264_amf' : 'libx264';
-  const hwFallback = wantHw && !encoders.h264_amf;
-
   let payload;
   let outputConfigs;
   try {
@@ -527,8 +485,7 @@ async function renderVideo(options) {
         config: payload.config,
         renderOptions: payload.renderOptions,
         subtitlesPath,
-        fontsDir,
-        videoEncoder
+        fontsDir
       });
       validateInputPaths(built.inputLabels);
 
@@ -561,9 +518,7 @@ async function renderVideo(options) {
   return {
     outputs,
     outputPath: outputs.length > 0 ? outputs[0].outputPath : payload.outputPath,
-    duration: totalDuration,
-    videoEncoder,
-    hwFallback
+    duration: totalDuration
   };
 }
 
@@ -574,7 +529,6 @@ module.exports = {
   resolveOutputConfigs,
   getFfmpegPath,
   getFontsDir,
-  detectEncoders,
   parseLeadingSilence,
   detectLeadingSilence,
   verifyBinaries,

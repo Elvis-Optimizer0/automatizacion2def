@@ -97,4 +97,44 @@ test.describe('project file (save/open)', () => {
     });
     expect(migrated.config.voice.engine).toBe('kokoro');
   });
+
+  test('migrateProject drops a stored hardware encoder id from renderOptions', () => {
+    const migrated = migrateProject({
+      version: 1,
+      images: [],
+      audio: { narration: null, music: null },
+      script: { raw: '' },
+      timeline: [],
+      config: {},
+      renderOptions: { zoomType: 'kenburns', videoEncoder: 'h264_amf', useHardwareAcceleration: true }
+    });
+    expect(migrated.renderOptions.videoEncoder).toBeUndefined();
+    expect(migrated.renderOptions.useHardwareAcceleration).toBeUndefined();
+    expect(migrated.renderOptions.zoomType).toBe('kenburns');
+  });
+
+  test('migrateProject drops a stored hardware flag from config and load does not throw', () => {
+    const migrated = migrateProject({
+      version: 1,
+      images: [],
+      audio: { narration: null, music: null },
+      script: { raw: '' },
+      timeline: [],
+      config: { videoEncoder: 'h264_amf', useHardwareAcceleration: true, outputs: ['16:9'] },
+      renderOptions: {}
+    });
+    expect(migrated.config.videoEncoder).toBeUndefined();
+    expect(migrated.config.useHardwareAcceleration).toBeUndefined();
+    const project = parseProjectFile({
+      version: 1,
+      images: [],
+      audio: { narration: null, music: null },
+      script: { raw: '' },
+      timeline: [],
+      config: { videoEncoder: 'h264_amf', outputs: ['16:9'] },
+      renderOptions: { useHardwareAcceleration: true }
+    });
+    expect(project.config.videoEncoder).toBeUndefined();
+    expect(project.renderOptions.useHardwareAcceleration).toBeUndefined();
+  });
 });

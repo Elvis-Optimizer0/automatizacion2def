@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld('api', {
   saveProject: (data, filePath) => ipcRenderer.invoke('project:save', data, filePath),
   openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
   verifyBinaries: () => ipcRenderer.invoke('verify:binaries'),
-  detectCodecs: () => ipcRenderer.invoke('codecs:detect'),
   listFonts: () => ipcRenderer.invoke('fonts:list'),
   importFont: () => ipcRenderer.invoke('fonts:import'),
   detectKeywords: (texts, options) => ipcRenderer.invoke('keywords:detect', texts, options),
