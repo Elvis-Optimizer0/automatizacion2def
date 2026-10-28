@@ -84,18 +84,24 @@ function resolveZoomType(baseType, mode, index, seed, checkedEffects) {
   if (mode === 'checked') {
     const checked = Array.isArray(checkedEffects) && checkedEffects.length > 0
       ? checkedEffects.filter(t => RANDOM_ZOOM_TYPES.includes(t))
-      : RANDOM_ZOOM_TYPES;
+      : [];
     if (checked.length === 0) return base;
     if (checked.length === 1) return checked[0];
-    const r = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index);
-    let pick = checked[Math.floor(r * checked.length) % checked.length];
-    if (index > 0) {
-      const prevR = seededRandom(seed != null ? seed : DEFAULT_ZOOM_SEED, index - 1);
-      const prevPick = checked[Math.floor(prevR * checked.length) % checked.length];
-      if (pick === prevPick) {
+    const len = checked.length;
+    const s = seed != null ? seed : DEFAULT_ZOOM_SEED;
+    // Simulate from scene 0 up to `index` so the "never the same twice in a
+    // row" rule compares against the ACTUAL previous pick (not the raw,
+    // uncorrected one). This keeps the function pure and reproducible.
+    let prevPick = null;
+    let pick = null;
+    for (let j = 0; j <= index; j++) {
+      const r = seededRandom(s, j);
+      pick = checked[Math.floor(r * len) % len];
+      if (j > 0 && pick === prevPick) {
         const idx = checked.indexOf(pick);
-        pick = checked[(idx + 1) % checked.length];
+        pick = checked[(idx + 1) % len];
       }
+      prevPick = pick;
     }
     return pick;
   }
