@@ -155,8 +155,11 @@ test.describe('focus in zoom', () => {
     // Smoothstep easing applied to progress on the frame counter
     expect(filter).toContain('3*(');
     expect(filter).toMatch(/on/);
-    expect(filter).toContain('scale=4320:7680:flags=lanczos'); // 4x upscale of 9:16 output
-    expect(filter).toContain('scale=1080:1920:flags=lanczos'); // downscale to target
+    // New structure uses zoompan for per-frame motion at output resolution
+    expect(filter).toContain('zoompan=');
+    expect(filter).toContain('s=\'1080x1920\':fps=30');
+    expect(filter).toContain('flags=lanczos');
+    expect(filter).not.toContain('scale=4320:7680'); // no separate 4x upscale stage
   });
 });
 
@@ -331,8 +334,8 @@ test.describe('manual framing (scale + background)', () => {
     expect(graph).toContain('color=#112233');
     // New structure uses zoompan for per-frame motion instead of crop w/h
     expect(graph).toContain('zoompan=');
-    expect(graph).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
-    expect(graph).toContain('scale=1920:1080:flags=lanczos'); // downscale
+    expect(graph).toContain('flags=lanczos');
+    expect(graph).not.toContain('scale=7680:4320'); // no separate 4x upscale stage
     expect(graph).not.toMatch(/\[1:v\]/);
   });
 
@@ -345,8 +348,8 @@ test.describe('manual framing (scale + background)', () => {
     expect(graph).toContain('crop=1920:1080:(iw-ow)*0.2:(ih-oh)*0.8');
     // New structure uses zoompan for zoom motion instead of crop w/h
     expect(graph).toContain('zoompan=');
-    expect(graph).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
-    expect(graph).toContain('scale=1920:1080:flags=lanczos'); // downscale
+    expect(graph).toContain('flags=lanczos');
+    expect(graph).not.toContain('scale=7680:4320'); // no separate 4x upscale stage
     expect(graph).not.toMatch(/\[1:v\]/);
   });
 

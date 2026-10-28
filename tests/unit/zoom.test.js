@@ -32,11 +32,11 @@ test.describe('zoom catalog', () => {
         expect(filter).toBe('');
         continue;
       }
-      // New structure: scale up (4x lanczos) -> zoompan (per-frame motion) -> scale down (lanczos)
-      expect(filter).toContain('scale=7680:4320:flags=lanczos'); // 4x upscale
+      // New structure: scale up (cover, lanczos) -> zoompan (per-frame motion at
+      // output resolution) -> setsar/format
       expect(filter).toContain('zoompan=');
-      expect(filter).toContain('scale=1920:1080:flags=lanczos'); // downscale to target
-      expect(filter).toContain('d=120:s=\'7680x4320\':fps=30'); // duration 4s @ 30fps = 120 frames
+      expect(filter).toContain('d=120:s=\'1920x1080\':fps=30'); // duration 4s @ 30fps = 120 frames
+      expect(filter).not.toContain('scale=7680:4320'); // no separate 4x upscale stage
       expect(filter).not.toContain('\\');
       expect(filter).not.toMatch(/[A-Za-z]:\\/);
     }
