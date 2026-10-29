@@ -11,7 +11,8 @@
     "e2e": "playwright test",
     "fetch-engines": "node scripts/fetch-engines.js",
     "dist": "electron-builder --publish=never",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "verify:render": "node scripts/verify-render.cjs"
   },
   "keywords": [],
   "author": "",
