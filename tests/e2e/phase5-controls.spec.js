@@ -176,4 +176,17 @@ test.describe.serial('Video Maker - Phase 5 Controls', () => {
     expect(state.scale).toBe(0.75);
     expect(state.sceneZooms).toEqual(['zoomIn', 'zoomIn']);
   });
+
+  test('4. Empty checked-effects checklist blocks export with Spanish message', async () => {
+    await page.evaluate(() => {
+      const img = window.__TEST_STATE__.images[0];
+      window.__TEST_STATE__.timeline.forEach((s) => { s.image = { ...img }; });
+      window.__TEST_STATE__.exportOptions.zoomMode = 'checked';
+      window.__TEST_STATE__.exportOptions.zoomCheckedEffects = [];
+    });
+    await page.evaluate(() => window.__TEST_EXPORT__.handleExport());
+    await page.waitForTimeout(300);
+    const status = await page.locator('#export-status').textContent();
+    expect(status).toContain('marca al menos un efecto');
+  });
 });

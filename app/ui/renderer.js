@@ -1236,7 +1236,8 @@ function updateExportButton() {
   const ready = state.timeline.length > 0
     && !!state.audio.narration
     && state.config.outputs.length > 0
-    && state.timeline.every(s => !!s.image);
+    && state.timeline.every(s => !!s.image)
+    && !(state.exportOptions.zoomMode === 'checked' && (!Array.isArray(state.exportOptions.zoomCheckedEffects) || state.exportOptions.zoomCheckedEffects.length === 0));
   btn.disabled = !ready || state.export.isRendering;
 }
 
@@ -2200,6 +2201,11 @@ async function handleExport() {
   }
   if (state.config.outputs.length === 0) {
     showToast('Selecciona al menos un formato de salida', 'warning');
+    return;
+  }
+  if (state.exportOptions.zoomMode === 'checked' && (!Array.isArray(state.exportOptions.zoomCheckedEffects) || state.exportOptions.zoomCheckedEffects.length === 0)) {
+    showToast('Marca al menos un efecto', 'warning');
+    setExportStatus('No se puede exportar: marca al menos un efecto', 'error');
     return;
   }
 
