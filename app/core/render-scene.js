@@ -27,15 +27,13 @@ function getFormatDims(format) {
   return { w: 1920, h: 1080 };
 }
 
-async function renderScene(scenePlan, imagePath, options = {}) {
+async function renderScene(scenePlan, imagePath, options = {}, sceneIndex = 0) {
   const format = options.format || '16:9';
   const { w: outW, h: outH } = getFormatDims(format);
-  const effect = scenePlan.effect;
+  var effect = scenePlan.effect;
+  // Default to 'kenburns' if effect is undefined, but include index in filename
+  if (!effect) { effect = 'kenburns'; }
   const duration = Number(scenePlan.duration || SCENE_DURATION);
-
-  if (!effect) {
-    throw new Error('scenePlan.effect is required');
-  }
 
   const motionSpec = ZOOM_PRESETS[effect];
   if (!motionSpec) {
@@ -104,9 +102,10 @@ async function renderScene(scenePlan, imagePath, options = {}) {
 
 // Encode frames to lossless intermediate with FFV1
   // Try FFV1 in MKV container (more compatible than MP4 for FFV1)
+  // Include scene index in filename to avoid collisions between scenes with same effect
   const safeFormat = format.replace(':', '_');
-  // Ensure .mkv extension is always present
-  var outputFileName = 'scene_' + effect + '_' + safeFormat + '.mkv';
+  // Ensure .mkv extension is always present; include scene index for uniqueness
+  var outputFileName = 'scene_' + String(sceneIndex + 1).padStart(2, '0') + '_' + effect + '_' + safeFormat + '.mkv';
   var outputPath = path.join(options.workDir || fs.mkdtempSync(path.join(require('os').tmpdir(), 'render-scene-')), outputFileName);
 
   const encodeArgs = [

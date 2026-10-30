@@ -94,7 +94,8 @@ async function renderProject(project, options = {}, deps = {}) {
         duration: scene.durationSec
       },
       imagePath,
-      { format: options.format || '16:9' }
+      { format: options.format || '16:9' },
+      sIdx  // pass scene index for unique filenames
     );
 
     sceneIntermediates.push({
