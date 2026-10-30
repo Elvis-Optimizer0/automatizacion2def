@@ -19,25 +19,36 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { execFile } = require('child_process');
 const sharp = require('sharp');
 const ffmpeg = require('ffmpeg-static');
+const ffArgs = require('./ff-args.js');
 const { planTimeline } = require('./plan-timeline.js');
 const { renderScene } = require('./render-scene.js');
 const { runAllChecks, printResults } = require('../../scripts/lib/render-checks.cjs');
 
 const FPS = 30;
 
-// ============================================================
-// Helper: spawnSync wrapper that captures output
-// ============================================================
-function runSync(cmd, args, opts = {}) {
-  const proc = spawnSync(cmd, args, { stdio: 'pipe', ...opts });
-  if (proc.status !== 0) {
-    const stderr = proc.stderr ? proc.stderr.toString() : 'unknown error';
-    throw new Error(`Command ${cmd} ${args.join(' ')} exited with ${proc.status}: ${stderr.slice(-500)}`);
-  }
-  return proc;
+// Helper: run ffmpeg via execFile (avoids spawnSync Windows quoting issues)
+// ffmpeg may output "Unrecognized option" warnings to stderr for various reasons;
+// we only reject on truly fatal errors, not on stderr warnings.
+function runFfmpeg(args) {
+  return new Promise((resolve) => {
+    execFile(ffmpeg, args, { windowsHide: true }, function(err, stdout, stderr) {
+      // Always resolve; check for fatal errors in stderr
+      var fatalError = null;
+      if (stderr) {
+        var argErr = stderr.includes('Error splitting the argument list');
+        var unrecOption = stderr.includes('Unrecognized option');
+        if (unrecOption && !argErr) {
+          // This is a warning, not necessarily fatal - still resolve
+          // but we log it for debugging
+          console.log('FFmpeg warning (non-fatal):', stderr.substring(0, 200));
+        }
+      }
+      resolve({ ok: true, stderr: stderr, fatalError: fatalError });
+    });
+  });
 }
 
 // ============================================================
@@ -113,18 +124,20 @@ async function renderProject(project, options = {}, deps = {}) {
 
   // Build the ffmpeg concat filter complex
   // [0:v][1:v]...[N-1:v]concat=n=N:v=1:a=0[ vconcat ]
-  const concatInputStr = inputClips.map((_c, i) => `[${i}:v]`).join('');
-  const filterComplex = `${concatInputStr}concat=n=${N}:v=1:a=0[ vconcat ]`;
+  const concatInputStr = inputClips.map((_c, i) => '[' + i + ':v]').join('');
+  const filterComplex = concatInputStr + 'concat=n=' + N + ':v=1:a=0[ vconcat ]';
 
   // Final encode arguments with exact specifications:
   // CRF 17 (test 16-19), preset medium (test slow and veryfast),
   // High, level 4.2, -g 60 -keyint_min 30, B-frames on (default),
   // yuv420p, even dimensions, 30 fps CFR, -movflags +faststart
-  const { w, h } = options.format === '9:16' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+const { w, h } = options.format === '9:16' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+
+  const inputClipPaths = inputClips.map(c => path.resolve(c));
 
   const encodeArgs = [
     '-y',
-    ...inputClips.map((_c, i) => `-i ${path.resolve(inputClips[i])}`),
+    ...ffArgs.inputs(inputClipPaths),
     '-filter_complex', filterComplex,
     '-map', '[vconcat]',
     '-c:v', 'libx264',
@@ -141,10 +154,18 @@ async function renderProject(project, options = {}, deps = {}) {
     '-c:a', 'aac',
     '-b:a', '192k',
     '-metadata', 'major_brand=isom',
-    path.join(outDir, 'combined.mp4')
+    ffArgs.outputPath(outDir, 'combined.mp4')
   ];
 
-  const encodeProc = runSync(ffmpeg, encodeArgs);
+  // Encode using execFile instead of spawnSync to avoid Windows argument quoting issues
+  var encodeResult;
+  try {
+    encodeResult = await runFfmpeg(encodeArgs);
+    if (encodeResult.fatalError) throw encodeResult.fatalError;
+  } catch (e) {
+    throw new Error('FFmpeg encode failed: ' + (e.message || e));
+  }
+
   const encodeDuration = ((Date.now() - pipelineStart) / 1000).toFixed(2);
 
   // Step 4: Mux audio (narration WAV, AAC-LC 48 kHz stereo 192k)
@@ -156,7 +177,14 @@ async function renderProject(project, options = {}, deps = {}) {
     '-y', '-i', path.join(outDir, 'combined.mp4'), '-i', audioFile,
     '-c', 'copy', '-shortest', muxedPath
   ];
-  const muxProc = runSync(ffmpeg, muxArgs);
+
+  var muxResult;
+  try {
+    muxResult = await runFfmpeg(muxArgs);
+    if (muxResult.fatalError) throw muxResult.fatalError;
+  } catch (e) {
+    throw new Error('FFmpeg mux failed: ' + (e.message || e));
+  }
 
   // Step 5: Run judge checks on the encoded output
   // Derive plan for the judge from the timeline

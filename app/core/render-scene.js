@@ -102,9 +102,12 @@ async function renderScene(scenePlan, imagePath, options = {}) {
       .toFile(path.join(framesDir, `frame_${String(i).padStart(4, '0')}.png`));
   }
 
-  // Encode frames to lossless intermediate with FFV1
+// Encode frames to lossless intermediate with FFV1
   // Try FFV1 in MKV container (more compatible than MP4 for FFV1)
-  const outputPath = path.join(options.workDir || fs.mkdtempSync(path.join(require('os').tmpdir(), 'render-scene-')), `scene_${effect}_${format}.mkv`);
+  const safeFormat = format.replace(':', '_');
+  // Ensure .mkv extension is always present
+  var outputFileName = 'scene_' + effect + '_' + safeFormat + '.mkv';
+  var outputPath = path.join(options.workDir || fs.mkdtempSync(path.join(require('os').tmpdir(), 'render-scene-')), outputFileName);
 
   const encodeArgs = [
     '-y',
